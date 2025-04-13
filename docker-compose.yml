@@ -1,93 +1,20 @@
 version: '3'
 
 services:
-  # C2 сервер для управления (опционально - рой может работать и автономно)
+  # C2 сервер для управления
   neurorat-server:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: neurorat-server
-    command: python server_monitor.py --host 0.0.0.0 --port 8080
+    command: python server_api.py
     ports:
       - "8080:8080"  # Веб-интерфейс
+      - "5001:5000"  # API порт (мапинг внешнего 5001 на внутренний 5000)
     networks:
       - neurorat-network
     environment:
       - NODE_ROLE=server
-      - LOG_LEVEL=INFO
-
-  # Основной узел роевого интеллекта (bootstrap node)
-  swarm-node-1:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: swarm-node-1
-    depends_on:
-      - neurorat-server
-    command: python test_swarm_isolated.py --node-id=node1 --port=8443 --server=neurorat-server:8080 --is-bootstrap
-    ports:
-      - "8443:8443"  # Порт для коммуникации роя
-    networks:
-      - neurorat-network
-    environment:
-      - NODE_ROLE=swarm_bootstrap
-      - LOG_LEVEL=INFO
-
-  # Дополнительные узлы роя, которые подключаются к основному
-  swarm-node-2:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: swarm-node-2
-    depends_on:
-      - swarm-node-1
-    command: python test_swarm_isolated.py --node-id=node2 --port=8444 --bootstrap=swarm-node-1:8443
-    networks:
-      - neurorat-network
-    environment:
-      - NODE_ROLE=swarm_node
-      - LOG_LEVEL=INFO
-
-  swarm-node-3:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: swarm-node-3
-    depends_on:
-      - swarm-node-1
-    command: python test_swarm_isolated.py --node-id=node3 --port=8445 --bootstrap=swarm-node-1:8443
-    networks:
-      - neurorat-network
-    environment:
-      - NODE_ROLE=swarm_node
-      - LOG_LEVEL=INFO
-
-  swarm-node-4:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: swarm-node-4
-    depends_on:
-      - swarm-node-1
-    command: python test_swarm_isolated.py --node-id=node4 --port=8446 --bootstrap=swarm-node-1:8443
-    networks:
-      - neurorat-network
-    environment:
-      - NODE_ROLE=swarm_node
-      - LOG_LEVEL=INFO
-
-  swarm-node-5:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: swarm-node-5
-    depends_on:
-      - swarm-node-1
-    command: python test_swarm_isolated.py --node-id=node5 --port=8447 --bootstrap=swarm-node-1:8443
-    networks:
-      - neurorat-network
-    environment:
-      - NODE_ROLE=swarm_node
       - LOG_LEVEL=INFO
 
 # Создаем изолированную сеть для наших контейнеров
