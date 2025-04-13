@@ -78,7 +78,7 @@ NeuroRAT разработан как инструмент для тестиро�
 
 ## Автор
 
-* **Mr. Thomas Anderson** - [@Personaz1](https://github.com/Personaz1) - iamnobodynothing@gmail.com
+* **Mr. Thomas Anderson** - [@Personaz1](https://github.com/Personaz1) - iamtomasanderson@gmail.com
 
 ## Лицензия
 

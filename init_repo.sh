@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # NeuroRAT Repository Initializer
-# Author: Mr. Thomas Anderson (iamnobodynothing@gmail.com)
+# Author: Mr. Thomas Anderson (iamtomasanderson@gmail.com)
 # License: MIT
 
 # Color settings
