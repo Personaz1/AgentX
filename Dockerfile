@@ -16,14 +16,20 @@ RUN apt-get update && apt-get install -y \
 # Создание рабочей директории
 WORKDIR /app
 
+# Создание директории для хранения API ключей и учетных данных
+RUN mkdir -p /app/credentials
+
 # Копирование файлов проекта
 COPY . /app/
 
 # Установка зависимостей
 RUN pip install --no-cache-dir -r requirements.txt
 
-# По умолчанию запускаем тестовый скрипт роевого интеллекта
-CMD ["python", "test_swarm_isolated.py"]
+# Установка python-dotenv для работы с .env файлами
+RUN pip install --no-cache-dir python-dotenv
 
-# Контейнер слушает порт для коммуникации роевого интеллекта
-EXPOSE 8443 
+# По умолчанию запускаем API сервер
+CMD ["python", "server_api.py"]
+
+# Экспортируем порты
+EXPOSE 8080 5000 8443 

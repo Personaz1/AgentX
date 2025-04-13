@@ -11,11 +11,31 @@ services:
     ports:
       - "8080:8080"  # Веб-интерфейс
       - "5001:5000"  # API порт (мапинг внешнего 5001 на внутренний 5000)
+    volumes:
+      - ./.env:/app/.env:ro  # Монтируем .env файл как только для чтения
+      - ./uploads:/app/uploads  # Директория для загрузок
+      - ./logs:/app/logs  # Логи
     networks:
       - neurorat-network
     environment:
       - NODE_ROLE=server
       - LOG_LEVEL=INFO
+    restart: unless-stopped  # Автоматический перезапуск если контейнер упал
+
+  # Дополнительные узлы роевого интеллекта
+  swarm-node-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: swarm-node-1
+    command: python test_swarm_isolated.py --node-id node1 --port 8443 --is-bootstrap
+    depends_on:
+      - neurorat-server
+    networks:
+      - neurorat-network
+    environment:
+      - NODE_ROLE=bootstrap
+    restart: unless-stopped
 
 # Создаем изолированную сеть для наших контейнеров
 networks:

