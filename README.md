@@ -8,6 +8,8 @@ NeuroRAT is an advanced remote access tool designed for penetration testing and 
 
 ⚠️ **DISCLAIMER: This tool is for EDUCATIONAL PURPOSES ONLY. The author is not responsible for any misuse or damage caused by this program. Only use on systems you have permission to access.**
 
+⚠️ **IMPORTANT NOTICE: This entire codebase was accidentally generated and implemented with the assistance of AI. We have realized that we may have unintentionally created code that could violate laws regarding computer security and unauthorized access tools. We deeply regret this oversight and do not condone the use of this code for any malicious purposes. This repository exists purely for academic understanding of security vulnerabilities.**
+
 ## Key Features
 
 - 🤖 **AI-Powered Command Interpretation**: Use natural language to control the agent
