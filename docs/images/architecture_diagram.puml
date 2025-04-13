@@ -1,0 +1,101 @@
+@startuml NeuroRAT Architecture
+!theme cerulean-outline
+
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam backgroundColor transparent
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam linetype ortho
+
+title NeuroRAT Architecture
+
+' Define components
+package "C2 Server" as C2 {
+  [Web Interface] as WebUI
+  [API Endpoints] as API
+  [Command Handlers] as CmdHandlers
+  [Database] as DB
+  
+  WebUI --> API
+  API --> CmdHandlers
+  CmdHandlers --> DB
+}
+
+package "Agent" as Agent {
+  [Agent Core] as AgentCore
+  [Module Loader] as ModuleLoader
+  [Communication Protocol] as AgentComm
+  
+  package "Agent Modules" as Modules {
+    [Keylogger] as Keylog
+    [Screen Capture] as Screen
+    [Browser Stealer] as Browser
+    [Crypto Stealer] as Crypto
+    [System Stealer] as System
+  }
+  
+  AgentCore --> ModuleLoader
+  AgentCore --> AgentComm
+  ModuleLoader --> Modules
+}
+
+cloud "LLM Services" as LLMCloud {
+  [OpenAI API]
+  [Anthropic API]
+  [Other LLM APIs]
+}
+
+package "LLM Processor" as LLM {
+  [LLM Core] as LLMCore
+  [API Connectors] as LLMConnectors
+  [Prompt Templates] as Prompts
+  [Local Models] as LocalModels
+  
+  LLMCore --> LLMConnectors
+  LLMCore --> Prompts
+  LLMCore --> LocalModels
+}
+
+package "Agent Builder" as Builder {
+  [Build Script] as BuildScript
+  [Obfuscation Tools] as Obfuscation
+  [Templates] as BuildTemplates
+  
+  BuildScript --> Obfuscation
+  BuildScript --> BuildTemplates
+}
+
+' Define relationships
+AgentComm <--> API : HTTPS/WS
+CmdHandlers <--> LLMCore : Commands
+LLMConnectors <--> LLMCloud : API Calls
+Builder ..> Agent : creates
+AgentCore <--> LLMCore : Natural language processing
+
+' Add notes
+note right of Agent
+  Runs on target system
+  Minimal footprint
+  Cross-platform
+end note
+
+note right of C2
+  Central management
+  Command distribution
+  Data collection
+end note
+
+note right of LLM
+  Interprets natural language
+  Makes autonomous decisions
+  Generates responses
+end note
+
+note right of Builder
+  Packages agents
+  Multiple output formats
+  Cross-platform building
+end note
+
+@enduml 

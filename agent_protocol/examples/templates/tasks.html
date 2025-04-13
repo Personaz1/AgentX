@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeuroRAT - Tasks</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+        }
+        .navbar {
+            background-color: #000000;
+            border-bottom: 1px solid #333;
+        }
+        .card {
+            background-color: #222;
+            border: 1px solid #444;
+            margin-bottom: 20px;
+        }
+        .card-header {
+            background-color: #333;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+        }
+        .task-row {
+            border-left: 4px solid transparent;
+            transition: all 0.3s ease;
+        }
+        .task-row:hover {
+            background-color: #2a2a2a;
+            cursor: pointer;
+        }
+        .task-pending {
+            border-left-color: #ffc107;
+        }
+        .task-running {
+            border-left-color: #17a2b8;
+        }
+        .task-completed {
+            border-left-color: #28a745;
+        }
+        .task-failed {
+            border-left-color: #dc3545;
+        }
+        .badge-pending {
+            background-color: #ffc107;
+        }
+        .badge-running {
+            background-color: #17a2b8;
+        }
+        .badge-completed {
+            background-color: #28a745;
+        }
+        .badge-failed {
+            background-color: #dc3545;
+        }
+        .terminal {
+            background-color: #0a0a0a;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            padding: 10px;
+            border-radius: 5px;
+            height: 300px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+        .cmd-input {
+            background-color: #1a1a1a;
+            color: #00ff00;
+            border: 1px solid #444;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">NeuroRAT</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/agents">Agents</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/tasks">Tasks</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/settings">Settings</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5>Task Management</h5>
+                        <div>
+                            <button class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#newTaskModal">New Task</button>
+                            <button class="btn btn-sm btn-outline-danger">Clear Completed</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <div class="input-group">
+                                <input type="text" class="form-control cmd-input" placeholder="Search tasks...">
+                                <button class="btn btn-outline-secondary">Search</button>
+                            </div>
+                        </div>
+                        
+                        <div class="table-responsive">
+                            <table class="table table-dark">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Agent</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                        <th>Status</th>
+                                        <th>Created</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr class="task-row task-pending" data-task-id="1">
+                                        <td>#001</td>
+                                        <td>agent_123</td>
+                                        <td>shell</td>
+                                        <td>Collect system information</td>
+                                        <td><span class="badge badge-pending">Pending</span></td>
+                                        <td>2023-08-15 14:30</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-info">View</button>
+                                            <button class="btn btn-sm btn-outline-danger">Cancel</button>
+                                        </td>
+                                    </tr>
+                                    <tr class="task-row task-running" data-task-id="2">
+                                        <td>#002</td>
+                                        <td>agent_456</td>
+                                        <td>llm</td>
+                                        <td>Analyze network traffic</td>
+                                        <td><span class="badge badge-running">Running</span></td>
+                                        <td>2023-08-15 15:15</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-info">View</button>
+                                            <button class="btn btn-sm btn-outline-danger">Cancel</button>
+                                        </td>
+                                    </tr>
+                                    <tr class="task-row task-completed" data-task-id="3">
+                                        <td>#003</td>
+                                        <td>agent_789</td>
+                                        <td>file</td>
+                                        <td>Download sensitive files</td>
+                                        <td><span class="badge badge-completed">Completed</span></td>
+                                        <td>2023-08-15 12:05</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-info">View</button>
+                                            <button class="btn btn-sm btn-outline-secondary">Delete</button>
+                                        </td>
+                                    </tr>
+                                    <tr class="task-row task-failed" data-task-id="4">
+                                        <td>#004</td>
+                                        <td>agent_123</td>
+                                        <td>shell</td>
+                                        <td>Privilege escalation attempt</td>
+                                        <td><span class="badge badge-failed">Failed</span></td>
+                                        <td>2023-08-15 16:45</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-info">View</button>
+                                            <button class="btn btn-sm btn-outline-warning">Retry</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <nav aria-label="Page navigation">
+                            <ul class="pagination justify-content-center">
+                                <li class="page-item disabled">
+                                    <a class="page-link" href="#" tabindex="-1">Previous</a>
+                                </li>
+                                <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                                <li class="page-item"><a class="page-link" href="#">2</a></li>
+                                <li class="page-item"><a class="page-link" href="#">3</a></li>
+                                <li class="page-item">
+                                    <a class="page-link" href="#">Next</a>
+                                </li>
+                            </ul>
+                        </nav>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Task Details</h5>
+                    </div>
+                    <div class="card-body" id="task-details-panel">
+                        <div class="text-center text-muted py-5">
+                            <p>Select a task to view details</p>
+                        </div>
+                        
+                        <div id="task-details" class="d-none">
+                            <h5 id="task-title">Task #002: Analyze network traffic</h5>
+                            <div class="mb-3">
+                                <span class="badge badge-running">Running</span>
+                                <small class="text-muted ms-2">Started: 15 minutes ago</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <strong>Agent:</strong> <a href="/agents/456">agent_456</a> <small>(Windows 10 Pro)</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <strong>Type:</strong> LLM Command
+                            </div>
+                            
+                            <div class="mb-3">
+                                <strong>Command:</strong>
+                                <pre class="bg-dark p-2 mt-1"><code>Analyze network connections and identify suspicious outbound traffic</code></pre>
+                            </div>
+                            
+                            <div class="terminal" id="task-output">
+                                <div>[Task] Executing on agent_456...</div>
+                                <div>[AI] Analyzing network connections</div>
+                                <div>[AI] Running netstat command...</div>
+                                <div>[AI] Checking DNS queries...</div>
+                                <div>[AI] Scanning for unusual ports...</div>
+                                <div>[AI] Found 3 potentially suspicious connections:</div>
+                                <div> - IP: 185.142.236.34 PORT: 8080 (Unknown service)</div>
+                                <div> - IP: 91.243.12.17 PORT: 443 (HTTPS)</div>
+                                <div> - IP: 103.15.67.88 PORT: 22 (SSH)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal for New Task -->
+    <div class="modal fade" id="newTaskModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title">Create New Task</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form>
+                        <div class="mb-3">
+                            <label for="taskAgent" class="form-label">Target Agent</label>
+                            <select class="form-select cmd-input" id="taskAgent">
+                                <option value="">Select Agent...</option>
+                                <option value="agent_123">agent_123 (Windows)</option>
+                                <option value="agent_456">agent_456 (Linux)</option>
+                                <option value="agent_789">agent_789 (macOS)</option>
+                                <option value="all">All Agents</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="taskType" class="form-label">Task Type</label>
+                            <select class="form-select cmd-input" id="taskType">
+                                <option value="shell">Shell Command</option>
+                                <option value="llm">LLM Query</option>
+                                <option value="file">File Operation</option>
+                                <option value="exfiltrate">Data Exfiltration</option>
+                                <option value="recon">Reconnaissance</option>
+                                <option value="lateral">Lateral Movement</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="taskCommand" class="form-label">Command/Query</label>
+                            <textarea class="form-control cmd-input" id="taskCommand" rows="3" placeholder="Enter command or query..."></textarea>
+                        </div>
+                        
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="taskPriority">
+                            <label class="form-check-label" for="taskPriority">High Priority</label>
+                        </div>
+                        
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="taskSilent">
+                            <label class="form-check-label" for="taskSilent">Silent Mode (no GUI indicators)</label>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="taskSchedule" class="form-label">Schedule (optional)</label>
+                            <input type="datetime-local" class="form-control cmd-input" id="taskSchedule">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success">Create Task</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Показать детали задачи при выборе
+        document.querySelectorAll('.task-row').forEach(row => {
+            row.addEventListener('click', function() {
+                document.querySelectorAll('.task-row').forEach(r => r.classList.remove('selected'));
+                this.classList.add('selected');
+                
+                document.querySelector('#task-details-panel .text-center').classList.add('d-none');
+                document.querySelector('#task-details').classList.remove('d-none');
+                
+                // Заполнение деталей в зависимости от выбранной задачи
+                const taskId = this.getAttribute('data-task-id');
+                // Здесь будет логика выбора данных по конкретной задаче
+            });
+        });
+        
+        // Симулировать обновление терминала задачи
+        setInterval(() => {
+            const terminal = document.getElementById('task-output');
+            if (terminal && !terminal.parentElement.classList.contains('d-none')) {
+                const messages = [
+                    '[AI] Continuing network traffic analysis...',
+                    '[AI] Checking for encrypted traffic patterns...',
+                    '[AI] Correlating connection times with user activity...',
+                    '[AI] Analyzing packet headers for anomalies...'
+                ];
+                
+                const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+                const messageElement = document.createElement('div');
+                messageElement.textContent = randomMessage;
+                terminal.appendChild(messageElement);
+                
+                terminal.scrollTop = terminal.scrollHeight;
+            }
+        }, 8000);
+    </script>
+</body>
+</html> 

@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeuroRAT - Agent Details</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+        }
+        .navbar {
+            background-color: #000000;
+            border-bottom: 1px solid #333;
+        }
+        .card {
+            background-color: #222;
+            border: 1px solid #444;
+            margin-bottom: 20px;
+        }
+        .card-header {
+            background-color: #333;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+        }
+        .terminal {
+            background-color: #0a0a0a;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            padding: 10px;
+            border-radius: 5px;
+            height: 300px;
+            overflow-y: auto;
+        }
+        .btn-action {
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+        .nav-tabs .nav-link {
+            color: #e0e0e0;
+            border: none;
+        }
+        .nav-tabs .nav-link.active {
+            background-color: #333;
+            color: #00ff00;
+            border: none;
+        }
+        .nav-tabs {
+            border-bottom: 1px solid #444;
+        }
+        .tab-content {
+            padding: 15px;
+            background-color: #222;
+            border-radius: 0 0 5px 5px;
+        }
+        .system-info {
+            background-color: #1a1a1a;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+        }
+        .cmd-input {
+            background-color: #1a1a1a;
+            color: #00ff00;
+            border: 1px solid #444;
+        }
+        .file-item {
+            background-color: #333;
+            padding: 5px 10px;
+            margin-bottom: 5px;
+            border-radius: 3px;
+        }
+        .file-item:hover {
+            background-color: #444;
+        }
+        .folder-icon {
+            color: #ffc107;
+        }
+        .file-icon {
+            color: #17a2b8;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">NeuroRAT</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/agents">Agents</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/tasks">Tasks</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/settings">Settings</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5>Agent: {{ agent.agent_id }}</h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-warning">Update</button>
+                    <button class="btn btn-sm btn-outline-danger">Terminate</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6>System Information</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="system-info">
+                                    <p><strong>OS:</strong> {{ agent.system_info.get('os', 'Unknown') }}</p>
+                                    <p><strong>Hostname:</strong> {{ agent.system_info.get('hostname', 'Unknown') }}</p>
+                                    <p><strong>IP:</strong> {{ agent.system_info.get('ip', 'Unknown') }}</p>
+                                    <p><strong>User:</strong> {{ agent.system_info.get('user', 'Unknown') }}</p>
+                                    <p><strong>First Seen:</strong> {{ agent.first_seen|int }}</p>
+                                    <p><strong>Last Active:</strong> {{ agent.last_active|int }}</p>
+                                    <p><strong>CPU:</strong> {{ agent.system_info.get('cpu', 'Unknown') }}</p>
+                                    <p><strong>RAM:</strong> {{ agent.system_info.get('ram', 'Unknown') }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6>Quick Actions</h6>
+                            </div>
+                            <div class="card-body">
+                                <button class="btn btn-outline-primary btn-action">Shell Command</button>
+                                <button class="btn btn-outline-info btn-action">LLM Command</button>
+                                <button class="btn btn-outline-warning btn-action">File Manager</button>
+                                <button class="btn btn-outline-secondary btn-action">Take Screenshot</button>
+                                <button class="btn btn-outline-secondary btn-action">Record Microphone</button>
+                                <button class="btn btn-outline-secondary btn-action">Capture Webcam</button>
+                                <button class="btn btn-outline-success btn-action">Keylogger</button>
+                                <button class="btn btn-outline-danger btn-action">Self Destruct</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <ul class="nav nav-tabs" id="myTab" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="terminal-tab" data-bs-toggle="tab" data-bs-target="#terminal" type="button" role="tab">Terminal</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="llm-tab" data-bs-toggle="tab" data-bs-target="#llm" type="button" role="tab">LLM Interface</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="files-tab" data-bs-toggle="tab" data-bs-target="#files" type="button" role="tab">Files</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#history" type="button" role="tab">Command History</button>
+                    </li>
+                </ul>
+                <div class="tab-content" id="myTabContent">
+                    <!-- Terminal Tab -->
+                    <div class="tab-pane fade show active" id="terminal" role="tabpanel">
+                        <div class="terminal" id="shell-terminal">
+                            <div>[System] Connection established with {{ agent.agent_id }}</div>
+                            <div>[System] Type commands to execute on the remote system</div>
+                            {% if agent.commands %}
+                                {% for cmd in agent.commands %}
+                                    {% if cmd.command_type == 'shell' %}
+                                        <div>> {{ cmd.data.get('command', '') }}</div>
+                                        <div>{{ cmd.data.get('stdout', '') }}</div>
+                                        {% if cmd.data.get('stderr', '') %}
+                                            <div class="text-danger">{{ cmd.data.get('stderr', '') }}</div>
+                                        {% endif %}
+                                    {% endif %}
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                        <div class="input-group mt-2">
+                            <input type="text" class="form-control cmd-input" placeholder="Enter command..." id="shell-command">
+                            <button class="btn btn-outline-success" type="button" id="send-command">Send</button>
+                        </div>
+                    </div>
+                    
+                    <!-- LLM Interface Tab -->
+                    <div class="tab-pane fade" id="llm" role="tabpanel">
+                        <div class="terminal" id="llm-terminal">
+                            <div>[AI] Hello operator. I'm ready to assist with autonomous actions on this system.</div>
+                            <div>[AI] You can ask me to perform tasks or provide instructions.</div>
+                            {% if agent.commands %}
+                                {% for cmd in agent.commands %}
+                                    {% if cmd.command_type == 'llm_query' %}
+                                        <div>👤 {{ cmd.data.get('query', '') }}</div>
+                                        <div>🤖 {{ cmd.data.get('result', {}).get('message', '') }}</div>
+                                    {% endif %}
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                        <div class="input-group mt-2">
+                            <input type="text" class="form-control cmd-input" placeholder="Enter LLM instruction..." id="llm-command">
+                            <button class="btn btn-outline-info" type="button" id="send-llm">Send</button>
+                        </div>
+                        <div class="form-check form-switch mt-2">
+                            <input class="form-check-input" type="checkbox" id="autonomous-mode">
+                            <label class="form-check-label" for="autonomous-mode">Autonomous Execution</label>
+                        </div>
+                    </div>
+                    
+                    <!-- Files Tab -->
+                    <div class="tab-pane fade" id="files" role="tabpanel">
+                        <div class="mb-3">
+                            <div class="input-group">
+                                <input type="text" class="form-control cmd-input" value="/home/user" id="current-path">
+                                <button class="btn btn-outline-warning" type="button" id="browse-path">Browse</button>
+                            </div>
+                        </div>
+                        <div class="file-browser mb-3">
+                            <div class="file-item">
+                                <span class="folder-icon">📁</span> <a href="#" class="text-decoration-none text-white">..</a>
+                            </div>
+                            <div class="file-item">
+                                <span class="folder-icon">📁</span> <a href="#" class="text-decoration-none text-white">Documents</a>
+                            </div>
+                            <div class="file-item">
+                                <span class="folder-icon">📁</span> <a href="#" class="text-decoration-none text-white">Downloads</a>
+                            </div>
+                            <div class="file-item">
+                                <span class="file-icon">📄</span> <a href="#" class="text-decoration-none text-white">.bashrc</a>
+                            </div>
+                            <div class="file-item">
+                                <span class="file-icon">📄</span> <a href="#" class="text-decoration-none text-white">.profile</a>
+                            </div>
+                        </div>
+                        <div class="btn-group mb-3">
+                            <button class="btn btn-outline-primary btn-sm">Upload</button>
+                            <button class="btn btn-outline-success btn-sm">Download</button>
+                            <button class="btn btn-outline-warning btn-sm">Edit</button>
+                            <button class="btn btn-outline-danger btn-sm">Delete</button>
+                        </div>
+                        <div class="terminal" style="height: 150px;">
+                            <div>[File System] Ready to perform file operations</div>
+                        </div>
+                    </div>
+                    
+                    <!-- History Tab -->
+                    <div class="tab-pane fade" id="history" role="tabpanel">
+                        <div class="table-responsive">
+                            <table class="table table-dark">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Type</th>
+                                        <th>Command</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% if agent.commands %}
+                                        {% for cmd in agent.commands %}
+                                        <tr>
+                                            <td>{{ cmd.time|int }}</td>
+                                            <td>{{ cmd.command_type }}</td>
+                                            <td>
+                                                {% if cmd.command_type == 'shell' %}
+                                                    {{ cmd.data.get('command', '') }}
+                                                {% elif cmd.command_type == 'llm_query' %}
+                                                    {{ cmd.data.get('query', '') }}
+                                                {% else %}
+                                                    Command data
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-success">Success</span>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr>
+                                            <td colspan="4" class="text-center">No command history</td>
+                                        </tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Симуляция отправки команд в терминал
+        document.getElementById('send-command').addEventListener('click', function() {
+            const terminal = document.getElementById('shell-terminal');
+            const commandInput = document.getElementById('shell-command');
+            const command = commandInput.value.trim();
+            
+            if (command) {
+                // Добавляем команду в терминал
+                const commandElement = document.createElement('div');
+                commandElement.textContent = '> ' + command;
+                terminal.appendChild(commandElement);
+                
+                // Симуляция ответа
+                setTimeout(() => {
+                    const responseElement = document.createElement('div');
+                    if (command.toLowerCase() === 'ls') {
+                        responseElement.textContent = 'Documents  Downloads  Pictures  Videos  agent.log';
+                    } else if (command.toLowerCase().startsWith('cat ')) {
+                        responseElement.textContent = 'File contents would appear here...';
+                    } else if (command.toLowerCase() === 'whoami') {
+                        responseElement.textContent = 'user';
+                    } else if (command.toLowerCase() === 'pwd') {
+                        responseElement.textContent = '/home/user';
+                    } else {
+                        responseElement.textContent = 'Command executed.';
+                    }
+                    
+                    terminal.appendChild(responseElement);
+                    terminal.scrollTop = terminal.scrollHeight;
+                }, 500);
+                
+                // Очищаем поле ввода
+                commandInput.value = '';
+            }
+            
+            terminal.scrollTop = terminal.scrollHeight;
+        });
+        
+        // Симуляция отправки запросов к LLM
+        document.getElementById('send-llm').addEventListener('click', function() {
+            const terminal = document.getElementById('llm-terminal');
+            const commandInput = document.getElementById('llm-command');
+            const autonomousMode = document.getElementById('autonomous-mode').checked;
+            const query = commandInput.value.trim();
+            
+            if (query) {
+                // Добавляем запрос в терминал
+                const queryElement = document.createElement('div');
+                queryElement.textContent = '👤 ' + query;
+                terminal.appendChild(queryElement);
+                
+                // Симуляция ответа от LLM
+                setTimeout(() => {
+                    const responseElement = document.createElement('div');
+                    
+                    if (query.toLowerCase().includes('collect') || query.toLowerCase().includes('find')) {
+                        responseElement.textContent = '🤖 I will collect information for you. Here are the commands I can execute:';
+                        terminal.appendChild(responseElement);
+                        
+                        const commandsElement = document.createElement('div');
+                        commandsElement.textContent = 'collect_info: system';
+                        terminal.appendChild(commandsElement);
+                        
+                        if (autonomousMode) {
+                            const executingElement = document.createElement('div');
+                            executingElement.textContent = '[AI] Executing commands automatically...';
+                            terminal.appendChild(executingElement);
+                            
+                            setTimeout(() => {
+                                const resultElement = document.createElement('div');
+                                resultElement.textContent = '✅ System information collected successfully.';
+                                terminal.appendChild(resultElement);
+                                terminal.scrollTop = terminal.scrollHeight;
+                            }, 1000);
+                        }
+                    } else if (query.toLowerCase().includes('execute') || query.toLowerCase().includes('run')) {
+                        responseElement.textContent = '🤖 I can execute these commands for you:';
+                        terminal.appendChild(responseElement);
+                        
+                        const commandsElement = document.createElement('div');
+                        commandsElement.textContent = 'execute: ls -la /tmp';
+                        terminal.appendChild(commandsElement);
+                        
+                        if (autonomousMode) {
+                            const executingElement = document.createElement('div');
+                            executingElement.textContent = '[AI] Executing commands automatically...';
+                            terminal.appendChild(executingElement);
+                            
+                            setTimeout(() => {
+                                const resultElement = document.createElement('div');
+                                resultElement.textContent = '✅ Command executed successfully.';
+                                terminal.appendChild(resultElement);
+                                terminal.scrollTop = terminal.scrollHeight;
+                            }, 1000);
+                        }
+                    } else {
+                        responseElement.textContent = '🤖 I understand your request. Based on my analysis, here are some suggested actions:';
+                        terminal.appendChild(responseElement);
+                        
+                        const suggestionsElement = document.createElement('div');
+                        suggestionsElement.textContent = '1. collect_info: system\n2. execute: ps aux | grep python';
+                        terminal.appendChild(suggestionsElement);
+                    }
+                    
+                    terminal.scrollTop = terminal.scrollHeight;
+                }, 1000);
+                
+                // Очищаем поле ввода
+                commandInput.value = '';
+            }
+            
+            terminal.scrollTop = terminal.scrollHeight;
+        });
+    </script>
+</body>
+</html> 
