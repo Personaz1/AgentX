@@ -131,14 +131,96 @@ class GoogleAIIntegration(APIIntegration):
         """Initialize the Google AI API integration"""
         super().__init__()
         self.api_key = os.getenv("GOOGLE_API_KEY")
+        self.gemini_api_key = os.getenv("GOOGLE_GEMINI_API_KEY")
+        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-pro")
         self.credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        self.max_tokens = int(os.getenv("LLM_MAX_TOKENS", "2048"))
+        self.temperature = float(os.getenv("LLM_TEMPERATURE", "0.7"))
     
     def _validate_env(self) -> bool:
         """Validate Google API configuration"""
-        if not self.api_key and not self.credentials_path:
-            logger.warning("Neither GOOGLE_API_KEY nor GOOGLE_APPLICATION_CREDENTIALS is set")
+        if not self.api_key and not self.gemini_api_key and not self.credentials_path:
+            logger.warning("Ни один из API ключей Google не настроен")
             return False
         return True
+    
+    def gemini_completion(self, prompt: str, system_prompt: str = None) -> Dict[str, Any]:
+        """
+        Send a request to the Google Gemini API
+        
+        Args:
+            prompt: User prompt
+            system_prompt: Optional system prompt for context
+            
+        Returns:
+            API response as dictionary
+        """
+        if not self.gemini_api_key:
+            return {"error": "Google Gemini API Key is not configured"}
+        
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.gemini_model}:generateContent?key={self.gemini_api_key}"
+            
+            # Формируем запрос для Gemini
+            data = {
+                "contents": []
+            }
+            
+            # Добавляем систем промпт если есть
+            if system_prompt:
+                data["contents"].append({
+                    "role": "user",
+                    "parts": [{"text": f"System: {system_prompt}"}]
+                })
+            
+            # Добавляем пользовательский промпт
+            data["contents"].append({
+                "role": "user",
+                "parts": [{"text": prompt}]
+            })
+            
+            # Добавляем параметры генерации
+            data["generationConfig"] = {
+                "temperature": self.temperature,
+                "maxOutputTokens": self.max_tokens,
+                "topP": 0.95,
+                "topK": 40
+            }
+            
+            response = requests.post(url, json=data)
+            response.raise_for_status()
+            
+            return response.json()
+            
+        except Exception as e:
+            logger.error(f"Error in Gemini API request: {str(e)}")
+            return {"error": str(e)}
+    
+    def generate_response(self, prompt: str, system_prompt: str = None) -> str:
+        """
+        Generate a response using Google Gemini API
+        
+        Args:
+            prompt: The user's prompt
+            system_prompt: Optional system prompt for context
+            
+        Returns:
+            Generated text response
+        """
+        response = self.gemini_completion(prompt, system_prompt)
+        
+        if "error" in response:
+            return f"Error: {response['error']}"
+        
+        try:
+            # Извлекаем текст ответа из структуры ответа Gemini
+            content = response.get("candidates", [{}])[0].get("content", {})
+            parts = content.get("parts", [{}])
+            text = parts[0].get("text", "Нет ответа")
+            return text
+        except (KeyError, IndexError) as e:
+            logger.error(f"Error parsing Gemini response: {str(e)}")
+            return "Error: Failed to parse API response"
 
 
 class TelegramIntegration(APIIntegration):
@@ -244,6 +326,11 @@ class APIFactory:
         return GoogleAIIntegration()
     
     @staticmethod
+    def get_gemini_integration() -> GoogleAIIntegration:
+        """Get Google Gemini integration instance (alias for google_integration)"""
+        return GoogleAIIntegration()
+    
+    @staticmethod
     def get_telegram_integration() -> TelegramIntegration:
         """Get Telegram integration instance"""
         return TelegramIntegration()
@@ -263,6 +350,17 @@ if __name__ == "__main__":
         # print(f"OpenAI response: {response}")
     else:
         print("❌ OpenAI API is not configured")
+    
+    # Test Gemini
+    gemini = APIFactory.get_gemini_integration()
+    if gemini.is_available() and gemini.gemini_api_key:
+        print("✅ Google Gemini API is configured properly")
+        
+        # Uncomment to test actual API call
+        # response = gemini.generate_response("Hello, what can you do?")
+        # print(f"Gemini response: {response}")
+    else:
+        print("❌ Google Gemini API is not configured")
     
     # Test Telegram
     telegram = APIFactory.get_telegram_integration()

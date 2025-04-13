@@ -828,6 +828,7 @@ monitor.start()
 
 # Initialize API clients
 openai_client = APIFactory.get_openai_integration()
+gemini_client = APIFactory.get_gemini_integration()
 telegram_client = APIFactory.get_telegram_integration()
 
 # Mock data for demonstration
@@ -872,22 +873,27 @@ You should respond as if you are this agent, providing information about the sys
 Be concise and informative. Format data well for readability.
 """
     
-    # Check if OpenAI integration is available
-    if not openai_client.is_available():
-        # Fallback to simple responses if OpenAI is not configured
-        if "system" in message.lower() or "info" in message.lower():
-            return f"System Information:\nOS: {agent['os']}\nHostname: {agent['hostname']}\nUsername: {agent['username']}\nIP: {agent['ip_address']}"
-        elif "scan" in message.lower() or "network" in message.lower():
-            return "Network scan completed. Found 12 devices on the local network."
-        elif "file" in message.lower() or "list" in message.lower():
-            return "Directory listing:\n/etc\n/var\n/home\n/usr\n/bin\n/sbin"
-        elif "help" in message.lower():
-            return "Available commands:\n- system info\n- scan network\n- list files\n- collect passwords\n- take screenshot"
-        else:
-            return f"Command '{message}' executed successfully."
+    # Проверяем доступность Gemini API
+    if gemini_client.is_available() and gemini_client.gemini_api_key:
+        # Используем Gemini API для генерации ответа
+        return gemini_client.generate_response(message, system_prompt)
     
-    # Use OpenAI integration for real responses
-    return openai_client.generate_response(message, system_prompt)
+    # Если Gemini недоступен, пробуем OpenAI
+    if openai_client.is_available():
+        # Используем OpenAI API для генерации ответа
+        return openai_client.generate_response(message, system_prompt)
+    
+    # Fallback к заглушке, если ни один API не доступен
+    if "system" in message.lower() or "info" in message.lower():
+        return f"System Information:\nOS: {agent['os']}\nHostname: {agent['hostname']}\nUsername: {agent['username']}\nIP: {agent['ip_address']}"
+    elif "scan" in message.lower() or "network" in message.lower():
+        return "Network scan completed. Found 12 devices on the local network."
+    elif "file" in message.lower() or "list" in message.lower():
+        return "Directory listing:\n/etc\n/var\n/home\n/usr\n/bin\n/sbin"
+    elif "help" in message.lower():
+        return "Available commands:\n- system info\n- scan network\n- list files\n- collect passwords\n- take screenshot"
+    else:
+        return f"Command '{message}' executed successfully."
 
 def record_event(event_type: str, agent_id: str = None, details: str = ""):
     """Record an event in the events list"""
@@ -1148,6 +1154,7 @@ generate_mock_data()
 # Print available API integrations on startup
 print("Available API integrations:")
 print(f"- OpenAI API: {'✅ Available' if openai_client.is_available() else '❌ Not configured'}")
+print(f"- Gemini API: {'✅ Available' if gemini_client.is_available() else '❌ Not configured'}")
 print(f"- Telegram API: {'✅ Available' if telegram_client.is_available() else '❌ Not configured'}")
 
 # Create a template for Satan page
