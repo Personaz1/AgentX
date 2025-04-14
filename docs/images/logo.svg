@@ -7,28 +7,62 @@
     }
     .brain-path {
       fill: none;
-      stroke: #7b1fa2;
+      stroke: #00ff8c;
       stroke-width: 2;
       stroke-linecap: round;
       stroke-linejoin: round;
+      filter: drop-shadow(0 0 3px #00ff8c);
     }
     .network-line {
-      stroke: #0288d1;
+      stroke: #0088ff;
       stroke-width: 1.5;
       stroke-dasharray: 3,3;
+      filter: drop-shadow(0 0 2px #0088ff);
     }
     .pulse {
       animation: pulse 2s infinite;
+    }
+    .glow {
+      filter: drop-shadow(0 0 5px #00ff8c);
     }
     @keyframes pulse {
       0% { opacity: 0.3; }
       50% { opacity: 1; }
       100% { opacity: 0.3; }
     }
+    @keyframes node-pulse {
+      0% { r: 2; opacity: 0.7; }
+      50% { r: 3; opacity: 1; }
+      100% { r: 2; opacity: 0.7; }
+    }
+    .node {
+      animation: node-pulse 3s infinite;
+    }
   </style>
   
   <!-- Background -->
-  <rect x="0" y="0" width="400" height="100" fill="#212121" rx="10" ry="10" />
+  <rect x="0" y="0" width="400" height="100" fill="#121212" rx="10" ry="10" />
+  
+  <!-- Digital grid background -->
+  <g stroke="#1e3a47" stroke-width="0.5" opacity="0.15">
+    <line x1="0" y1="10" x2="400" y2="10" />
+    <line x1="0" y1="20" x2="400" y2="20" />
+    <line x1="0" y1="30" x2="400" y2="30" />
+    <line x1="0" y1="40" x2="400" y2="40" />
+    <line x1="0" y1="50" x2="400" y2="50" />
+    <line x1="0" y1="60" x2="400" y2="60" />
+    <line x1="0" y1="70" x2="400" y2="70" />
+    <line x1="0" y1="80" x2="400" y2="80" />
+    <line x1="0" y1="90" x2="400" y2="90" />
+    
+    <line x1="50" y1="0" x2="50" y2="100" />
+    <line x1="100" y1="0" x2="100" y2="100" />
+    <line x1="150" y1="0" x2="150" y2="100" />
+    <line x1="200" y1="0" x2="200" y2="100" />
+    <line x1="250" y1="0" x2="250" y2="100" />
+    <line x1="300" y1="0" x2="300" y2="100" />
+    <line x1="350" y1="0" x2="350" y2="100" />
+  </g>
   
   <!-- Brain icon -->
   <g transform="translate(30, 25) scale(0.8)">
@@ -39,38 +73,47 @@
     <path class="brain-path" d="M60,10 C60,20 60,40 60,60" />
     
     <!-- Neural connections -->
-    <path class="brain-path network-line pulse" d="M30,20 C40,25 50,15 60,20" />
-    <path class="brain-path network-line pulse" d="M40,30 C50,35 70,25 80,30" />
-    <path class="brain-path network-line pulse" d="M30,40 C40,45 50,35 60,40" />
-    <path class="brain-path network-line pulse" d="M40,50 C50,55 70,45 80,50" />
+    <path class="network-line pulse" d="M30,20 C40,25 50,15 60,20" />
+    <path class="network-line pulse" d="M40,30 C50,35 70,25 80,30" />
+    <path class="network-line pulse" d="M30,40 C40,45 50,35 60,40" />
+    <path class="network-line pulse" d="M40,50 C50,55 70,45 80,50" />
     
     <!-- Nodes -->
-    <circle cx="30" cy="20" r="3" fill="#e91e63" />
-    <circle cx="60" cy="20" r="3" fill="#e91e63" />
-    <circle cx="40" cy="30" r="3" fill="#e91e63" />
-    <circle cx="80" cy="30" r="3" fill="#e91e63" />
-    <circle cx="30" cy="40" r="3" fill="#e91e63" />
-    <circle cx="60" cy="40" r="3" fill="#e91e63" />
-    <circle cx="40" cy="50" r="3" fill="#e91e63" />
-    <circle cx="80" cy="50" r="3" fill="#e91e63" />
+    <circle class="node" cx="30" cy="20" r="2.5" fill="#00ffcc" />
+    <circle class="node" cx="60" cy="20" r="2.5" fill="#00ffcc" />
+    <circle class="node" cx="40" cy="30" r="2.5" fill="#00ffcc" />
+    <circle class="node" cx="80" cy="30" r="2.5" fill="#00ffcc" />
+    <circle class="node" cx="30" cy="40" r="2.5" fill="#00ffcc" />
+    <circle class="node" cx="60" cy="40" r="2.5" fill="#00ffcc" />
+    <circle class="node" cx="40" cy="50" r="2.5" fill="#00ffcc" />
+    <circle class="node" cx="80" cy="50" r="2.5" fill="#00ffcc" />
   </g>
   
   <!-- Text -->
-  <g transform="translate(130, 0)">
-    <text x="0" y="60" class="logo-text" font-size="40" fill="#ffffff">Neuro<tspan fill="#f44336">RAT</tspan></text>
+  <g transform="translate(130, 0)" class="glow">
+    <text x="0" y="60" class="logo-text" font-size="40">
+      <tspan fill="#ffffff">Neuro</tspan><tspan fill="#00ff8c">RAT</tspan>
+    </text>
     <text x="5" y="80" font-size="14" fill="#9e9e9e">AI-Powered Remote Access Tool</text>
   </g>
   
-  <!-- Digital circuit pattern background -->
-  <g stroke="#424242" stroke-width="0.5" opacity="0.3">
+  <!-- Circuit pattern -->
+  <g stroke="#0088ff" stroke-width="0.7" opacity="0.5">
     <path d="M320,20 L350,20 L350,40 L380,40" />
     <path d="M320,30 L340,30 L340,60 L380,60" />
     <path d="M320,40 L330,40 L330,80 L380,80" />
-    <circle cx="350" cy="20" r="2" fill="#4caf50" />
-    <circle cx="340" cy="30" r="2" fill="#4caf50" />
-    <circle cx="330" cy="40" r="2" fill="#4caf50" />
-    <circle cx="350" cy="40" r="2" fill="#4caf50" />
-    <circle cx="340" cy="60" r="2" fill="#4caf50" />
-    <circle cx="330" cy="80" r="2" fill="#4caf50" />
+    <circle cx="350" cy="20" r="2" fill="#0088ff" />
+    <circle cx="340" cy="30" r="2" fill="#0088ff" />
+    <circle cx="330" cy="40" r="2" fill="#0088ff" />
+    <circle cx="350" cy="40" r="2" fill="#0088ff" />
+    <circle cx="340" cy="60" r="2" fill="#0088ff" />
+    <circle cx="330" cy="80" r="2" fill="#0088ff" />
+  </g>
+  
+  <!-- Cyberpunk hexagon details -->
+  <g stroke="#00ff8c" stroke-width="1" fill="none" opacity="0.2" transform="translate(330, 15) scale(0.5)">
+    <polygon points="0,30 26,15 26,-15 0,-30 -26,-15 -26,15" />
+    <polygon points="0,50 43,25 43,-25 0,-50 -43,-25 -43,25" />
+    <polygon points="0,70 60,35 60,-35 0,-70 -60,-35 -60,35" />
   </g>
 </svg> 

