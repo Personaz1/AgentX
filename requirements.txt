@@ -22,10 +22,10 @@ python-dotenv>=0.20.0
 # Для логирования
 colorlog>=6.6.0
 
-# Зависимости для LLM и автономного мозга
-transformers>=4.20.0
-torch>=1.11.0
-sentence-transformers>=2.2.2
+# Зависимости для LLM и автономного мозга - ВРЕМЕННО ОТКЛЮЧЕНЫ
+# transformers>=4.20.0
+# torch>=1.11.0
+# sentence-transformers>=2.2.2
 numpy>=1.22.0
 # re - это встроенный модуль Python, не требует установки через pip
 
