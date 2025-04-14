@@ -7,10 +7,10 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: neurorat-server
-    command: python server_api.py
+    command: python server_api.py --port 8080
     ports:
       - "8080:8080"  # Веб-интерфейс
-      - "5001:5000"  # API порт (мапинг внешнего 5001 на внутренний 5000)
+      - "5050:5000"  # API порт
     volumes:
       - ./.env:/app/.env:ro  # Монтируем .env файл как только для чтения
       - ./uploads:/app/uploads  # Директория для загрузок
