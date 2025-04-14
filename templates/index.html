@@ -1,279 +1,147 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>NeuroRAT C2 Server</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #1a1a1a;
-            color: #f0f0f0;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        header {
-            background-color: #2a2a2a;
-            padding: 20px;
-            margin-bottom: 20px;
-            border-bottom: 1px solid #3a3a3a;
-        }
-        h1, h2, h3 {
-            color: #00ff00;
-        }
-        .card {
-            background-color: #2a2a2a;
-            padding: 20px;
-            margin-bottom: 20px;
-            border-radius: 5px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            padding: 10px;
-            text-align: left;
-            border-bottom: 1px solid #3a3a3a;
-        }
-        th {
-            background-color: #222;
-        }
-        .status-active {
-            color: #00ff00;
-        }
-        .status-inactive {
-            color: #ff3333;
-        }
-        .btn {
-            display: inline-block;
-            padding: 8px 16px;
-            background-color: #444;
-            color: #fff;
-            text-decoration: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        .btn:hover {
-            background-color: #555;
-        }
-        .btn-danger {
-            background-color: #aa2222;
-        }
-        .btn-danger:hover {
-            background-color: #cc3333;
-        }
-        .satan-btn {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background-color: #990000;
-            color: white;
-            padding: 15px 25px;
-            border-radius: 8px;
-            font-weight: bold;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-            transition: all 0.3s ease;
-            z-index: 999;
-        }
-        .satan-btn:hover {
-            background-color: #cc0000;
-            transform: scale(1.05);
-            box-shadow: 0 6px 12px rgba(0,0,0,0.5);
-        }
-        /* Модальное окно */
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.9);
-            overflow: auto;
-        }
-        .modal-content {
-            background-color: #111;
-            color: #ff0000;
-            margin: 5% auto;
-            padding: 20px;
-            width: 80%;
-            border: 1px solid #333;
-            border-radius: 5px;
-            font-family: monospace;
-            white-space: pre;
-            line-height: 1.2;
-            text-align: center;
-            position: relative;
-        }
-        .close-modal {
-            color: #aaa;
-            float: right;
-            font-size: 28px;
-            font-weight: bold;
-            position: absolute;
-            top: 10px;
-            right: 20px;
-        }
-        .close-modal:hover {
-            color: #f00;
-            text-decoration: none;
-            cursor: pointer;
-        }
-        @keyframes flicker {
-            0% { opacity: 1; }
-            5% { opacity: 0.8; }
-            10% { opacity: 1; }
-            15% { opacity: 0.9; }
-            20% { opacity: 1; }
-            25% { opacity: 0.9; }
-            30% { opacity: 1; }
-            35% { opacity: 0.8; }
-            40% { opacity: 1; }
-            50% { opacity: 0.7; }
-            60% { opacity: 1; }
-            70% { opacity: 0.9; }
-            80% { opacity: 1; }
-            90% { opacity: 0.8; }
-            100% { opacity: 1; }
-        }
-        .satan-text {
-            animation: flicker 5s infinite;
-            color: #ff3300;
-            text-shadow: 0 0 10px #ff0000;
-        }
-    </style>
-</head>
-<body>
-    <header>
-        <div class="container">
-            <h1>NeuroRAT C2 Server</h1>
-            <p>Command and Control Interface</p>
-        </div>
-    </header>
-    
-    <div class="container">
-        <div class="card">
-            <h2>Server Status</h2>
-            <p>Uptime: {{uptime}}</p>
-            <p>Connected Agents: {{connected_agents}}</p>
-            <p>Total Agents: {{total_agents}}</p>
-        </div>
-        
-        <div class="card">
-            <h2>Connected Agents</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>OS</th>
-                        <th>Hostname</th>
-                        <th>Username</th>
-                        <th>IP Address</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for agent in agents %}
-                    <tr>
-                        <td>{{agent.agent_id}}</td>
-                        <td>{{agent.os}}</td>
-                        <td>{{agent.hostname}}</td>
-                        <td>{{agent.username}}</td>
-                        <td>{{agent.ip_address}}</td>
-                        <td class="status-{{agent.status}}">{{agent.status}}</td>
-                        <td>
-                            <a href="/agent/{{agent.agent_id}}" class="btn">Details</a>
-                            <a href="/agent/{{agent.agent_id}}/chat" class="btn">Chat</a>
-                            <a href="/agent/{{agent.agent_id}}/command" class="btn">Command</a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        
-        <div class="card">
-            <h2>Recent Events</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Event Type</th>
-                        <th>Agent</th>
-                        <th>Details</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for event in events %}
-                    <tr>
-                        <td>{{event.timestamp}}</td>
-                        <td>{{event.event_type}}</td>
-                        <td>{{event.agent_id or "System"}}</td>
-                        <td>{{event.details}}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+{% extends "shared/base_layout.html" %}
+
+{% block title %}NeuroRAT C2 Dashboard{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Server Status</h2>
+    <p>Uptime: {{uptime}}</p>
+    <p>Connected Agents: {{connected_agents}}</p>
+    <p>Total Agents: {{total_agents}}</p>
+</div>
+
+<div class="card">
+    <h2>Connected Agents</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>OS</th>
+                <th>Hostname</th>
+                <th>Username</th>
+                <th>IP Address</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for agent in agents %}
+            <tr>
+                <td>{{agent.agent_id}}</td>
+                <td>{{agent.os}}</td>
+                <td>{{agent.hostname}}</td>
+                <td>{{agent.username}}</td>
+                <td>{{agent.ip_address}}</td>
+                <td class="status-{{agent.status}}">{{agent.status}}</td>
+                <td>
+                    <a href="/agent/{{agent.agent_id}}/chat" class="btn">Chat</a>
+                    <a href="/agent/{{agent.agent_id}}/command" class="btn">Command</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Recent Events</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Event Type</th>
+                <th>Agent</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for event in events %}
+            <tr>
+                <td>{{event.timestamp}}</td>
+                <td>{{event.event_type}}</td>
+                <td>{{event.agent_id or "System"}}</td>
+                <td>{{event.details}}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Кнопка вызова сатаны -->
+<button class="satan-btn" id="summonSatan">ВЫЗВАТЬ САТАНУ</button>
+
+<!-- Модальное окно с ASCII-артом сатаны -->
+<div id="satanModal" class="modal">
+    <div class="modal-content">
+        <span class="close-modal">&times;</span>
+        <h2 class="satan-text">САТАНА ПРИЗВАН!</h2>
+        <pre class="satan-text">{{satan_ascii|safe}}</pre>
+        <p class="satan-text">Ваша программа теперь проклята и работает на 666% быстрее</p>
     </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Refresh data every 30 seconds
+    setTimeout(() => {
+        window.location.reload();
+    }, 30000);
     
-    <!-- Кнопка вызова сатаны -->
-    <button class="satan-btn" id="summonSatan">ВЫЗВАТЬ САТАНУ</button>
+    // Модальное окно с сатаной
+    const modal = document.getElementById("satanModal");
+    const btn = document.getElementById("summonSatan");
+    const span = document.getElementsByClassName("close-modal")[0];
     
-    <!-- Модальное окно с ASCII-артом сатаны -->
-    <div id="satanModal" class="modal">
-        <div class="modal-content">
-            <span class="close-modal">&times;</span>
-            <h2 class="satan-text">САТАНА ПРИЗВАН!</h2>
-            <pre class="satan-text">{{satan_ascii|safe}}</pre>
-            <p class="satan-text">Ваша программа теперь проклята и работает на 666% быстрее</p>
-        </div>
-    </div>
+    // Открыть модальное окно при клике на кнопку
+    btn.onclick = function() {
+        modal.style.display = "block";
+        // Добавляем звуковой эффект (демонический смех)
+        playDemonicSound();
+    }
     
-    <script>
-        // Refresh data every 30 seconds
-        setTimeout(() => {
-            window.location.reload();
-        }, 30000);
-        
-        // Модальное окно с сатаной
-        const modal = document.getElementById("satanModal");
-        const btn = document.getElementById("summonSatan");
-        const span = document.getElementsByClassName("close-modal")[0];
-        
-        // Открыть модальное окно при клике на кнопку
-        btn.onclick = function() {
-            modal.style.display = "block";
-            // Добавляем звуковой эффект (демонический смех)
-            playDemonicSound();
-        }
-        
-        // Закрыть модальное окно при клике на крестик
-        span.onclick = function() {
+    // Закрыть модальное окно при клике на крестик
+    span.onclick = function() {
+        modal.style.display = "none";
+    }
+    
+    // Закрыть модальное окно при клике вне его
+    window.onclick = function(event) {
+        if (event.target == modal) {
             modal.style.display = "none";
         }
-        
-        // Закрыть модальное окно при клике вне его
-        window.onclick = function(event) {
-            if (event.target == modal) {
-                modal.style.display = "none";
-            }
-        }
-        
-        // Функция для звукового эффекта
-        function playDemonicSound() {
-            // Здесь мог бы быть код для проигрывания звука
-            console.log("Демонический смех звучит в вашем воображении");
-        }
-    </script>
-</body>
-</html>
+    }
+    
+    // Функция для звукового эффекта
+    function playDemonicSound() {
+        // Здесь мог бы быть код для проигрывания звука
+        console.log("Демонический смех звучит в вашем воображении");
+    }
+</script>
+{% endblock %}
+
+{% block extra_styles %}
+@keyframes flicker {
+    0% { opacity: 1; }
+    5% { opacity: 0.8; }
+    10% { opacity: 1; }
+    15% { opacity: 0.9; }
+    20% { opacity: 1; }
+    25% { opacity: 0.9; }
+    30% { opacity: 1; }
+    35% { opacity: 0.8; }
+    40% { opacity: 1; }
+    50% { opacity: 0.7; }
+    60% { opacity: 1; }
+    70% { opacity: 0.9; }
+    80% { opacity: 1; }
+    90% { opacity: 0.8; }
+    100% { opacity: 1; }
+}
+
+.satan-text {
+    animation: flicker 5s infinite;
+    color: #ff3300;
+    text-shadow: 0 0 10px #ff0000;
+}
+{% endblock %}

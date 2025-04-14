@@ -1,960 +1,662 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NeuroRAT - Чат с агентом</title>
-    <link rel="stylesheet" href="https://unpkg.com/xterm/css/xterm.css">
-    <style>
-        :root {
-            --primary-color: #8A2BE2;
-            --primary-dark: #4B0082;
-            --secondary-color: #00C9A7;
-            --dark-bg: #121212;
-            --darker-bg: #0a0a0a;
-            --light-text: #f5f5f5;
-            --medium-text: #aaaaaa;
-            --dark-text: #333333;
-            --border-color: #2a2a2a;
-            --success-color: #00C851;
-            --danger-color: #ff4444;
-            --warning-color: #ffbb33;
-            --info-color: #33b5e5;
-        }
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        
-        body {
-            background-color: var(--dark-bg);
-            color: var(--light-text);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-        
-        .container {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            max-width: 100%;
-            margin: 0 auto;
-            height: 100vh;
-            background-color: var(--dark-bg);
-        }
+{% extends "shared/base_layout.html" %}
 
-        .chat-container {
-            display: flex;
-            flex: 1;
-            overflow: hidden;
-        }
+{% block title %}NeuroRAT - Чат с агентом{% endblock %}
 
-        .chat-area {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            border-right: 1px solid var(--border-color);
-            transition: width 0.3s ease;
-        }
+{% block extra_styles %}
+.chat-container {
+    display: flex;
+    height: calc(100vh - 160px);
+    margin-top: 20px;
+}
 
-        .thinking-panel {
-            width: 0;
-            overflow: hidden;
-            background-color: var(--darker-bg);
-            transition: width 0.3s ease;
-            display: flex;
-            flex-direction: column;
-        }
+.chat-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border-radius: 4px;
+    overflow: hidden;
+    background-color: var(--card);
+    box-shadow: var(--shadow);
+    margin-right: 20px;
+}
 
-        .thinking-panel.active {
-            width: 40%;
-            min-width: 400px;
-        }
+.chat-header {
+    background-color: rgba(0, 0, 0, 0.2);
+    padding: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+}
 
-        .thinking-header {
-            padding: 15px;
-            background-color: var(--primary-dark);
-            color: var(--light-text);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+.chat-header h2 {
+    margin: 0;
+    display: flex;
+    align-items: center;
+}
 
-        .thinking-content {
-            flex: 1;
-            overflow-y: auto;
-            padding: 15px;
-        }
+.status-icon {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 10px;
+}
 
-        .thinking-step {
-            margin-bottom: 15px;
-            padding: 10px;
-            background-color: rgba(255, 255, 255, 0.05);
-            border-radius: 5px;
-            border-left: 3px solid var(--primary-color);
-        }
+.status-active {
+    background-color: var(--primary);
+    box-shadow: 0 0 5px var(--primary-glow);
+}
 
-        .thinking-step h4 {
-            color: var(--secondary-color);
-            margin-bottom: 5px;
-        }
+.status-inactive {
+    background-color: var(--danger);
+}
 
-        .thinking-settings {
-            padding: 10px 15px;
-            background-color: var(--darker-bg);
-            border-top: 1px solid var(--border-color);
-        }
-        
-        .chat-header {
-            padding: 15px;
-            background-color: var(--primary-dark);
-            color: var(--light-text);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .chat-header h2 {
-            margin: 0;
-            font-size: 1.2rem;
-        }
-        
-        .header-actions {
-            display: flex;
-            gap: 15px;
-            align-items: center;
-        }
-        
-        .header-actions button {
-            background-color: transparent;
-            border: none;
-            color: var(--light-text);
-            cursor: pointer;
-            padding: 5px 10px;
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            transition: background-color 0.2s;
-        }
-        
-        .header-actions button:hover {
-            background-color: rgba(255, 255, 255, 0.1);
-        }
-        
-        .agent-status {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-        
-        .status-indicator {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background-color: var(--success-color);
-        }
+.chat-messages {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    background-color: rgba(0, 0, 0, 0.1);
+}
 
-        .status-indicator.offline {
-            background-color: var(--danger-color);
-        }
-        
-        .chat-messages {
-            flex: 1;
-            overflow-y: auto;
-            padding: 15px;
-            display: flex;
-            flex-direction: column;
-        }
-        
-        .message {
-            max-width: 80%;
-            margin-bottom: 15px;
-            padding: 12px 15px;
-            border-radius: 8px;
-            line-height: 1.5;
-            position: relative;
-            animation: fadeIn 0.3s;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .user-message {
-            align-self: flex-end;
-            background-color: var(--primary-color);
-            color: var(--light-text);
-            border-bottom-right-radius: 0;
-        }
-        
-        .agent-message {
-            align-self: flex-start;
-            background-color: #2a2a2a;
-            color: var(--light-text);
-            border-bottom-left-radius: 0;
-        }
-        
-        .message-time {
-            display: block;
-            font-size: 0.7rem;
-            margin-top: 5px;
-            opacity: 0.7;
-            text-align: right;
-        }
-        
-        .chat-input {
-            padding: 15px;
-            background-color: var(--darker-bg);
-            border-top: 1px solid var(--border-color);
-        }
-        
-        .input-container {
-            display: flex;
-            gap: 10px;
-        }
-        
-        textarea {
-            flex: 1;
-            padding: 12px 15px;
-            border-radius: 8px;
-            border: 1px solid var(--border-color);
-            background-color: #1e1e1e;
-            color: var(--light-text);
-            resize: none;
-            height: 60px;
-            font-size: 0.9rem;
-            transition: border-color 0.3s;
-        }
-        
-        textarea:focus {
-            outline: none;
-            border-color: var(--primary-color);
-        }
-        
-        button.send-btn {
-            padding: 0 15px;
-            border: none;
-            background-color: var(--primary-color);
-            color: white;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-            font-weight: bold;
-        }
-        
-        button.send-btn:hover {
-            background-color: var(--primary-dark);
-        }
-        
-        .typing-indicator {
-            display: flex;
-            align-items: center;
-            margin-top: 5px;
-            color: var(--medium-text);
-            font-size: 0.9rem;
-        }
-        
-        .dot {
-            width: 8px;
-            height: 8px;
-            margin: 0 1px;
-            background-color: var(--medium-text);
-            border-radius: 50%;
-            animation: typing-dot 1.4s infinite ease-in-out;
-        }
-        
-        .dot:nth-child(2) {
-            animation-delay: 0.2s;
-        }
-        
-        .dot:nth-child(3) {
-            animation-delay: 0.4s;
-        }
-        
-        @keyframes typing-dot {
-            0%, 60%, 100% { transform: translateY(0); }
-            30% { transform: translateY(-5px); }
-        }
-        
-        .autonomous-badge {
-            font-size: 0.7rem;
-            padding: 2px 6px;
-            background-color: var(--warning-color);
-            color: var(--dark-text);
-            border-radius: 10px;
-            margin-left: 5px;
-            font-weight: bold;
-        }
-        
-        .icon {
-            display: inline-block;
-            margin-right: 3px;
-        }
-        
-        .command-result {
-            background-color: #1a1a1a;
-            padding: 12px;
-            border-radius: 5px;
-            margin-top: 8px;
-            font-family: monospace;
-            white-space: pre-wrap;
-            overflow-x: auto;
-            border-left: 3px solid var(--secondary-color);
-        }
-        
-        .system-message {
-            align-self: center;
-            background-color: rgba(255, 255, 255, 0.1);
-            color: var(--medium-text);
-            padding: 8px 12px;
-            border-radius: 15px;
-            font-size: 0.85rem;
-            margin: 10px 0;
-            max-width: 80%;
-        }
-        
-        .neuron-animation {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            width: 40px;
-            height: 40px;
-            opacity: 0.2;
-        }
-        
-        .neuron-dot {
-            position: absolute;
-            width: 3px;
-            height: 3px;
-            background-color: var(--secondary-color);
-            border-radius: 50%;
-        }
-        
-        .neuron-path {
-            position: absolute;
-            height: 1px;
-            background-color: var(--secondary-color);
-            transform-origin: left center;
-        }
-        
-        .toggle-switch {
-            position: relative;
-            display: inline-block;
-            width: 46px;
-            height: 20px;
-        }
-        
-        .toggle-switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-        
-        .toggle-slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: #444;
-            transition: .4s;
-            border-radius: 20px;
-        }
-        
-        .toggle-slider:before {
-            position: absolute;
-            content: "";
-            height: 16px;
-            width: 16px;
-            left: 2px;
-            bottom: 2px;
-            background-color: white;
-            transition: .4s;
-            border-radius: 50%;
-        }
-        
-        input:checked + .toggle-slider {
-            background-color: var(--primary-color);
-        }
-        
-        input:checked + .toggle-slider:before {
-            transform: translateX(26px);
-        }
-        
-        .toggle-label {
-            margin-left: 10px;
-            font-size: 0.85rem;
-            color: var(--medium-text);
-        }
+.chat-message {
+    margin-bottom: 15px;
+    max-width: 80%;
+}
 
-        .terminal-container {
-            display: none;
-            flex-direction: column;
-            height: 300px;
-            background-color: #0e0e0e;
-            border-top: 1px solid var(--border-color);
-        }
+.message-user {
+    margin-left: auto;
+    background: rgba(153, 0, 255, 0.2);
+    border-radius: 12px 12px 0 12px;
+    padding: 12px 15px;
+    color: var(--text);
+    position: relative;
+}
 
-        .terminal-container.show {
-            display: flex;
-        }
+.message-agent {
+    margin-right: auto;
+    background: rgba(0, 255, 0, 0.1);
+    border-radius: 12px 12px 12px 0;
+    padding: 12px 15px;
+    color: var(--text);
+    position: relative;
+}
 
-        .terminal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 15px;
-            background-color: #1a1a1a;
-            border-bottom: 1px solid var(--border-color);
-        }
+.message-error {
+    margin: 10px auto;
+    background: rgba(255, 0, 0, 0.1);
+    border-radius: 12px;
+    padding: 10px 15px;
+    color: var(--danger);
+    width: 90%;
+    text-align: center;
+}
 
-        .terminal-header h3 {
-            font-size: 0.9rem;
-            margin: 0;
-            color: var(--secondary-color);
-        }
+.message-time {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-align: right;
+    margin-top: 5px;
+}
 
-        .terminal-actions {
-            display: flex;
-            gap: 10px;
-        }
+.chat-input {
+    padding: 15px;
+    border-top: 1px solid var(--border);
+    background-color: rgba(0, 0, 0, 0.2);
+}
 
-        .terminal-body {
-            flex: 1;
-            overflow: hidden;
-            padding: 5px;
-        }
+.chat-form {
+    display: flex;
+}
 
-        #terminal {
-            height: 100%;
-        }
+.chat-textarea {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 15px;
+    resize: none;
+    background-color: rgba(0, 0, 0, 0.3);
+    color: var(--text);
+    font-family: inherit;
+    margin-right: 10px;
+    min-height: 44px;
+}
 
-        .terminal-btn {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
+.chat-textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px var(--primary-glow);
+}
 
-        @keyframes neuron-pulse {
-            0% { transform: scale(1); opacity: 0.6; }
-            50% { transform: scale(1.2); opacity: 1; }
-            100% { transform: scale(1); opacity: 0.6; }
-        }
+.send-btn {
+    cursor: pointer;
+}
 
-        .mode-switch {
-            display: flex;
-            align-items: center;
-            margin-left: 15px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
+.send-btn:hover {
+    transform: translateY(-2px);
+}
+
+.agent-info {
+    background-color: var(--dark);
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+    font-size: 14px;
+}
+
+.agent-info p {
+    margin: 5px 0;
+    display: flex;
+    align-items: center;
+}
+
+.agent-info i {
+    width: 20px;
+    margin-right: 10px;
+    color: var(--primary);
+}
+
+.thinking-panel {
+    width: 400px;
+    background-color: var(--card);
+    border-radius: 4px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.thinking-header {
+    background-color: var(--secondary-dark);
+    color: white;
+    padding: 15px;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.thinking-close {
+    cursor: pointer;
+    font-size: 20px;
+}
+
+.thinking-content {
+    flex: 1;
+    padding: 15px;
+    overflow-y: auto;
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+.thinking-section {
+    margin-bottom: 20px;
+}
+
+.thinking-section h3 {
+    color: var(--primary);
+    margin-bottom: 10px;
+    border-bottom: 1px solid rgba(0, 255, 0, 0.2);
+    padding-bottom: 5px;
+}
+
+.observation h3 {
+    color: #00aaff;
+}
+
+.analysis h3 {
+    color: #ffaa00;
+}
+
+.planning h3 {
+    color: #aa00ff;
+}
+
+.execution h3 {
+    color: #ff5500;
+}
+
+.conclusion h3 {
+    color: #00ffaa;
+}
+
+.thinking-footer {
+    padding: 10px 15px;
+    background-color: rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    border-top: 1px solid var(--border);
+}
+
+.toggle-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-left: 15px;
+}
+
+.toggle {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 24px;
+    background-color: #ccc;
+    border-radius: 12px;
+    margin: 0 10px;
+}
+
+.toggle:after {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background-color: white;
+    top: 3px;
+    left: 3px;
+    transition: all 0.3s;
+}
+
+.toggle.active {
+    background-color: var(--primary);
+}
+
+.toggle.active:after {
+    left: 19px;
+}
+
+/* Terminal */
+.terminal-container {
+    width: 100%;
+    height: 300px;
+    background-color: #000;
+    border-radius: 4px;
+    padding: 10px;
+    font-family: 'Courier New', monospace;
+    color: #00ff00;
+    overflow: auto;
+    display: none;
+}
+
+.terminal-header {
+    background-color: #333;
+    padding: 5px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: -10px -10px 10px -10px;
+}
+
+.terminal-title {
+    color: #00ff00;
+    font-weight: bold;
+}
+
+.terminal-close {
+    cursor: pointer;
+    color: #ff0000;
+}
+
+/* Mode Toggle */
+.mode-toggle {
+    display: flex;
+    align-items: center;
+    margin-right: 20px;
+}
+
+.mode-label {
+    margin-right: 10px;
+    color: var(--text-secondary);
+}
+{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/xterm/3.18.0/xterm.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xterm/3.18.0/xterm.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xterm/3.18.0/addons/fit/fit.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="agent-info card">
+    <h2><span class="status-icon status-{{ agent_status }}"></span> Агент: NeuroRAT-Agent</h2>
+    <div style="display: flex; justify-content: space-between; margin-top: 10px;">
+        <p><i class="fas fa-desktop"></i> {{ agent_os }}</p>
+        <p><i class="fas fa-server"></i> {{ agent_hostname }}</p>
+        <p><i class="fas fa-user"></i> {{ agent_username }}</p>
+        <p><i class="fas fa-network-wired"></i> {{ agent_ip }}</p>
+        
+        <!-- Переключатель автономного режима -->
+        <div class="mode-toggle">
+            <span class="mode-label">Автономный режим</span>
+            <div class="toggle" id="autonomousToggle"></div>
+        </div>
+        
+        <!-- Кнопки для переключения между чатом и терминалом -->
+        <div>
+            <button id="terminalBtn" class="btn btn-secondary"><i class="fas fa-terminal"></i> Терминал</button>
+            <button id="thinkingBtn" class="btn btn-secondary"><i class="fas fa-brain"></i> Ход мысли</button>
+        </div>
+    </div>
+</div>
+
+<div class="chat-container">
+    <div class="chat-main">
         <div class="chat-header">
-            <div class="agent-status">
-                <span class="status-indicator" id="statusIndicator"></span>
-                <h2>Агент: <span id="agentName">NeuroRAT</span></h2>
-                <span id="autonomousBadge" class="autonomous-badge" style="display: none;">Автономный</span>
-            </div>
-            <div class="header-actions">
-                <div class="mode-switch">
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="autonomousToggle">
-                        <span class="toggle-slider"></span>
-                    </label>
-                    <span class="toggle-label">Автономный режим</span>
-                </div>
-                <button id="terminalToggle" class="terminal-btn">
-                    <span class="icon">🖥️</span> Терминал
-                </button>
-                <button id="reasoningToggle">
-                    <span class="icon">🧠</span> Ход мысли
-                </button>
+            <h2><span class="status-icon status-{{ agent_status }}"></span> Агент: NeuroRAT-Agent</h2>
+            <div>Подключен к серверу. Готов к работе.</div>
+        </div>
+        
+        <div class="chat-messages" id="chatMessages">
+            <!-- Здесь будут сообщения чата -->
+            <div class="chat-message message-agent">
+                <div class="message-content">Привет! Я - интеллектуальный агент NeuroRAT. Чем я могу помочь?</div>
+                <div class="message-time">{{ current_time }}</div>
             </div>
         </div>
-        <div class="chat-container">
-            <div class="chat-area">
-                <div class="chat-messages" id="chatMessages">
-                    <div class="system-message">
-                        Подключен к серверу. Готов к работе.
-                    </div>
-                </div>
-                <div class="terminal-container" id="terminalContainer">
-                    <div class="terminal-header">
-                        <h3>Терминал</h3>
-                        <div class="terminal-actions">
-                            <button id="clearTerminal">
-                                <span class="icon">🗑️</span> Очистить
-                            </button>
-                            <button id="closeTerminal">
-                                <span class="icon">✕</span>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="terminal-body">
-                        <div id="terminal"></div>
-                    </div>
-                </div>
-                <div class="chat-input">
-                    <div class="input-container">
-                        <textarea id="messageInput" placeholder="Введите сообщение..."></textarea>
-                        <button class="send-btn" id="sendButton">Отправить</button>
-                    </div>
-                    <div class="typing-indicator" id="typingIndicator" style="display: none;">
-                        <span>Агент думает</span>
-                        <div class="dot"></div>
-                        <div class="dot"></div>
-                        <div class="dot"></div>
-                    </div>
-                </div>
+        
+        <div class="terminal-container" id="terminal">
+            <div class="terminal-header">
+                <span class="terminal-title">Терминал</span>
+                <span class="terminal-close" id="closeTerminal">&times;</span>
             </div>
-            <div class="thinking-panel" id="thinkingPanel">
-                <div class="thinking-header">
-                    <h3>Процесс рассуждения</h3>
-                    <button id="closeThinking">
-                        <span class="icon">✕</span>
-                    </button>
-                </div>
-                <div class="thinking-content" id="thinkingContent">
-                    <!-- Reasoning steps will be added here -->
-                </div>
-                <div class="thinking-settings">
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="autoShowReasoning">
-                        <span class="toggle-slider"></span>
-                    </label>
-                    <span class="toggle-label">Автоматически показывать рассуждения</span>
-                </div>
-                <div class="neuron-animation" id="neuronAnimation"></div>
+            <!-- Терминал будет инициализирован с помощью xterm.js -->
+        </div>
+        
+        <div class="chat-input">
+            <form id="chatForm" class="chat-form">
+                <textarea id="messageInput" class="chat-textarea" placeholder="Введите сообщение..." rows="1"></textarea>
+                <button type="submit" class="btn send-btn"><i class="fas fa-paper-plane"></i> Отправить</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Панель процесса рассуждения -->
+    <div class="thinking-panel" id="thinkingPanel" style="display: none;">
+        <div class="thinking-header">
+            <span>Процесс рассуждения</span>
+            <span class="thinking-close" id="closeThinking">&times;</span>
+        </div>
+        <div class="thinking-content" id="thinkingContent">
+            <!-- Здесь будут отображаться этапы рассуждения агента -->
+        </div>
+        <div class="thinking-footer">
+            <div class="toggle-container">
+                <span>Автоматически показывать рассуждения</span>
+                <div class="toggle" id="autoShowThinking"></div>
             </div>
         </div>
     </div>
+</div>
+{% endblock %}
 
-    <script src="https://unpkg.com/xterm/lib/xterm.js"></script>
-    <script src="https://unpkg.com/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
-    <script>
-        // Agent status
-        let agentConnected = true;
-        let agentName = "NeuroRAT-Agent";
-        let autonomousMode = false;
-        let showReasoning = false;
-        
-        // DOM Elements
-        const statusIndicator = document.getElementById('statusIndicator');
-        const agentNameElement = document.getElementById('agentName');
-        const autonomousBadge = document.getElementById('autonomousBadge');
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
         const chatMessages = document.getElementById('chatMessages');
         const messageInput = document.getElementById('messageInput');
-        const sendButton = document.getElementById('sendButton');
-        const typingIndicator = document.getElementById('typingIndicator');
-        const autonomousToggle = document.getElementById('autonomousToggle');
-        const reasoningToggle = document.getElementById('reasoningToggle');
-        const thinkingPanel = document.getElementById('thinkingPanel');
-        const thinkingContent = document.getElementById('thinkingContent');
-        const closeThinking = document.getElementById('closeThinking');
-        const autoShowReasoning = document.getElementById('autoShowReasoning');
-        const neuronAnimation = document.getElementById('neuronAnimation');
-        const terminalToggle = document.getElementById('terminalToggle');
-        const terminalContainer = document.getElementById('terminalContainer');
+        const chatForm = document.getElementById('chatForm');
+        const terminalContainer = document.getElementById('terminal');
+        const terminalBtn = document.getElementById('terminalBtn');
         const closeTerminal = document.getElementById('closeTerminal');
-        const clearTerminal = document.getElementById('clearTerminal');
+        const thinkingPanel = document.getElementById('thinkingPanel');
+        const thinkingBtn = document.getElementById('thinkingBtn');
+        const closeThinking = document.getElementById('closeThinking');
+        const thinkingContent = document.getElementById('thinkingContent');
+        const autoShowThinking = document.getElementById('autoShowThinking');
+        const autonomousToggle = document.getElementById('autonomousToggle');
         
-        // Initialize agent status
-        function updateAgentStatus() {
-            if (agentConnected) {
-                statusIndicator.classList.remove('offline');
-                agentNameElement.textContent = agentName;
-            } else {
-                statusIndicator.classList.add('offline');
-                agentNameElement.textContent = agentName + " (Offline)";
-            }
+        let autonomousMode = false;  // По умолчанию автономный режим выключен
+        let terminal = null;
+        let socket = null;
+        
+        // Обработчик формы отправки сообщения
+        chatForm.addEventListener('submit', function(e) {
+            e.preventDefault();
             
-            autonomousBadge.style.display = autonomousMode ? 'inline-block' : 'none';
-        }
-        
-        // Initialize the terminal
-        let terminal = new Terminal({
-            cursorBlink: true,
-            theme: {
-                background: '#0e0e0e',
-                foreground: '#f0f0f0',
-                cursor: '#f0f0f0',
-                selection: 'rgba(138, 43, 226, 0.3)',
-                black: '#000000',
-                red: '#ff5555',
-                green: '#50fa7b',
-                yellow: '#f1fa8c',
-                blue: '#bd93f9',
-                magenta: '#ff79c6',
-                cyan: '#8be9fd',
-                white: '#f8f8f2',
-                brightBlack: '#6272a4',
-                brightRed: '#ff6e6e',
-                brightGreen: '#69ff94',
-                brightYellow: '#ffffa5',
-                brightBlue: '#d6acff',
-                brightMagenta: '#ff92df',
-                brightCyan: '#a4ffff',
-                brightWhite: '#ffffff'
-            },
-            fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-            fontSize: 14,
-            lineHeight: 1.3
+            const message = messageInput.value.trim();
+            if (!message) return;
+            
+            // Добавляем сообщение пользователя в чат
+            addMessage('user', message);
+            
+            // Очищаем поле ввода
+            messageInput.value = '';
+            
+            // Отправляем сообщение на сервер
+            sendMessageToAgent(message, autonomousMode);
         });
         
-        const fitAddon = new FitAddon.FitAddon();
-        terminal.loadAddon(fitAddon);
-        
-        // Initialize WebSocket for terminal
-        let terminalSocket = null;
-        
-        function initTerminal() {
-            terminal.open(document.getElementById('terminal'));
-            fitAddon.fit();
+        // Функция для добавления сообщения в чат
+        function addMessage(sender, content, error = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = error ? 'chat-message message-error' : `chat-message message-${sender}`;
             
-            window.addEventListener('resize', () => {
-                if (terminalContainer.classList.contains('show')) {
-                    fitAddon.fit();
-                    // Send terminal size to server
-                    if (terminalSocket && terminalSocket.readyState === WebSocket.OPEN) {
-                        terminalSocket.send(JSON.stringify({
-                            type: 'resize',
-                            cols: terminal.cols,
-                            rows: terminal.rows
-                        }));
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = content;
+            
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'message-time';
+            const now = new Date();
+            timeDiv.textContent = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+            
+            messageDiv.appendChild(contentDiv);
+            if (!error) {
+                messageDiv.appendChild(timeDiv);
+            }
+            
+            chatMessages.appendChild(messageDiv);
+            
+            // Прокручиваем чат вниз
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        // Функция для отправки сообщения агенту
+        function sendMessageToAgent(message, autonomous) {
+            fetch(`/api/agent/{{ agent_id }}/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    message: message,
+                    autonomous_mode: autonomous
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    addMessage(null, `Ошибка: ${data.error}`, true);
+                } else {
+                    // Добавляем ответ агента в чат
+                    addMessage('agent', data.response);
+                    
+                    // Если включен автоматический показ рассуждений
+                    if (autoShowThinking.classList.contains('active')) {
+                        // Имитация процесса рассуждения (в реальной системе данные будут приходить с сервера)
+                        showThinkingProcess(message);
                     }
+                }
+            })
+            .catch(error => {
+                addMessage(null, `Ошибка обработки запроса: ${error.message}`, true);
+            });
+        }
+        
+        // Функция для показа процесса рассуждения
+        function showThinkingProcess(query) {
+            // Очищаем предыдущие рассуждения
+            thinkingContent.innerHTML = '';
+            
+            // Показываем панель рассуждений
+            thinkingPanel.style.display = 'flex';
+            
+            // Создаем разделы для этапов рассуждения
+            const sections = [
+                { name: 'Наблюдение', class: 'observation', content: `Получен запрос от пользователя: "${query}"` },
+                { name: 'Анализ', class: 'analysis', content: 'Определяю тип запроса и необходимые действия. Проверяю, требуется ли выполнение команды в терминале.' },
+                { name: 'Планирование', class: 'planning', content: 'Подготовка к выполнению запроса. Проверяю безопасность команды и возможные последствия.' },
+                { name: 'Выполнение', class: 'execution', content: 'Отправляю запрос на сервер и выполняю необходимые действия.' },
+                { name: 'Заключение', class: 'conclusion', content: 'Запрос обработан. Формирую ответ пользователю с результатами выполнения.' }
+            ];
+            
+            // Добавляем каждый раздел на панель
+            sections.forEach(section => {
+                const sectionDiv = document.createElement('div');
+                sectionDiv.className = `thinking-section ${section.class}`;
+                
+                const title = document.createElement('h3');
+                title.textContent = section.name;
+                
+                const content = document.createElement('p');
+                content.textContent = section.content;
+                
+                sectionDiv.appendChild(title);
+                sectionDiv.appendChild(content);
+                
+                thinkingContent.appendChild(sectionDiv);
+            });
+        }
+        
+        // Инициализация терминала
+        function initTerminal() {
+            if (terminal) return;
+            
+            // Загружаем аддон FitAddon (для автоматического масштабирования терминала)
+            Terminal.applyAddon(fit);
+            
+            // Создаем новый терминал
+            terminal = new Terminal({
+                cursorBlink: true,
+                theme: {
+                    background: '#000000',
+                    foreground: '#00ff00'
                 }
             });
             
-            terminal.onData(data => {
-                if (terminalSocket && terminalSocket.readyState === WebSocket.OPEN) {
-                    terminalSocket.send(JSON.stringify({
-                        type: 'input',
-                        data: data
+            // Открываем терминал в контейнере
+            terminal.open(terminalContainer.querySelector('.terminal-header').nextSibling);
+            
+            // Используем FitAddon для правильного масштабирования
+            const fitAddon = new Terminal.FitAddon();
+            terminal.loadAddon(fitAddon);
+            fitAddon.fit();
+            
+            // Подключаемся к WebSocket для терминала
+            connectTerminalWebSocket();
+            
+            // Обработчик изменения размера окна
+            window.addEventListener('resize', function() {
+                fitAddon.fit();
+                
+                // Отправляем новый размер терминала на сервер
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({
+                        type: 'resize',
+                        cols: terminal.cols,
+                        rows: terminal.rows
                     }));
                 }
             });
+            
+            // Выводим сообщение о подключении
+            terminal.writeln('Подключено к терминальной сессии');
         }
         
+        // Подключение к WebSocket для терминала
         function connectTerminalWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}/api/agent/terminal/ws`;
             
-            terminalSocket = new WebSocket(wsUrl);
+            socket = new WebSocket(wsUrl);
             
-            terminalSocket.onopen = () => {
-                terminal.clear();
-                terminal.writeln('Connected to terminal session');
-                terminal.writeln('');
+            socket.onopen = function() {
+                console.log('WebSocket подключен');
                 
-                // Send terminal size
-                terminalSocket.send(JSON.stringify({
+                // Отправляем начальные размеры терминала
+                socket.send(JSON.stringify({
                     type: 'resize',
                     cols: terminal.cols,
                     rows: terminal.rows
                 }));
+                
+                // Отправляем данные с терминала на сервер
+                terminal.onData(function(data) {
+                    socket.send(JSON.stringify({
+                        type: 'input',
+                        data: data
+                    }));
+                });
             };
             
-            terminalSocket.onmessage = (event) => {
-                const message = JSON.parse(event.data);
-                if (message.type === 'output') {
-                    terminal.write(message.data);
+            socket.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'output') {
+                    terminal.write(data.data);
                 }
             };
             
-            terminalSocket.onclose = () => {
-                terminal.writeln('');
-                terminal.writeln('Terminal session closed');
+            socket.onclose = function() {
+                console.log('WebSocket закрыт');
+                terminal.writeln('\r\nТерминальная сессия закрыта');
             };
             
-            terminalSocket.onerror = (error) => {
-                console.error('Terminal WebSocket error:', error);
-                terminal.writeln('Error connecting to terminal session');
+            socket.onerror = function(error) {
+                console.error('Ошибка WebSocket:', error);
+                terminal.writeln('\r\nОшибка подключения к терминалу');
             };
         }
         
-        // Update status on load
-        updateAgentStatus();
-        
-        // Create neuron animation
-        function createNeuronAnimation() {
-            neuronAnimation.innerHTML = '';
-            
-            // Create central neuron
-            const centralNeuron = document.createElement('div');
-            centralNeuron.className = 'neuron-dot';
-            centralNeuron.style.left = '50%';
-            centralNeuron.style.top = '50%';
-            centralNeuron.style.width = '6px';
-            centralNeuron.style.height = '6px';
-            centralNeuron.style.transform = 'translate(-50%, -50%)';
-            centralNeuron.style.backgroundColor = 'var(--secondary-color)';
-            centralNeuron.style.animation = 'neuron-pulse 2s infinite';
-            neuronAnimation.appendChild(centralNeuron);
-            
-            // Create surrounding neurons and connections
-            for (let i = 0; i < 6; i++) {
-                const angle = (i * 60) * (Math.PI / 180);
-                const distance = 15 + Math.random() * 5;
-                
-                const x = Math.cos(angle) * distance + 20;
-                const y = Math.sin(angle) * distance + 20;
-                
-                // Create neuron dot
-                const neuron = document.createElement('div');
-                neuron.className = 'neuron-dot';
-                neuron.style.left = `${x}px`;
-                neuron.style.top = `${y}px`;
-                neuronAnimation.appendChild(neuron);
-                
-                // Create connection path
-                const path = document.createElement('div');
-                path.className = 'neuron-path';
-                path.style.left = '50%';
-                path.style.top = '50%';
-                path.style.width = `${distance}px`;
-                path.style.transform = `translate(-50%, -50%) rotate(${angle}rad)`;
-                neuronAnimation.appendChild(path);
-            }
-        }
-        
-        // Add a message to chat
-        function addMessage(content, isUser = false, isSystem = false, isCommand = false, commandResult = '') {
-            const messageElement = document.createElement('div');
-            
-            if (isSystem) {
-                messageElement.className = 'system-message';
-                messageElement.textContent = content;
+        // Обработчики кнопок
+        terminalBtn.addEventListener('click', function() {
+            if (terminalContainer.style.display === 'block') {
+                terminalContainer.style.display = 'none';
+                chatMessages.style.display = 'block';
             } else {
-                messageElement.className = isUser ? 'message user-message' : 'message agent-message';
-                
-                if (isCommand) {
-                    messageElement.innerHTML = `<strong>Команда:</strong> ${content}`;
-                    
-                    if (commandResult) {
-                        const resultElement = document.createElement('div');
-                        resultElement.className = 'command-result';
-                        resultElement.textContent = commandResult;
-                        messageElement.appendChild(resultElement);
-                    }
-                } else {
-                    messageElement.textContent = content;
-                }
-                
-                const timeElement = document.createElement('span');
-                timeElement.className = 'message-time';
-                
-                const now = new Date();
-                timeElement.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                
-                if (autonomousMode && !isUser) {
-                    timeElement.innerHTML += ' <span class="autonomous-badge">Авто</span>';
-                }
-                
-                messageElement.appendChild(timeElement);
-            }
-            
-            chatMessages.appendChild(messageElement);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-        
-        // Add a thinking step
-        function addThinkingStep(title, content) {
-            const stepElement = document.createElement('div');
-            stepElement.className = 'thinking-step';
-            
-            const titleElement = document.createElement('h4');
-            titleElement.textContent = title;
-            stepElement.appendChild(titleElement);
-            
-            const contentElement = document.createElement('p');
-            contentElement.textContent = content;
-            stepElement.appendChild(contentElement);
-            
-            thinkingContent.appendChild(stepElement);
-            thinkingContent.scrollTop = thinkingContent.scrollHeight;
-        }
-        
-        // Clear thinking content
-        function clearThinking() {
-            thinkingContent.innerHTML = '';
-        }
-        
-        // Show fake agent thinking process (for demonstration)
-        function showAgentThinking(query) {
-            if (showReasoning) {
-                clearThinking();
-                
-                setTimeout(() => {
-                    addThinkingStep("Наблюдение", "Получен запрос от пользователя: \"" + query + "\"");
-                }, 300);
-                
-                setTimeout(() => {
-                    addThinkingStep("Анализ", "Определяю тип запроса и необходимые действия. Это команда для выполнения в терминале.");
-                }, 1200);
-                
-                setTimeout(() => {
-                    addThinkingStep("Планирование", "Подготовка к выполнению команды в терминале. Проверяю безопасность команды и возможные последствия.");
-                }, 2400);
-                
-                setTimeout(() => {
-                    addThinkingStep("Выполнение", "Отправляю команду в терминал и собираю результаты выполнения.");
-                }, 3500);
-                
-                setTimeout(() => {
-                    addThinkingStep("Заключение", "Команда выполнена. Формирую ответ пользователю с результатами выполнения.");
-                }, 4500);
-            }
-            
-            // Simulate agent thinking time
-            typingIndicator.style.display = 'flex';
-            
-            setTimeout(() => {
-                typingIndicator.style.display = 'none';
-                
-                // Add a response from agent
-                if (query.toLowerCase().startsWith('screenshot') || query.toLowerCase().includes('скриншот')) {
-                    addMessage("Делаю скриншот экрана агента...");
-                    setTimeout(() => {
-                        addMessage("Скриншот сделан и отправлен на сервер. Вы можете его просмотреть в интерфейсе администратора.");
-                    }, 1500);
-                } else if (query.toLowerCase().includes('system info') || query.toLowerCase().includes('информация о системе')) {
-                    addMessage("Собираю информацию о системе...");
-                    setTimeout(() => {
-                        const sysinfo = `Hostname: DESKTOP-AG3NT\nOS: Windows 10 Pro x64 21H2\nCPU: Intel Core i7-9700K @ 3.60GHz (8 cores)\nRAM: 16.0 GB (64% used)\nDisk: C: 256GB SSD (40% free)\nNetwork: Ethernet, IPv4: 192.168.1.133`;
-                        addMessage("Информация о системе:", false, false, true, sysinfo);
-                    }, 1000);
-                } else if (query.toLowerCase().includes('start shell') || query.toLowerCase().includes('запустить терминал') || query.toLowerCase().includes('запусти шелл')) {
-                    addMessage("Запускаю терминальную сессию...");
-                    terminalContainer.classList.add('show');
-                    setTimeout(() => {
-                        initTerminal();
-                        connectTerminalWebSocket();
-                        chatMessages.scrollTop = chatMessages.scrollHeight;
-                    }, 500);
-                } else if (query.toLowerCase().includes('help') || query.toLowerCase().includes('помощь')) {
-                    const helpText = `Доступные команды:
-- screenshot / скриншот - Сделать скриншот экрана агента
-- system info / информация о системе - Получить информацию о системе агента
-- start shell / запустить терминал - Запустить интерактивный терминал
-- search [query] / поиск [запрос] - Поиск файлов на агенте
-- keylog start / начать кейлоггер - Запустить кейлоггер
-- keylog stop / остановить кейлоггер - Остановить кейлоггер
-- help / помощь - Показать список команд`;
-                    
-                    addMessage("Список доступных команд:", false, false, true, helpText);
-                } else {
-                    // Just echo the command in terminal style for demo
-                    addMessage(query, false, false, true, `Выполнение команды: ${query}\n\nCommand executed successfully.`);
-                }
-            }, 5000); // Simulated response time
-        }
-        
-        // Send a message
-        function sendMessage() {
-            const message = messageInput.value.trim();
-            if (message.length === 0) return;
-            
-            // Add user message to chat
-            addMessage(message, true);
-            
-            // Clear input
-            messageInput.value = '';
-            
-            // Show agent response
-            showAgentThinking(message);
-        }
-        
-        // Event listeners
-        sendButton.addEventListener('click', sendMessage);
-        
-        messageInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
-        
-        autonomousToggle.addEventListener('change', () => {
-            autonomousMode = autonomousToggle.checked;
-            updateAgentStatus();
-            
-            // Add system message about mode change
-            const message = autonomousMode ? 
-                "Автономный режим активирован. Агент будет действовать самостоятельно." : 
-                "Автономный режим деактивирован. Агент будет ждать ваших команд.";
-            
-            addMessage(message, false, true);
-        });
-        
-        reasoningToggle.addEventListener('click', () => {
-            showReasoning = !showReasoning;
-            thinkingPanel.classList.toggle('active', showReasoning);
-            
-            if (showReasoning) {
-                createNeuronAnimation();
-            }
-        });
-        
-        closeThinking.addEventListener('click', () => {
-            showReasoning = false;
-            thinkingPanel.classList.remove('active');
-        });
-        
-        autoShowReasoning.addEventListener('change', () => {
-            if (autoShowReasoning.checked) {
-                localStorage.setItem('autoShowReasoning', 'true');
-            } else {
-                localStorage.setItem('autoShowReasoning', 'false');
-            }
-        });
-        
-        terminalToggle.addEventListener('click', () => {
-            if (!terminalContainer.classList.contains('show')) {
-                terminalContainer.classList.add('show');
+                terminalContainer.style.display = 'block';
+                chatMessages.style.display = 'none';
                 initTerminal();
-                connectTerminalWebSocket();
-                chatMessages.scrollTop = chatMessages.scrollHeight;
-            } else {
-                terminalContainer.classList.remove('show');
             }
         });
         
-        closeTerminal.addEventListener('click', () => {
-            terminalContainer.classList.remove('show');
+        closeTerminal.addEventListener('click', function() {
+            terminalContainer.style.display = 'none';
+            chatMessages.style.display = 'block';
         });
         
-        clearTerminal.addEventListener('click', () => {
-            if (terminal) {
-                terminal.clear();
-            }
+        thinkingBtn.addEventListener('click', function() {
+            thinkingPanel.style.display = thinkingPanel.style.display === 'none' ? 'flex' : 'none';
         });
         
-        // Load saved settings
-        function loadSettings() {
-            const autoShow = localStorage.getItem('autoShowReasoning');
-            if (autoShow === 'true') {
-                autoShowReasoning.checked = true;
-                showReasoning = true;
-                thinkingPanel.classList.add('active');
-                createNeuronAnimation();
-            }
-        }
+        closeThinking.addEventListener('click', function() {
+            thinkingPanel.style.display = 'none';
+        });
         
-        // Initialize
-        loadSettings();
+        // Переключатель автоматического показа рассуждений
+        autoShowThinking.addEventListener('click', function() {
+            this.classList.toggle('active');
+        });
         
-        // Add initial messages
-        setTimeout(() => {
-            addMessage("Привет! Я - интеллектуальный агент NeuroRAT. Чем я могу помочь?");
-        }, 1000);
-    </script>
-</body>
-</html>
+        // Переключатель автономного режима
+        autonomousToggle.addEventListener('click', function() {
+            this.classList.toggle('active');
+            autonomousMode = this.classList.contains('active');
+            
+            // Добавляем информационное сообщение в чат
+            const statusMsg = autonomousMode ? 
+                'Автономный режим активирован. Агент будет действовать самостоятельно.' : 
+                'Автономный режим деактивирован.';
+            
+            addMessage(null, statusMsg, false);
+        });
+        
+        // Авто-ресайз поля ввода
+        messageInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+        });
+    });
+</script>
+{% endblock %}
