@@ -387,7 +387,7 @@ Network Interfaces: {len(real_system_info.get('network', {}).get('interfaces', [
             # Get this file's code
             with open(__file__, 'r') as f:
                 code = f.read()
-            return f"Исходный код агента (первые 1500 символов):\n```python\n{code[:1500]}...\n```\n"
+            return f"Исходный код агента:\n```python\n{code}\n```\n"
         except Exception as e:
             return f"Ошибка при чтении кода: {str(e)}"
     
