@@ -28,7 +28,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: swarm-node-1
-    command: python test_swarm_isolated.py --node-id node1 --port 8443 --is-bootstrap
+    command: python test_swarm_isolated.py 
     depends_on:
       - neurorat-server
     networks:
