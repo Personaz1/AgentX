@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NeuroRAT - Windows Agent Builder</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            color: #f0f0f0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        header {
+            background-color: #2a2a2a;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #3a3a3a;
+        }
+        h1, h2, h3 {
+            color: #00ff00;
+        }
+        .card {
+            background-color: #2a2a2a;
+            border-radius: 5px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #aaa;
+        }
+        input[type="text"], 
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #3a3a3a;
+            background-color: #333;
+            color: #f0f0f0;
+            border-radius: 3px;
+        }
+        input[type="checkbox"] {
+            margin-right: 10px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 15px;
+            background-color: #006600;
+            color: #fff;
+            text-decoration: none;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        .btn:hover {
+            background-color: #008800;
+        }
+        .btn-secondary {
+            background-color: #333;
+        }
+        .btn-danger {
+            background-color: #660000;
+        }
+        .back-btn {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #aaa;
+            text-decoration: none;
+        }
+        .back-btn:hover {
+            color: #fff;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #333;
+            border-radius: 3px;
+        }
+        .download-section {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #006600;
+            border-radius: 3px;
+            text-align: center;
+            display: none;
+        }
+        .download-link {
+            color: #fff;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        pre {
+            background-color: #333;
+            padding: 10px;
+            border-radius: 3px;
+            overflow: auto;
+            max-height: 300px;
+        }
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>NeuroRAT C2 Server</h1>
+            <p>Windows Agent Builder</p>
+        </div>
+    </header>
+    
+    <div class="container">
+        <a href="/" class="back-btn">← Back to Dashboard</a>
+        
+        <div class="card">
+            <h2>Build Windows Agent</h2>
+            <p>Create a Windows implant to connect with the C2 server and execute commands remotely.</p>
+            
+            <form id="buildForm" method="post" action="/api/build_windows">
+                <div class="form-group">
+                    <label for="output_name">Output Name (optional):</label>
+                    <input type="text" id="output_name" name="output_name" placeholder="e.g. system_service.exe">
+                </div>
+                
+                <div class="form-group">
+                    <label for="server_address">C2 Server Address:</label>
+                    <input type="text" id="server_address" name="server_address" value="http://localhost:8080" required>
+                </div>
+                
+                <div class="feature-grid">
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="enable_persistence" name="enable_persistence" value="true" checked>
+                            Enable Persistence
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="enable_uac_bypass" name="enable_uac_bypass" value="true" checked>
+                            UAC Bypass
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="enable_obfuscation" name="enable_obfuscation" value="true" checked>
+                            Code Obfuscation
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="enable_anti_vm" name="enable_anti_vm" value="true">
+                            Anti-VM
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="sleep_interval">Sleep Interval (seconds):</label>
+                    <input type="number" id="sleep_interval" name="sleep_interval" value="5" min="1" max="3600">
+                </div>
+                
+                <div class="form-group">
+                    <label for="jitter">Jitter (seconds):</label>
+                    <input type="number" id="jitter" name="jitter" value="2" min="0" max="60">
+                </div>
+                
+                <div class="form-group">
+                    <label for="icon_type">Icon Type:</label>
+                    <select id="icon_type" name="icon_type">
+                        <option value="system">Windows System</option>
+                        <option value="browser">Web Browser</option>
+                        <option value="media">Media Player</option>
+                        <option value="document">Document</option>
+                        <option value="none">No Icon</option>
+                    </select>
+                </div>
+                
+                <button type="submit" class="btn">Build Agent</button>
+                <button type="reset" class="btn btn-secondary">Reset</button>
+            </form>
+            
+            <div id="buildStatus" class="status" style="display: none;">
+                <h3>Build Status</h3>
+                <div id="buildLog"></div>
+            </div>
+            
+            <div id="downloadSection" class="download-section">
+                <h3>Download Agent</h3>
+                <p>Your agent has been built successfully!</p>
+                <a href="#" id="downloadLink" class="download-link">Download EXE</a>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>Usage Instructions</h2>
+            <p>Follow these steps to deploy the Windows agent:</p>
+            <ol>
+                <li>Build the agent using the form above</li>
+                <li>Download the generated EXE file</li>
+                <li>Transfer the EXE to the target Windows system</li>
+                <li>Execute the file with Administrator privileges if possible</li>
+                <li>The agent will connect back to the C2 server automatically</li>
+            </ol>
+            
+            <p><strong>Note:</strong> This agent is provided for testing and educational purposes only. Only deploy on systems you own or have explicit permission to test.</p>
+            
+            <h3>Capabilities</h3>
+            <ul>
+                <li>Execute system commands remotely</li>
+                <li>Upload/download files</li>
+                <li>Capture screenshots</li>
+                <li>Automatic privilege escalation</li>
+                <li>Persistence across reboots</li>
+            </ul>
+        </div>
+    </div>
+    
+    <script>
+        document.getElementById('buildForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Display build status
+            const buildStatus = document.getElementById('buildStatus');
+            const buildLog = document.getElementById('buildLog');
+            buildStatus.style.display = 'block';
+            buildLog.innerHTML = '<p>Building agent... Please wait.</p>';
+            
+            // Collect form data
+            const formData = new FormData(this);
+            
+            // Send request to build agent
+            fetch('/api/build_windows', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    buildLog.innerHTML = `<p>Build completed successfully!</p><pre>${data.log}</pre>`;
+                    
+                    // Show download section
+                    const downloadSection = document.getElementById('downloadSection');
+                    const downloadLink = document.getElementById('downloadLink');
+                    downloadSection.style.display = 'block';
+                    downloadLink.href = data.download_url;
+                } else {
+                    buildLog.innerHTML = `<p>Build failed:</p><pre>${data.error}</pre>`;
+                }
+            })
+            .catch(error => {
+                buildLog.innerHTML = `<p>Error: ${error.message}</p>`;
+            });
+        });
+    </script>
+</body>
+</html> 
