@@ -1,34 +1,51 @@
-# NeuroRAT
+# NeuroRAT C2 Framework
 
-![NeuroRAT Logo](docs/images/logo.svg)
+Фреймворк NeuroRAT C2 для управления агентами через удобный веб-интерфейс.
 
-<div align="center">
+## Возможности
 
+- **Docker-контейнеры**: Легкое развертывание серверной части и агентов
+- **Веб-интерфейс**: Удобный интерфейс для управления агентами
+- **Терминал**: Встроенный терминал для выполнения команд на агентах
+- **Автономность**: Агенты работают автономно даже при потере связи с сервером
+
+## Быстрый старт
+
+### Подготовка
+
+1. Установите Docker и Docker Compose
+2. Клонируйте репозиторий
+
+### Запуск
+
+Используйте скрипт автоматического запуска:
+
+```bash
+chmod +x start.sh
+./start.sh
 ```
-██╗    ██╗ █████╗ ██████╗ ███╗   ██╗██╗███╗   ██╗ ██████╗ 
-██║    ██║██╔══██╗██╔══██╗████╗  ██║██║████╗  ██║██╔════╝ 
-██║ █╗ ██║███████║██████╔╝██╔██╗ ██║██║██╔██╗ ██║██║  ███╗
-██║███╗██║██╔══██║██╔══██╗██║╚██╗██║██║██║╚██╗██║██║   ██║
-╚███╔███╔╝██║  ██║██║  ██║██║ ╚████║██║██║ ╚████║╚██████╔╝
- ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝╚═╝  ╚═══╝ ╚═════╝ 
+
+или запустите компоненты вручную:
+
+```bash
+# Запуск Docker-контейнеров
+docker-compose up -d
 ```
 
-</div>
+## Доступ к интерфейсу
 
-```console
-[!] SECURITY NOTICE [!]
---------------------
-This project is strictly RESEARCH-ORIENTED. Created and published 
-exclusively for scientific and educational purposes in private repositories.
+- Web UI: http://localhost:8080
 
-ANY USE OF THIS CODE FOR ILLEGAL PURPOSES IS A CRIMINAL OFFENSE.
-```
+## Структура проекта
 
-> **CRITICAL WARNING**: The `swarm_intelligence.py` module contains potentially dangerous code that theoretically enables the unification of all infected systems into a single decentralized network. It is **STRICTLY PROHIBITED** to activate this module outside a tightly controlled research environment. This module is intended exclusively for demonstrating theoretical capabilities of decentralized attacks and developing appropriate defense mechanisms.
+- `docker-compose.yml` - Конфигурация Docker
+- `server_api.py` - Основной C2 сервер
+- `agent_memory.py` - Модуль памяти агента
+- `neurorat_agent.py` - Основной модуль агента
 
 ## Overview
 
-NeuroRAT is an advanced remote access tool designed for penetration testing and security research. It combines traditional RAT capabilities with artificial intelligence through LLM (Large Language Model) integration, enabling autonomous decision-making and natural language command interpretation.
+NeuroRAT is an advanced remote access tool designed for penetration testing and security research. It combines traditional RAT capabilities with artificial intelligence, enabling autonomous decision-making and natural language command interpretation.
 
 ⚠️ **DISCLAIMER: This tool is for EDUCATIONAL PURPOSES ONLY. The author is not responsible for any misuse or damage caused by this program. Only use on systems you have permission to access.**
 

@@ -41,7 +41,7 @@ logger = logging.getLogger("neurorat-consciousness")
 
 # Константы системы
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyA5-R3HgT1m-urpmRbdT8Lh15dsS3oYnxc")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro-exp-03-25")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 SERVER_API_URL = "http://localhost:8080"
 SYSTEM_PROFILE = {
     "stealth_level": 0.7,

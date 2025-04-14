@@ -135,7 +135,7 @@ class GeminiIntegration:
         """
         self.credentials_path = credentials_path
         self.api_key = os.getenv("GEMINI_API_KEY")
-        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-pro-exp-03-25")
+        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
         self.is_initialized = False
         self.session = None
         
@@ -153,7 +153,7 @@ class GoogleAIIntegration(APIIntegration):
         """Initialize the Google AI API integration"""
         self.api_key = os.getenv("GEMINI_API_KEY")
         self.gemini_api_key = os.getenv("GEMINI_API_KEY")
-        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-pro-exp-03-25")
+        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
         self.credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
         self.max_tokens = int(os.getenv("LLM_MAX_TOKENS", "2048"))
         self.temperature = float(os.getenv("LLM_TEMPERATURE", "0.7"))
