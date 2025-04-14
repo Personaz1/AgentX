@@ -1,0 +1,50 @@
+{
+    "output_dir": "compiled_payloads",
+    "template_dir": "templates",
+    "obfuscation_level": 2,
+    "c2_server": "localhost",
+    "c2_port": 8080,
+    "platforms": ["windows", "linux", "macos"],
+    "payload_types": ["agent", "dropper", "stager", "backdoor"],
+    "delivery_methods": ["executable", "script", "dll", "macro"],
+    "encryption": {
+        "enabled": true,
+        "algorithm": "AES-256-GCM",
+        "key_exchange": "RSA-4096"
+    },
+    "anti_detection": {
+        "sandbox_detection": true,
+        "vm_detection": true,
+        "anti_debug": true,
+        "sleep_techniques": ["dynamic", "jitter", "delayed"],
+        "process_injection": false
+    },
+    "network": {
+        "protocols": ["https", "dns", "icmp"],
+        "fallback_comms": true,
+        "domain_fronting": false,
+        "proxy_aware": true
+    },
+    "compilation": {
+        "strip_symbols": true,
+        "compress": true,
+        "self_delete": true,
+        "use_upx": false,
+        "icon_path": "assets/icons/default.ico"
+    },
+    "signatures": {
+        "code_signing": false,
+        "certificate_path": ""
+    },
+    "persistence": {
+        "enabled": true,
+        "methods": ["registry", "startup", "scheduled_task", "wmi"],
+        "resilience": true
+    },
+    "logging": {
+        "enabled": true,
+        "level": "INFO",
+        "encrypt_logs": true,
+        "remote_logging": false
+    }
+} 

