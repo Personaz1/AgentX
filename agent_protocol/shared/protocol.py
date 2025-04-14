@@ -425,4 +425,106 @@ def create_event(event_type: str, event_data: Dict[str, Any] = None,
     Возвращает:
     - Объект события
     """
-    return Event(event_type, event_data, session_id=session_id) 
+    return Event(event_type, event_data, session_id=session_id)
+
+
+def create_keyexchange_command(public_key: str, session_id: Optional[str] = None) -> Command:
+    """
+    Создание команды для обмена ключами шифрования.
+    
+    Параметры:
+    - public_key: Публичный ключ для обмена
+    - session_id: Идентификатор сессии
+    
+    Возвращает:
+    - Объект команды обмена ключами
+    """
+    return Command(
+        command_type=CommandType.KEY_EXCHANGE,
+        data={"public_key": public_key},
+        session_id=session_id
+    )
+
+
+def complete_keyexchange(response: Response, dh_manager) -> bool:
+    """
+    Завершение процесса обмена ключами на основе полученного ответа.
+    
+    Параметры:
+    - response: Ответ от сервера/клиента с данными для завершения обмена ключами
+    - dh_manager: Экземпляр DiffieHellmanManager для управления ключами
+    
+    Возвращает:
+    - True, если обмен ключами успешно завершен
+    """
+    if not response.success:
+        return False
+    
+    try:
+        # Получаем публичный ключ из ответа
+        peer_public_key = response.data.get("public_key")
+        if not peer_public_key:
+            return False
+        
+        # Обрабатываем полученный ключ
+        return dh_manager.process_peer_key(peer_public_key)
+    except Exception as e:
+        print(f"Error completing key exchange: {str(e)}")
+        return False
+
+
+def process_keyexchange_command(command: Command, encryption_manager) -> Response:
+    """
+    Обработка команды обмена ключами.
+    
+    Параметры:
+    - command: Команда обмена ключами
+    - encryption_manager: Менеджер шифрования
+    
+    Возвращает:
+    - Ответ на команду обмена ключами
+    """
+    try:
+        # Получаем публичный ключ из данных команды
+        client_public_key = command.data.get("public_key")
+        if not client_public_key:
+            return Response(
+                command_id=command.command_id,
+                success=False,
+                message="Public key missing from key exchange command"
+            )
+        
+        # Инициализируем менеджер диффи-хеллмана, если он еще не инициализирован
+        if not hasattr(encryption_manager, 'dh_manager') or encryption_manager.dh_manager is None:
+            from agent_protocol.shared.key_exchange import DiffieHellmanManager
+            encryption_manager.dh_manager = DiffieHellmanManager()
+            encryption_manager.dh_manager.initialize()
+        
+        # Устанавливаем публичный ключ клиента и получаем общий ключ
+        result = encryption_manager.dh_manager.process_peer_key(client_public_key)
+        
+        if result:
+            # Обмен ключами успешен
+            return Response(
+                command_id=command.command_id,
+                success=True,
+                data={
+                    "public_key": encryption_manager.dh_manager.get_public_key_str(),
+                    "fingerprint": encryption_manager.dh_manager.get_key_fingerprint()
+                },
+                message="Key exchange successful"
+            )
+        else:
+            # Ошибка обмена ключами
+            return Response(
+                command_id=command.command_id,
+                success=False,
+                message="Failed to process client key"
+            )
+    except Exception as e:
+        # Ошибка обработки команды
+        return Response(
+            command_id=command.command_id,
+            success=False,
+            message=f"Error processing key exchange: {str(e)}"
+        ) 

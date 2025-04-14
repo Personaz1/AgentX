@@ -281,6 +281,79 @@ def secure_first_contact(server_public_key_str: str, aes_key: bytes) -> bytes:
     
     return encrypted_key
 
+class DiffieHellmanManager:
+    """
+    Класс для управления обменом ключами по протоколу Диффи-Хеллмана.
+    Упрощает взаимодействие с KeyExchange и хранит состояние обмена.
+    """
+    
+    def __init__(self):
+        """Инициализация менеджера обмена ключами."""
+        self.private_key = None
+        self.public_key = None
+        self.shared_key = None
+        self.peer_public_key = None
+        self.is_exchange_complete = False
+    
+    def initialize(self):
+        """Генерация пары ключей и подготовка к обмену."""
+        self.private_key, self.public_key = KeyExchange.generate_dh_keypair()
+        self.is_exchange_complete = False
+        self.shared_key = None
+        return self.get_public_key_str()
+    
+    def get_public_key_str(self) -> str:
+        """Получение строкового представления публичного ключа."""
+        if not self.public_key:
+            raise ValueError("Public key not initialized. Call initialize() first.")
+        return KeyExchange.serialize_public_key(self.public_key)
+    
+    def process_peer_key(self, peer_key_str: str) -> bool:
+        """
+        Обработка публичного ключа от партнера по обмену.
+        
+        Параметры:
+        - peer_key_str: Строковое представление публичного ключа партнера
+        
+        Возвращает:
+        - True, если обмен успешно завершен
+        """
+        if not self.private_key:
+            raise ValueError("Private key not initialized. Call initialize() first.")
+        
+        try:
+            # Десериализуем ключ партнера
+            self.peer_public_key = KeyExchange.deserialize_public_key(peer_key_str)
+            
+            # Проверяем валидность ключа
+            if not KeyExchange.validate_dh_key(self.peer_public_key):
+                logger.warning("Received invalid peer DH key")
+                return False
+            
+            # Вычисляем общий секретный ключ
+            self.shared_key = KeyExchange.compute_shared_key(
+                self.private_key, 
+                self.peer_public_key
+            )
+            
+            self.is_exchange_complete = True
+            return True
+        except Exception as e:
+            logger.error(f"Error processing peer key: {str(e)}")
+            return False
+    
+    def get_key_fingerprint(self) -> str:
+        """Получение отпечатка ключа для проверки."""
+        if not self.shared_key:
+            raise ValueError("Shared key not computed yet.")
+        return KeyExchange.get_key_fingerprint(self.shared_key)
+    
+    def get_shared_key(self) -> bytes:
+        """Получение общего секретного ключа."""
+        if not self.is_exchange_complete or not self.shared_key:
+            raise ValueError("Key exchange not complete.")
+        return self.shared_key
+
 def generate_agent_keypair(password: Optional[str] = None) -> Tuple[str, str]:
     """
     Генерация пары ключей RSA для агента.
@@ -299,6 +372,20 @@ def generate_agent_keypair(password: Optional[str] = None) -> Tuple[str, str]:
     public_key_str = RSAKeyExchange.serialize_public_key(public_key)
     
     return private_key_str, public_key_str
+
+def generate_secure_token(length: int = 32) -> str:
+    """
+    Генерация криптографически стойкого токена.
+    
+    Параметры:
+    - length: Длина токена в байтах
+    
+    Возвращает:
+    - Токен в виде строки в кодировке base64
+    """
+    token_bytes = os.urandom(length)
+    token_b64 = base64.urlsafe_b64encode(token_bytes).decode('utf-8').rstrip('=')
+    return token_b64
 
 if __name__ == "__main__":
     # Пример использования:

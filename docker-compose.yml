@@ -7,9 +7,9 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: neurorat-server
-    command: python server_api.py --port 8080
+    command: python server_api.py --port 5000
     ports:
-      - "8080:8080"  # Веб-интерфейс
+      - "8080:5000"  # Веб-интерфейс
       - "5050:5000"  # API порт
     volumes:
       - ./.env:/app/.env:ro  # Монтируем .env файл как только для чтения
@@ -20,21 +20,28 @@ services:
     environment:
       - NODE_ROLE=server
       - LOG_LEVEL=INFO
+      - PYTHONPATH=/app
     restart: unless-stopped  # Автоматический перезапуск если контейнер упал
 
-  # Дополнительные узлы роевого интеллекта
-  swarm-node-1:
+  # Реальный агент для подключения к C2 серверу
+  agent-local:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: swarm-node-1
-    command: python test_swarm_isolated.py 
+    container_name: agent-local
+    hostname: macos-agent  # Задаем свое имя хоста
+    command: python launcher_wrapper.py run --server neurorat-server --port 5000
     depends_on:
       - neurorat-server
     networks:
       - neurorat-network
     environment:
-      - NODE_ROLE=bootstrap
+      - NODE_ROLE=agent
+      - PYTHONPATH=/app
+      - AGENT_NAME=MacOS_Local
+      - DEBUG=1
+    volumes:
+      - ./logs:/app/logs  # Логи для отладки
     restart: unless-stopped
 
 # Создаем изолированную сеть для наших контейнеров

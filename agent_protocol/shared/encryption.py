@@ -9,6 +9,12 @@ import json
 import hashlib
 from typing import Any, Dict, Optional, Tuple, Union
 
+# Импортируем DiffieHellmanManager из модуля key_exchange
+from agent_protocol.shared.key_exchange import DiffieHellmanManager
+
+# DHKeyExchange - псевдоним для DiffieHellmanManager для совместимости с импортами
+DHKeyExchange = DiffieHellmanManager
+
 try:
     # Пробуем импортировать cryptography
     from cryptography.hazmat.primitives.asymmetric import rsa, padding
@@ -381,4 +387,18 @@ def get_encryption_manager() -> Union[EncryptionManager, SimpleEncryptionManager
     if CRYPTO_AVAILABLE:
         return EncryptionManager()
     else:
-        return SimpleEncryptionManager() 
+        return SimpleEncryptionManager()
+
+
+def generate_secure_token(length: int = 32) -> str:
+    """
+    Генерирует криптографически стойкий токен.
+    
+    Параметры:
+    - length: Длина токена в байтах
+    
+    Возвращает:
+    - Токен в формате Base64
+    """
+    token_bytes = os.urandom(length)
+    return base64.urlsafe_b64encode(token_bytes).decode('utf-8').rstrip('=') 
