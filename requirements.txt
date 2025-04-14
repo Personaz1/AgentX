@@ -23,8 +23,8 @@ python-dotenv>=0.20.0
 colorlog>=6.6.0
 
 # Зависимости для LLM и автономного мозга
-# transformers>=4.20.0
-# torch>=1.11.0
+transformers>=4.20.0
+torch>=1.11.0
 sentence-transformers>=2.2.2
 numpy>=1.22.0
 # re - это встроенный модуль Python, не требует установки через pip
@@ -38,11 +38,4 @@ python-multipart>=0.0.5
 python-jose>=3.3.0
 jinja2>=3.0.3
 python-telegram-bot>=13.7
-# openai>=1.0.0
-
-# Дополнительные зависимости
-fastapi-cli>=0.0.1
-Pillow>=9.0.0
-setproctitle>=1.2.3
-paramiko>=2.10.0
-pysmb>=1.2.7 
+openai>=1.0.0 
