@@ -125,14 +125,35 @@ class OpenAIIntegration(APIIntegration):
             return "Error: Failed to parse API response"
 
 
+class GeminiIntegration:
+    def __init__(self, credentials_path=None):
+        """
+        Инициализация класса для работы с API Gemini.
+        
+        Args:
+            credentials_path: Путь к файлу учетных данных Google API (опционально).
+        """
+        self.credentials_path = credentials_path
+        self.api_key = os.getenv("GEMINI_API_KEY")
+        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-pro-exp-03-25")
+        self.is_initialized = False
+        self.session = None
+        
+        # Инициализация при создании экземпляра
+        if not self.api_key and not self.credentials_path:
+            logger.warning("Не найден API ключ или путь к учетным данным для Gemini")
+        else:
+            self.initialize()
+
+
 class GoogleAIIntegration(APIIntegration):
     """Integration with Google AI APIs"""
     
     def __init__(self):
         """Initialize the Google AI API integration"""
-        self.api_key = os.getenv("GOOGLE_API_KEY")
-        self.gemini_api_key = os.getenv("GOOGLE_GEMINI_API_KEY")
-        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        self.api_key = os.getenv("GEMINI_API_KEY")
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY")
+        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-pro-exp-03-25")
         self.credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
         self.max_tokens = int(os.getenv("LLM_MAX_TOKENS", "2048"))
         self.temperature = float(os.getenv("LLM_TEMPERATURE", "0.7"))
@@ -140,8 +161,8 @@ class GoogleAIIntegration(APIIntegration):
     
     def _validate_env(self) -> bool:
         """Validate Google API configuration"""
-        if not self.api_key and not self.gemini_api_key and not self.credentials_path:
-            logger.warning("Ни один из API ключей Google не настроен")
+        if not self.api_key and not self.credentials_path:
+            logger.warning("API ключ Gemini или путь к учетным данным не настроен")
             return False
         return True
     

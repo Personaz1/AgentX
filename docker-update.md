@@ -13,17 +13,18 @@
 
 ## 2. Обновление .env файла
 
-Необходимо обновить файл `.env` с правильными значениями API ключей:
+Необходимо добавить в файл `.env` следующие переменные окружения:
 
 ```
-# Google API ключи
-GOOGLE_API_KEY=ваш_настоящий_ключ_API
-GOOGLE_GEMINI_API_KEY=ваш_настоящий_ключ_API
+# Путь к учетным данным Google API
 GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service_account.json
 
-# Дополнительные настройки LLM
-GEMINI_MODEL=gemini-2.0-flash
+# Настройки для Gemini API 
+GEMINI_API_KEY
+GEMINI_MODEL
 ```
+
+Значения ключей и модели должны быть указаны в реальном .env файле.
 
 ## 3. Обновление Dockerfile
 
