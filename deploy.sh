@@ -46,9 +46,7 @@ fi
 
 # Check Python version
 PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-if (( $(echo "$PYTHON_VERSION < 3.8" | bc -l) )); then
-    handle_error "Python version must be 3.8 or higher. Current version: $PYTHON_VERSION"
-fi
+python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' || handle_error "Python version must be 3.8 or higher. Current version: $PYTHON_VERSION"
 
 # Create virtual environment
 echo -e "${BLUE}Creating virtual environment...${NC}"
