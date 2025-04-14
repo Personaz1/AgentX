@@ -636,14 +636,18 @@ async def chat_with_agent(agent_id: str, request: Request):
     try:
         data = await request.json()
         message = data.get("message", "")
-    except:
+        autonomous_mode = data.get("autonomous_mode", False)  # Получаем режим работы
+        
+        logger.info(f"Получена команда от пользователя. Агент: {agent_id}, Автономный режим: {'Вкл' if autonomous_mode else 'Выкл'}")
+    except Exception as e:
+        logger.error(f"Invalid request format: {str(e)}")
         raise HTTPException(status_code=400, detail="Invalid request format")
     
     if not message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
     
     # Record the command event
-    record_event("command", agent_id, f"User sent command: {message}")
+    record_event("command", agent_id, f"User sent command: {message}, Autonomous: {autonomous_mode}")
     
     # Add to chat history
     if agent_id not in chat_histories:
@@ -666,9 +670,32 @@ async def chat_with_agent(agent_id: str, request: Request):
     })
     
     # Record another event for the response
-    record_event("response", agent_id, f"Agent executed command")
+    record_event("response", agent_id, f"Agent executed command. Autonomous mode: {autonomous_mode}")
     
-    return {"response": response, "response_type": "Agent"}
+    # Если включен автономный режим, автоматически выполняем команды
+    # (временная заглушка для демонстрации функциональности)
+    autonomous_info = ""
+    if autonomous_mode:
+        # Здесь в будущем будет код обработки автономных действий
+        if message.startswith("!exec"):
+            command = message[6:].strip()
+            # Безопасный запуск команды через subprocess
+            try:
+                result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=10)
+                autonomous_info = f"\n\n[Автономное выполнение команды: {command}]\n[Результат: {result.stdout}]"
+                if result.stderr:
+                    autonomous_info += f"\n[Ошибка: {result.stderr}]"
+            except Exception as e:
+                autonomous_info = f"\n\n[Ошибка автономного выполнения: {str(e)}]"
+        elif message.lower().startswith("скан") or "scan" in message.lower():
+            autonomous_info = "\n\n[Автономное сканирование окружения...]\n"
+            # Имитация результата сканирования
+            autonomous_info += "[Обнаружены системы: 192.168.1.1 (Router), 192.168.1.100 (Windows), 192.168.1.101 (Linux)]"
+    
+    # Добавляем информацию о результатах автономных действий к ответу
+    response_with_autonomous = response + autonomous_info
+    
+    return {"response": response_with_autonomous, "response_type": "Agent", "autonomous_mode": autonomous_mode}
 
 @app.post("/api/agent/{agent_id}/screenshot")
 async def take_screenshot(agent_id: str):

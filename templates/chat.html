@@ -294,6 +294,23 @@
             animation: pulse 2s infinite;
             animation-delay: calc(var(--n) * 0.3s);
         }
+        
+        /* Стили для индикатора автономного режима */
+        .autonomous-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: #660000;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            display: none;
+        }
+        .autonomous-indicator.active {
+            display: block;
+            animation: pulse 2s infinite;
+        }
     </style>
 </head>
 <body>
@@ -318,6 +335,10 @@
                         <span class="icon">🧠</span>
                         <span>Show Reasoning</span>
                     </div>
+                </div>
+                
+                <div class="autonomous-indicator" id="autonomous-indicator">
+                    🤖 Autonomous Mode Active
                 </div>
                 
                 <div id="chat-messages" class="chat-messages">
@@ -352,6 +373,10 @@
                         <input type="checkbox" id="auto-show-thinking" checked>
                         Auto-show for each response
                     </label>
+                    <label>
+                        <input type="checkbox" id="autonomous-mode">
+                        <span title="Агент будет самостоятельно выполнять команды">🤖 Autonomous Mode</span>
+                    </label>
                 </div>
             </div>
         </div>
@@ -382,6 +407,8 @@
         const thinkingToggle = document.getElementById("thinking-toggle");
         const closeThinkingBtn = document.getElementById("close-thinking-btn");
         const autoShowThinking = document.getElementById("auto-show-thinking");
+        const autonomousMode = document.getElementById("autonomous-mode");
+        const autonomousIndicator = document.getElementById("autonomous-indicator");
         
         // Состояние
         const appState = {
@@ -402,6 +429,22 @@
             // Панель размышлений
             thinkingToggle.addEventListener("click", toggleThinkingPanel);
             closeThinkingBtn.addEventListener("click", hideThinkingPanel);
+            
+            // Автономный режим
+            autonomousMode.addEventListener("change", function() {
+                if (this.checked) {
+                    autonomousIndicator.classList.add("active");
+                    if (confirm("Внимание! Автономный режим позволяет агенту самостоятельно выполнять команды. Продолжить?")) {
+                        addSystemMessage("⚠️ Автономный режим активирован. Агент может самостоятельно выполнять команды.");
+                    } else {
+                        this.checked = false;
+                        autonomousIndicator.classList.remove("active");
+                    }
+                } else {
+                    autonomousIndicator.classList.remove("active");
+                    addSystemMessage("Автономный режим деактивирован.");
+                }
+            });
             
             // Действия
             screenshotButton.addEventListener("click", takeScreenshot);
@@ -596,7 +639,10 @@ System Information:
                 headers: {
                     "Content-Type": "application/json"
                 },
-                body: JSON.stringify({ message })
+                body: JSON.stringify({ 
+                    message: message,
+                    autonomous_mode: document.getElementById('autonomous-mode').checked 
+                })
             })
             .then(response => response.json())
             .then(data => {
@@ -607,6 +653,11 @@ System Information:
                     // Финальный шаг размышления перед ответом
                     if (autoShowThinking.checked) {
                         addThinkingStep("ФОРМИРОВАНИЕ ОТВЕТА", "Генерирую ответ на основе собранных данных и анализа ситуации.");
+                        
+                        // Если был автономный режим, показываем это в размышлениях
+                        if (data.autonomous_mode) {
+                            addThinkingStep("АВТОНОМНОЕ ДЕЙСТВИЕ", "Выполняю действия самостоятельно на основе принятого решения.");
+                        }
                     }
                     
                     addAgentMessage(data.response, data.response_type || "Agent");
