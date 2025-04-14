@@ -1,0 +1,307 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <title>NeuroRAT - Вход в систему</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Roboto:wght@300;400;500;700&display=swap">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #0f0;
+            --primary-dark: #00a000;
+            --secondary: #0070ff;
+            --danger: #ff3030;
+            --dark: #1a1a1a;
+            --darker: #121212;
+            --card: #1e1e1e;
+            --text: #e0e0e0;
+            --text-secondary: #999;
+            --border: #333;
+            --shadow: 0 4px 8px rgba(0,0,0,0.3);
+            --glow: 0 0 10px rgba(0,255,0,0.5);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--darker);
+            color: var(--text);
+            line-height: 1.6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+            position: relative;
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(0, 255, 0, 0.05) 0%, transparent 30%),
+                radial-gradient(circle at 90% 80%, rgba(0, 255, 0, 0.05) 0%, transparent 30%);
+        }
+        
+        .login-container {
+            width: 100%;
+            max-width: 420px;
+            background-color: var(--card);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            animation: fadeIn 0.8s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .login-header {
+            background-color: var(--dark);
+            padding: 25px;
+            text-align: center;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .login-logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+        
+        .login-logo h1 {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 24px;
+            color: var(--primary);
+            margin: 0;
+            text-shadow: var(--glow);
+        }
+        
+        .login-logo-icon {
+            font-size: 28px;
+            color: var(--primary);
+            text-shadow: var(--glow);
+        }
+        
+        .login-subtitle {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        
+        .login-form {
+            padding: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 25px;
+            position: relative;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 12px 12px 12px 40px;
+            background-color: rgba(0,0,0,0.2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-family: 'Roboto', sans-serif;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(0,255,0,0.2);
+        }
+        
+        .form-icon {
+            position: absolute;
+            left: 12px;
+            top: 37px;
+            color: var(--text-secondary);
+            font-size: 18px;
+        }
+        
+        .login-btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(to right, var(--primary-dark), var(--primary));
+            border: none;
+            border-radius: 6px;
+            color: var(--darker);
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,255,0,0.3);
+        }
+        
+        .login-btn:active {
+            transform: translateY(0);
+        }
+        
+        .error-message {
+            background-color: rgba(255,48,48,0.1);
+            border: 1px solid var(--danger);
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 25px;
+            color: var(--danger);
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: shake 0.5s;
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+        
+        .ascii-bg {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            font-family: monospace;
+            font-size: 10px;
+            color: rgba(0,255,0,0.05);
+            line-height: 1;
+            white-space: pre;
+            z-index: -1;
+            pointer-events: none;
+            user-select: none;
+        }
+        
+        .particles {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: -1;
+        }
+        
+        .particle {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background-color: var(--primary);
+            border-radius: 50%;
+            opacity: 0.5;
+            animation: float 20s linear infinite;
+        }
+        
+        @keyframes float {
+            0% { transform: translateY(0) translateX(0); opacity: 0; }
+            10% { opacity: 0.8; }
+            90% { opacity: 0.5; }
+            100% { transform: translateY(-700px) translateX(100px); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="particles" id="particles"></div>
+    
+    <div class="login-container">
+        <div class="login-header">
+            <div class="login-logo">
+                <i class="fas fa-radiation login-logo-icon"></i>
+                <h1>NeuroRAT</h1>
+            </div>
+            <div class="login-subtitle">Система управления и контроля</div>
+        </div>
+        
+        <div class="login-form">
+            {% if error %}
+            <div class="error-message">
+                <i class="fas fa-exclamation-circle"></i>
+                {{ error }}
+            </div>
+            {% endif %}
+            
+            <form action="/auth" method="post">
+                <div class="form-group">
+                    <label for="username">Имя пользователя</label>
+                    <i class="fas fa-user form-icon"></i>
+                    <input type="text" id="username" name="username" class="form-input" placeholder="Введите имя пользователя" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Пароль</label>
+                    <i class="fas fa-lock form-icon"></i>
+                    <input type="password" id="password" name="password" class="form-input" placeholder="Введите пароль" required>
+                </div>
+                
+                <button type="submit" class="login-btn">
+                    <i class="fas fa-sign-in-alt"></i>
+                    Войти в систему
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <div class="ascii-bg">{{ satan_ascii }}</div>
+    
+    <script>
+        // Create floating particles
+        function createParticles() {
+            const container = document.getElementById('particles');
+            const particleCount = 30;
+            
+            for (let i = 0; i < particleCount; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                
+                // Random starting position
+                const x = Math.floor(Math.random() * window.innerWidth);
+                const y = Math.floor(Math.random() * window.innerHeight);
+                
+                // Random size
+                const size = Math.random() * 2 + 1;
+                
+                // Random duration
+                const duration = Math.random() * 15 + 5;
+                
+                // Random delay
+                const delay = Math.random() * 5;
+                
+                particle.style.left = `${x}px`;
+                particle.style.top = `${y}px`;
+                particle.style.width = `${size}px`;
+                particle.style.height = `${size}px`;
+                particle.style.animationDuration = `${duration}s`;
+                particle.style.animationDelay = `${delay}s`;
+                
+                container.appendChild(particle);
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', createParticles);
+    </script>
+</body>
+</html>

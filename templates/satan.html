@@ -1,0 +1,85 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SATAN HAS BEEN SUMMONED</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            background-color: #000;
+            color: #ff0000;
+            font-family: monospace;
+            text-align: center;
+            margin: 0;
+            padding: 50px 20px;
+            overflow: hidden;
+        }
+        h1 {
+            font-size: 36px;
+            text-shadow: 0 0 10px #ff0000;
+            animation: glow 2s infinite alternate;
+        }
+        pre {
+            font-size: 14px;
+            white-space: pre;
+            line-height: 1.2;
+            text-align: center;
+            margin: 0 auto;
+            max-width: 800px;
+            text-shadow: 0 0 5px #ff0000;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        @keyframes glow {
+            0% { text-shadow: 0 0 10px #ff0000; }
+            100% { text-shadow: 0 0 20px #ff0000, 0 0 30px #ff3300; }
+        }
+        @keyframes flicker {
+            0% { opacity: 1; }
+            5% { opacity: 0.8; }
+            10% { opacity: 1; }
+            15% { opacity: 0.9; }
+            20% { opacity: 1; }
+            25% { opacity: 0.9; }
+            30% { opacity: 1; }
+            35% { opacity: 0.8; }
+            40% { opacity: 1; }
+            50% { opacity: 0.7; }
+            60% { opacity: 1; }
+            70% { opacity: 0.9; }
+            80% { opacity: 1; }
+            90% { opacity: 0.8; }
+            100% { opacity: 1; }
+        }
+        .flicker {
+            animation: flicker 5s infinite;
+        }
+        .back-btn {
+            margin-top: 30px;
+            background-color: #990000;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        .back-btn:hover {
+            background-color: #cc0000;
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="flicker">САТАНА ПРИЗВАН!</h1>
+        <pre class="flicker">{{satan_ascii}}</pre>
+        <p>Ваша программа теперь проклята и работает на 666% быстрее</p>
+        <a href="/" class="back-btn">Вернуться в ад</a>
+    </div>
+</body>
+</html>
