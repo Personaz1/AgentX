@@ -7,8 +7,21 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <ctype.h>
+#ifdef _WIN32
 #include <windows.h>
 #include <direct.h>
+#else
+#include <stdint.h>
+#include <unistd.h>
+typedef uint8_t BYTE;
+typedef int BOOL;
+#ifndef TRUE
+#define TRUE 1
+#define FALSE 0
+#endif
+typedef size_t SIZE_T;
+#endif
 
 #define MAX_SHELLCODE_SIZE 8192
 #define MAX_PATH_LENGTH 260
