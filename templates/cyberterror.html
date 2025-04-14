@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <title>AGENTX 2040 — Red Team Command Center</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #00ffea;
+            --primary-dark: #00bfae;
+            --danger: #ff3030;
+            --matrix: #00ff41;
+            --bg: #10131a;
+            --card: rgba(30,34,44,0.85);
+            --glass: rgba(30,34,44,0.55);
+            --text: #e0e0e0;
+            --glow: 0 0 18px #00fff7, 0 0 2px #00fff7;
+        }
+        body {
+            font-family: 'Roboto Mono', monospace;
+            background: var(--bg);
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        .cyber-bg {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: 0; pointer-events: none;
+            background: radial-gradient(circle at 20% 30%, #00fff7 0%, transparent 60%),
+                        radial-gradient(circle at 80% 80%, #ff00c8 0%, transparent 70%),
+                        linear-gradient(120deg, #10131a 60%, #181c24 100%);
+            animation: bgmove 12s linear infinite alternate;
+        }
+        @keyframes bgmove {
+            0% { background-position: 0 0, 100% 100%, 0 0; }
+            100% { background-position: 100% 0, 0 100%, 100% 100%; }
+        }
+        .matrix-rain {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: 1; pointer-events: none;
+        }
+        .center-panel {
+            position: relative;
+            z-index: 10;
+            max-width: 1200px;
+            margin: 40px auto;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 32px;
+            justify-content: center;
+        }
+        .card-glass {
+            background: var(--glass);
+            border-radius: 18px;
+            box-shadow: 0 8px 32px 0 rgba(0,255,234,0.12);
+            backdrop-filter: blur(12px) saturate(120%);
+            border: 1.5px solid rgba(0,255,234,0.12);
+            padding: 28px 24px;
+            min-width: 340px;
+            max-width: 420px;
+            flex: 1 1 340px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+        .card-title {
+            font-size: 1.3rem;
+            color: var(--primary);
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+            text-shadow: var(--glow);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .cyber-map {
+            background: #0a0e14;
+            border-radius: 18px;
+            box-shadow: 0 2px 12px 0 #00fff7a0;
+            border: 1.5px solid #00fff7a0;
+            min-height: 340px;
+            min-width: 340px;
+            width: 100%;
+            height: 340px;
+            margin-bottom: 12px;
+            position: relative;
+        }
+        .terminal {
+            background: #0a0e14;
+            color: var(--matrix);
+            border-radius: 10px;
+            min-height: 180px;
+            max-height: 260px;
+            overflow-y: auto;
+            font-size: 1.05rem;
+            font-family: 'Roboto Mono', monospace;
+            padding: 14px;
+            box-shadow: 0 2px 8px 0 #00fff71a;
+            border: 1.5px solid #00fff7a0;
+            margin-bottom: 8px;
+            user-select: text;
+            cursor: pointer;
+        }
+        .terminal .error { color: var(--danger); text-shadow: 0 0 4px var(--danger); }
+        .terminal .success { color: var(--primary); }
+        .reasoning-feed {
+            background: #181c24;
+            color: #00fff7;
+            border-radius: 10px;
+            min-height: 80px;
+            max-height: 180px;
+            overflow-y: auto;
+            font-size: 1.01rem;
+            font-family: 'Roboto Mono', monospace;
+            padding: 10px 14px;
+            box-shadow: 0 2px 8px 0 #00fff71a;
+            border: 1.5px solid #00fff7a0;
+        }
+        .btn-panel {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-top: 10px;
+        }
+        .cyber-btn {
+            background: linear-gradient(90deg, #00fff7 0%, #ff00c8 100%);
+            color: #181c24;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.08rem;
+            font-weight: 700;
+            padding: 12px 22px;
+            cursor: pointer;
+            box-shadow: 0 2px 12px 0 #00fff7a0;
+            transition: box-shadow 0.3s, transform 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+        .cyber-btn:hover {
+            transform: translateY(-2px) scale(1.03);
+            box-shadow: 0 6px 24px 0 #00fff7a0;
+        }
+        .cyber-btn:active {
+            transform: scale(0.98);
+        }
+        .ascii-bg {
+            position: fixed;
+            bottom: 18px;
+            right: 18px;
+            font-family: monospace;
+            font-size: 13px;
+            color: rgba(0,255,234,0.08);
+            line-height: 1;
+            white-space: pre;
+            z-index: 1;
+            pointer-events: none;
+            user-select: none;
+            text-align: right;
+        }
+        @media (max-width: 900px) {
+            .center-panel { flex-direction: column; align-items: center; }
+            .card-glass { min-width: 90vw; max-width: 98vw; }
+        }
+    </style>
+</head>
+<body>
+    <div class="cyber-bg"></div>
+    <canvas class="matrix-rain"></canvas>
+    <div class="center-panel">
+        <div class="card-glass">
+            <div class="card-title"><i class="fa-solid fa-network-wired"></i> Карта заражения</div>
+            <div class="cyber-map" id="cyberMap">
+                <!-- SVG/Canvas карта заражения, узлы, линии, анимация -->
+            </div>
+            <div class="btn-panel">
+                <button class="cyber-btn" id="btnAttack"><i class="fa-solid fa-bolt"></i> Запустить автономный взлом</button>
+                <button class="cyber-btn" id="btnPersistence"><i class="fa-solid fa-infinity"></i> Persistence</button>
+                <button class="cyber-btn" id="btnLateral"><i class="fa-solid fa-share-nodes"></i> Lateral movement</button>
+                <button class="cyber-btn" id="btnDump"><i class="fa-solid fa-key"></i> Дамп паролей</button>
+                <button class="cyber-btn" id="btnScreenshot"><i class="fa-solid fa-image"></i> Скриншот</button>
+                <button class="cyber-btn" id="btnReport"><i class="fa-solid fa-file-alt"></i> Генерировать отчёт</button>
+            </div>
+        </div>
+        <div class="card-glass">
+            <div class="card-title"><i class="fa-solid fa-terminal"></i> Терминал атак</div>
+            <div class="terminal" id="attackTerminal">$ <span class="success">AGENTX 2040 готов к атаке...</span></div>
+        </div>
+        <div class="card-glass">
+            <div class="card-title"><i class="fa-solid fa-brain"></i> Reasoning Feed</div>
+            <div class="reasoning-feed" id="reasoningFeed">[AI] Ожидание команды...</div>
+        </div>
+    </div>
+    <div class="ascii-bg">
+        ________  ________  ________  ________  ________  ________  ________  ________<br>
+       |\   __  \|\   __  \|\   __  \|\   __  \|\   __  \|\   __  \|\   __  \<br>
+        \ \  \|\  \ \  \|\  \ \  \|\  \ \  \|\  \ \  \|\  \ \  \|\  \ \  \|\  \<br>
+         \ \   ____\ \   __  \ \   ____\ \   __  \ \   ____\ \   __  \ \   ____\<br>
+          \ \  \___|\ \  \ \  \ \  \___|\ \  \ \  \ \  \___|\ \  \ \  \ \  \___|<br>
+           \ \__\    \ \__\ \__\ \__\    \ \__\ \__\ \__\    \ \__\ \__\ \__\<br>
+            \|__|     \|__|\|__|\|__|     \|__|\|__|\|__|     \|__|\|__|\|__|<br>
+        AGENTX 2040 // MATRIX x MR.ROBOT MODE
+    </div>
+    <script>
+        // Matrix rain эффект
+        const canvas = document.querySelector('.matrix-rain');
+        const ctx = canvas.getContext('2d');
+        let width = window.innerWidth;
+        let height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+        const letters = '01ABCDEFGHIJKLMNOPQRSTUVWXYZ#$%&*'.split('');
+        const fontSize = 18;
+        const columns = Math.floor(width / fontSize);
+        const drops = Array(columns).fill(1);
+        function drawMatrix() {
+            ctx.fillStyle = 'rgba(16,19,26,0.15)';
+            ctx.fillRect(0, 0, width, height);
+            ctx.font = fontSize + 'px monospace';
+            for (let i = 0; i < drops.length; i++) {
+                const text = letters[Math.floor(Math.random() * letters.length)];
+                ctx.fillStyle = '#00ff41';
+                ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+                if (drops[i] * fontSize > height && Math.random() > 0.975) {
+                    drops[i] = 0;
+                }
+                drops[i]++;
+            }
+        }
+        setInterval(drawMatrix, 40);
+        window.addEventListener('resize', () => {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+        });
+        // Терминал: авто-скролл, копирование
+        const terminal = document.getElementById('attackTerminal');
+        terminal.addEventListener('click', function() {
+            if (terminal.textContent) {
+                navigator.clipboard.writeText(terminal.textContent);
+                terminal.textContent += '\n[Скопировано в буфер!]';
+                setTimeout(()=>terminal.textContent=terminal.textContent.replace('\n[Скопировано в буфер!]',''), 1200);
+            }
+        });
+        // Reasoning feed: авто-скролл
+        const reasoningFeed = document.getElementById('reasoningFeed');
+        const feedObserver = new MutationObserver(() => {
+            reasoningFeed.scrollTop = reasoningFeed.scrollHeight;
+        });
+        feedObserver.observe(reasoningFeed, {childList: true, subtree: true, characterData: true});
+        // Кнопки управления (заглушки)
+        document.getElementById('btnAttack').onclick = () => {
+            terminal.innerHTML += '\n$ <span>Запуск автономного взлома...</span>';
+            reasoningFeed.innerHTML += '\n[AI] Начинаю сканирование сети...';
+        };
+        document.getElementById('btnPersistence').onclick = () => {
+            terminal.innerHTML += '\n$ <span>Persistence: внедрение...</span>';
+            reasoningFeed.innerHTML += '\n[AI] Внедряю persistence...';
+        };
+        document.getElementById('btnLateral').onclick = () => {
+            terminal.innerHTML += '\n$ <span>Lateral movement: попытка распространения...</span>';
+            reasoningFeed.innerHTML += '\n[AI] Пробую lateral movement...';
+        };
+        document.getElementById('btnDump').onclick = () => {
+            terminal.innerHTML += '\n$ <span>Дамп паролей...</span>';
+            reasoningFeed.innerHTML += '\n[AI] Ищу credentials...';
+        };
+        document.getElementById('btnScreenshot').onclick = () => {
+            terminal.innerHTML += '\n$ <span>Скриншот экрана...</span>';
+            reasoningFeed.innerHTML += '\n[AI] Делаю скриншот...';
+        };
+        document.getElementById('btnReport').onclick = () => {
+            terminal.innerHTML += '\n$ <span>Генерация отчёта...</span>';
+            reasoningFeed.innerHTML += '\n[AI] Формирую отчёт...';
+        };
+        // TODO: WebSocket/polling для reasoning-feed и терминала
+        // TODO: SVG/Canvas карта заражения, анимация lateral movement
+        // TODO: Интеграция с backend reasoning-агента
+    </script>
+</body>
+</html> 
