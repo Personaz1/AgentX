@@ -48,6 +48,37 @@ fi
 PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' || handle_error "Python version must be 3.8 or higher. Current version: $PYTHON_VERSION"
 
+# Check system dependencies
+echo -e "${BLUE}Checking system dependencies...${NC}"
+check_venv_support() {
+    python3 -m venv --help &>/dev/null
+    return $?
+}
+
+if ! check_venv_support; then
+    echo -e "${YELLOW}Python virtual environment support is not installed.${NC}"
+    echo -e "${YELLOW}You need to install the appropriate packages for your system:${NC}"
+    
+    # Determine Linux distribution
+    if [ -f /etc/debian_version ]; then
+        echo -e "${GREEN}Debian/Ubuntu detected. Run the following command:${NC}"
+        echo -e "    sudo apt update"
+        echo -e "    sudo apt install python3-venv python3-pip"
+    elif [ -f /etc/redhat-release ]; then
+        echo -e "${GREEN}Red Hat/CentOS/Fedora detected. Run the following command:${NC}"
+        echo -e "    sudo yum install python3-venv python3-pip"
+    elif [ -f /etc/arch-release ]; then
+        echo -e "${GREEN}Arch Linux detected. Run the following command:${NC}"
+        echo -e "    sudo pacman -S python-virtualenv python-pip"
+    else
+        echo -e "${GREEN}For your distribution, install packages similar to:${NC}"
+        echo -e "    python3-venv, python3-pip"
+    fi
+    
+    handle_error "Missing system dependencies. Please install them and try again."
+fi
+echo -e "${GREEN}System dependencies check passed.${NC}"
+
 # Create virtual environment
 echo -e "${BLUE}Creating virtual environment...${NC}"
 if [ ! -d "venv" ]; then
@@ -57,9 +88,25 @@ else
     echo -e "${YELLOW}Virtual environment already exists.${NC}"
 fi
 
+# Verify virtual environment was created properly
+if [ ! -f "venv/bin/activate" ]; then
+    echo -e "${RED}Virtual environment exists but seems corrupt (activate script not found).${NC}"
+    echo -e "${YELLOW}Try removing it and running this script again:${NC}"
+    echo -e "    rm -rf venv"
+    echo -e "    ./deploy.sh"
+    handle_error "Virtual environment is not properly set up."
+fi
+
 # Activate virtual environment
 echo -e "${BLUE}Activating virtual environment...${NC}"
-source venv/bin/activate || handle_error "Failed to activate virtual environment."
+if ! source venv/bin/activate 2>/dev/null; then
+    echo -e "${RED}Failed to activate virtual environment.${NC}"
+    echo -e "${YELLOW}This could be due to shell compatibility issues or corruption.${NC}"
+    echo -e "${YELLOW}Try removing the environment and running again:${NC}"
+    echo -e "    rm -rf venv"
+    echo -e "    ./deploy.sh"
+    handle_error "Failed to activate virtual environment."
+fi
 echo -e "${GREEN}Virtual environment activated.${NC}"
 
 # Install dependencies
