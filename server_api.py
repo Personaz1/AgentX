@@ -692,18 +692,25 @@ def record_event(event_type: str, agent_id: str = None, details: str = ""):
 # Основные маршруты API
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    """Render the index page."""
-    return templates.TemplateResponse("index.html", {"request": request})
-
-@app.get("/builder", response_class=HTMLResponse)
-async def builder(request: Request):
-    """Render the builder page."""
-    return templates.TemplateResponse("builder.html", {"request": request})
+    """Main page with dashboard"""
+    try:
+        return templates.TemplateResponse("index.html", {"request": request})
+    except Exception as e:
+        logger.error(f"Failed to render index.html: {str(e)}")
+        return HTMLResponse(content=f"<h1>Error loading dashboard</h1><p>{str(e)}</p>")
 
 @app.get("/cyberterror", response_class=HTMLResponse)
 async def cyberterror(request: Request):
-    """Render the Red Team Command Center page."""
-    return templates.TemplateResponse("cyberterror.html", {"request": request})
+    """Red Team Command Center with cyberpunk interface"""
+    try:
+        return templates.TemplateResponse("cyberterror.html", {"request": request})
+    except Exception as e:
+        logger.error(f"Failed to render cyberterror.html: {str(e)}")
+        return HTMLResponse(content=f"<h1>Error loading Red Team Command Center</h1><p>{str(e)}</p>")
+
+@app.get("/builder", response_class=HTMLResponse)
+async def get_builder(request: Request):
+    return templates.TemplateResponse("builder.html", {"request": request})
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def get_dashboard(request: Request):
@@ -1528,22 +1535,39 @@ async def download_built_file(file: str):
 
 @app.get("/api/reasoning-feed")
 async def get_reasoning_feed():
-    """Get reasoning agent logs."""
-    return JSONResponse(content={"logs": reasoning_logs})
+    """Return the logs from the reasoning agent"""
+    try:
+        return reasoning_logs
+    except Exception as e:
+        logger.error(f"Error getting reasoning feed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error getting reasoning feed: {str(e)}")
 
-@app.post("/api/reasoning-feed")
-async def add_reasoning_log(
-    message: str = Form(...),
-    type: str = Form(...),
-):
-    """Add a new reasoning log entry."""
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    new_log = {"timestamp": timestamp, "type": type, "message": message}
-    reasoning_logs.append(new_log)
-    # Limit the log size to prevent memory issues
-    if len(reasoning_logs) > 100:
-        reasoning_logs.pop(0)
-    return JSONResponse(content={"status": "success", "log": new_log})
+@app.post("/api/reasoning-feed/add", status_code=201)
+async def add_reasoning_log(request: Request):
+    """Add a new entry to the reasoning feed"""
+    try:
+        data = await request.json()
+        if "message" not in data:
+            raise HTTPException(status_code=400, detail="Missing required field: message")
+            
+        entry = {
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "type": data.get("type", "info"),
+            "message": data["message"]
+        }
+        
+        reasoning_logs.append(entry)
+        
+        # Limit the size of the logs to last 100 entries
+        if len(reasoning_logs) > 100:
+            del reasoning_logs[0]
+            
+        return {"success": True, "entry": entry}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding to reasoning feed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error adding to reasoning feed: {str(e)}")
 
 @app.get("/api/cyber-map-data")
 async def get_cyber_map_data():
