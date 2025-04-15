@@ -9,6 +9,7 @@
     <div class="tab-buttons">
         <button class="tab-btn active" data-tab="builder">Сборка Агента</button>
         <button class="tab-btn" data-tab="deployment">Саморепликация</button>
+        <button class="tab-btn" data-tab="ransomware">Зонд-Шифровальщик</button>
     </div>
     
     <div id="builder" class="tab-content active">
@@ -72,6 +73,25 @@
                 <h3>Обнаруженные цели:</h3>
                 <div id="targetList"></div>
             </div>
+        </div>
+    </div>
+    
+    <div id="ransomware" class="tab-content">
+        <div class="card">
+            <h2 class="section-title">Сборка зонда-шифровальщика (Windows)</h2>
+            <form id="ransomwareForm" action="/api/build_ransomware" method="post">
+                <div class="form-group">
+                    <label for="wallet_address">Криптокошелек для выкупа</label>
+                    <input type="text" id="wallet_address" name="wallet_address" placeholder="BTC/ETH/USDT..." required>
+                </div>
+                <div class="form-group">
+                    <label for="ransom_amount">Сумма выкупа</label>
+                    <input type="text" id="ransom_amount" name="ransom_amount" value="0.05 BTC" required>
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn">Собрать шифровальщик</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
