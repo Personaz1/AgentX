@@ -77,3 +77,6 @@ service_account.json *.bak
 *.log
 server_log*
 *.reload
+
+# Dev Plan Secret
+.dev_plan_secret.md

