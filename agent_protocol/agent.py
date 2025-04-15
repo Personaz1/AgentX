@@ -223,10 +223,8 @@ class Agent:
         
         # Создаем команду
         command = Command(
-            cmd_type=cmd_type,
-            agent_id=self.agent_id,
-            data=data,
-            auth_token=self.auth_token
+            command_type=cmd_type,
+            data=data
         )
         
         # Шифруем, если нужно

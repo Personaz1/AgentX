@@ -1,0 +1,498 @@
+{
+  "status": "success",
+  "summary": {
+    "total_found": 71,
+    "total_extracted": 20,
+    "categories": {
+      "documents": 20,
+      "images": 20,
+      "configurations": 11,
+      "source_code": 20,
+      "credentials": 0
+    },
+    "system": "Darwin",
+    "using_environment_manager": true
+  },
+  "found_files": {
+    "documents": [
+      {
+        "name": "No1014 Цивилизация Россия.docx",
+        "path": "/Users/stefan/Downloads/No1014 Цивилизация Россия.docx",
+        "size": 1260907,
+        "modified": "2025-04-12T21:00:31.087061",
+        "extracted_to": "/Users/stefan/Agent/extracted_data/file_stealer/documents/No1014 Цивилизация Россия.docx"
+      },
+      {
+        "name": "No1012_Неофициальная_история_европейского_выбора_России.docx",
+        "path": "/Users/stefan/Downloads/No1012_Неофициальная_история_европейского_выбора_России.docx",
+        "size": 438292,
+        "modified": "2025-04-12T21:00:31.052490",
+        "extracted_to": "/Users/stefan/Agent/extracted_data/file_stealer/documents/No1012_Неофициальная_история_европейского_выбора_России.docx"
+      },
+      {
+        "name": "No1013 НЕ ВЫИГРАЛ, А ПРОИГРАЛ.docx",
+        "path": "/Users/stefan/Downloads/No1013 НЕ ВЫИГРАЛ, А ПРОИГРАЛ.docx",
+        "size": 347949,
+        "modified": "2025-04-12T21:00:30.901816",
+        "extracted_to": "/Users/stefan/Agent/extracted_data/file_stealer/documents/No1013 НЕ ВЫИГРАЛ, А ПРОИГРАЛ.docx"
+      },
+      {
+        "name": "No1015 К пониманию процессов.docx",
+        "path": "/Users/stefan/Downloads/No1015 К пониманию процессов.docx",
+        "size": 402482,
+        "modified": "2025-04-12T21:00:30.680680",
+        "extracted_to": "/Users/stefan/Agent/extracted_data/file_stealer/documents/No1015 К пониманию процессов.docx"
+      },
+      {
+        "name": "1739188459418.pdf",
+        "path": "/Users/stefan/Downloads/1739188459418.pdf",
+        "size": 3118018,
+        "modified": "2025-04-12T17:26:55.404016",
+        "extracted_to": "/Users/stefan/Agent/extracted_data/file_stealer/documents/1739188459418.pdf"
+      },
+      {
+        "name": "новый смысл бытия.txt",
+        "path": "/Users/stefan/Desktop/новый смысл бытия.txt",
+        "size": 5813,
+        "modified": "2025-04-12T11:35:15.498529"
+      },
+      {
+        "name": "Docker_Command_Cheat_Sheet.pdf",
+        "path": "/Users/stefan/Downloads/Docker_Command_Cheat_Sheet.pdf",
+        "size": 279294,
+        "modified": "2025-04-01T20:14:24.609477"
+      },
+      {
+        "name": "raport_platforma_wymiany_walut_fixed (1).pdf",
+        "path": "/Users/stefan/Downloads/raport_platforma_wymiany_walut_fixed (1).pdf",
+        "size": 34730,
+        "modified": "2025-04-01T12:28:55.208086"
+      },
+      {
+        "name": "raport_platforma_wymiany_walut_fixed.pdf",
+        "path": "/Users/stefan/Downloads/raport_platforma_wymiany_walut_fixed.pdf",
+        "size": 34730,
+        "modified": "2025-04-01T12:28:39.654239"
+      },
+      {
+        "name": "Симулякры и симуляции.pdf",
+        "path": "/Users/stefan/Downloads/Симулякры и симуляции.pdf",
+        "size": 3792286,
+        "modified": "2025-03-27T11:05:34.002379"
+      },
+      {
+        "name": "kniga_mirdada.pdf",
+        "path": "/Users/stefan/Downloads/kniga_mirdada.pdf",
+        "size": 983602,
+        "modified": "2025-03-27T11:05:27.538147"
+      },
+      {
+        "name": "Mettsinger_2016_Nauka o mozge i mif o svoem ya.pdf",
+        "path": "/Users/stefan/Downloads/Mettsinger_2016_Nauka o mozge i mif o svoem ya.pdf",
+        "size": 2891668,
+        "modified": "2025-03-20T21:37:16.879413"
+      },
+      {
+        "name": "Wilson_1998_Quantum psychology.pdf",
+        "path": "/Users/stefan/Downloads/Wilson_1998_Quantum psychology.pdf",
+        "size": 1119547,
+        "modified": "2025-03-20T21:37:15.799277"
+      },
+      {
+        "name": "Смысл бытия.txt",
+        "path": "/Users/stefan/Desktop/Смысл бытия.txt",
+        "size": 6359,
+        "modified": "2025-03-15T00:13:26.958731"
+      },
+      {
+        "name": "Hatha-yoga-pradipika 2.pdf",
+        "path": "/Users/stefan/Downloads/Книги/Hatha-yoga-pradipika 2.pdf",
+        "size": 1591085,
+        "modified": "2025-03-06T11:38:21.373261"
+      },
+      {
+        "name": "70 cc.txt",
+        "path": "/Users/stefan/Downloads/70 cc.txt",
+        "size": 9245,
+        "modified": "2025-03-02T17:06:39.463668"
+      },
+      {
+        "name": "ЗАДАЧИ.txt",
+        "path": "/Users/stefan/Desktop/ЗАДАЧИ.txt",
+        "size": 3520,
+        "modified": "2025-02-28T10:17:18.141463"
+      },
+      {
+        "name": "~$utm_source.xlsx",
+        "path": "/Users/stefan/Downloads/~$utm_source.xlsx",
+        "size": 165,
+        "modified": "2025-02-27T09:32:18.838396"
+      },
+      {
+        "name": "Cybersecurity management and strategic intelligence.pdf",
+        "path": "/Users/stefan/Downloads/Книги/Cybersecurity management and strategic intelligence.pdf",
+        "size": 2439367,
+        "modified": "2025-02-22T16:31:12.518505"
+      },
+      {
+        "name": "export-2.txt",
+        "path": "/Users/stefan/Downloads/export-2.txt",
+        "size": 6482,
+        "modified": "2025-02-18T10:19:46.750700"
+      }
+    ],
+    "images": [
+      {
+        "name": "Screenshot 2025-04-15 at 21.27.19.png",
+        "path": "/Users/stefan/Desktop/Screenshot 2025-04-15 at 21.27.19.png",
+        "size": 353033,
+        "modified": "2025-04-15T21:27:25.754027",
+        "extracted_to": "/Users/stefan/Agent/extracted_data/file_stealer/images/Screenshot 2025-04-15 at 21.27.19.png"
+      },
+      {
+        "name": "Screenshot 2025-04-15 at 21.21.46.png",
+        "path": "/Users/stefan/Desktop/Screenshot 2025-04-15 at 21.21.46.png",
+        "size": 377914,
+        "modified": "2025-04-15T21:21:52.108256",
+        "extracted_to": "/Users/stefan/Agent/extracted_data/file_stealer/images/Screenshot 2025-04-15 at 21.21.46.png"
+      },
+      {
+        "name": "Screenshot 2025-04-15 at 21.02.02.png",
+        "path": "/Users/stefan/Desktop/Screenshot 2025-04-15 at 21.02.02.png",
+        "size": 1095996,
+        "modified": "2025-04-15T21:02:07.849836",
+        "extracted_to": "/Users/stefan/Agent/extracted_data/file_stealer/images/Screenshot 2025-04-15 at 21.02.02.png"
+      },
+      {
+        "name": "Screenshot 2025-04-15 at 20.42.50.png",
+        "path": "/Users/stefan/Desktop/Screenshot 2025-04-15 at 20.42.50.png",
+        "size": 1556125,
+        "modified": "2025-04-15T20:42:53.819620",
+        "extracted_to": "/Users/stefan/Agent/extracted_data/file_stealer/images/Screenshot 2025-04-15 at 20.42.50.png"
+      },
+      {
+        "name": "Screenshot 2025-04-15 at 20.22.02.png",
+        "path": "/Users/stefan/Desktop/Screenshot 2025-04-15 at 20.22.02.png",
+        "size": 1734387,
+        "modified": "2025-04-15T20:22:08.499246",
+        "extracted_to": "/Users/stefan/Agent/extracted_data/file_stealer/images/Screenshot 2025-04-15 at 20.22.02.png"
+      },
+      {
+        "name": "Screenshot 2025-04-15 at 20.21.33.png",
+        "path": "/Users/stefan/Desktop/Screenshot 2025-04-15 at 20.21.33.png",
+        "size": 246711,
+        "modified": "2025-04-15T20:21:38.647627"
+      },
+      {
+        "name": "Screenshot 2025-04-15 at 20.18.49.png",
+        "path": "/Users/stefan/Desktop/Screenshot 2025-04-15 at 20.18.49.png",
+        "size": 1847932,
+        "modified": "2025-04-15T20:18:52.575389"
+      },
+      {
+        "name": "Screenshot 2025-04-15 at 20.15.01.png",
+        "path": "/Users/stefan/Desktop/Screenshot 2025-04-15 at 20.15.01.png",
+        "size": 45685,
+        "modified": "2025-04-15T20:15:05.354906"
+      },
+      {
+        "name": "Screenshot 2025-04-15 at 19.21.30.png",
+        "path": "/Users/stefan/Desktop/Screenshot 2025-04-15 at 19.21.30.png",
+        "size": 323652,
+        "modified": "2025-04-15T19:21:36.382392"
+      },
+      {
+        "name": "Screenshot 2025-04-15 at 18.47.35.png",
+        "path": "/Users/stefan/Desktop/Screenshot 2025-04-15 at 18.47.35.png",
+        "size": 1082609,
+        "modified": "2025-04-15T18:47:41.748645"
+      },
+      {
+        "name": "Screenshot 2025-04-15 at 18.12.56.png",
+        "path": "/Users/stefan/Desktop/Screenshot 2025-04-15 at 18.12.56.png",
+        "size": 1636743,
+        "modified": "2025-04-15T18:13:02.065379"
+      },
+      {
+        "name": "Screenshot 2025-04-15 at 12.40.16.png",
+        "path": "/Users/stefan/Desktop/Screenshot 2025-04-15 at 12.40.16.png",
+        "size": 334270,
+        "modified": "2025-04-15T12:40:21.765682"
+      },
+      {
+        "name": "Screenshot 2025-04-15 at 12.39.03.png",
+        "path": "/Users/stefan/Desktop/Screenshot 2025-04-15 at 12.39.03.png",
+        "size": 535043,
+        "modified": "2025-04-15T12:39:04.002588"
+      },
+      {
+        "name": "Screenshot 2025-04-15 at 12.29.30.png",
+        "path": "/Users/stefan/Desktop/Screenshot 2025-04-15 at 12.29.30.png",
+        "size": 282953,
+        "modified": "2025-04-15T12:29:36.230742"
+      },
+      {
+        "name": "Screenshot 2025-04-15 at 11.48.36.png",
+        "path": "/Users/stefan/Desktop/Screenshot 2025-04-15 at 11.48.36.png",
+        "size": 285794,
+        "modified": "2025-04-15T11:48:37.967881"
+      },
+      {
+        "name": "Screenshot 2025-04-15 at 03.23.49.png",
+        "path": "/Users/stefan/Desktop/Screenshot 2025-04-15 at 03.23.49.png",
+        "size": 1175362,
+        "modified": "2025-04-15T03:23:54.758541"
+      },
+      {
+        "name": "Screenshot 2025-04-15 at 03.02.54.png",
+        "path": "/Users/stefan/Desktop/Screenshot 2025-04-15 at 03.02.54.png",
+        "size": 743221,
+        "modified": "2025-04-15T03:02:54.203503"
+      },
+      {
+        "name": "Screenshot 2025-04-15 at 01.42.22.png",
+        "path": "/Users/stefan/Desktop/Screenshot 2025-04-15 at 01.42.22.png",
+        "size": 242544,
+        "modified": "2025-04-15T01:42:27.938945"
+      },
+      {
+        "name": "Screenshot 2025-04-15 at 01.15.53.png",
+        "path": "/Users/stefan/Desktop/Screenshot 2025-04-15 at 01.15.53.png",
+        "size": 297152,
+        "modified": "2025-04-15T01:15:59.452748"
+      },
+      {
+        "name": "Screenshot 2025-04-15 at 01.09.19.png",
+        "path": "/Users/stefan/Desktop/Screenshot 2025-04-15 at 01.09.19.png",
+        "size": 329536,
+        "modified": "2025-04-15T01:09:22.950263"
+      }
+    ],
+    "configurations": [
+      {
+        "name": "nodemon.json",
+        "path": "/Users/stefan/.config/simple-update-notifier/nodemon.json",
+        "size": 33,
+        "modified": "2025-03-30T21:01:38.269431",
+        "extracted_to": "/Users/stefan/Agent/extracted_data/file_stealer/configurations/nodemon.json"
+      },
+      {
+        "name": "package.json",
+        "path": "/Users/stefan/Downloads/europound-clone 2/package.json",
+        "size": 756,
+        "modified": "2025-03-27T11:33:00",
+        "extracted_to": "/Users/stefan/Agent/extracted_data/file_stealer/configurations/package.json"
+      },
+      {
+        "name": "components.json",
+        "path": "/Users/stefan/Downloads/europound-clone 2/components.json",
+        "size": 445,
+        "modified": "2025-03-27T11:33:00",
+        "extracted_to": "/Users/stefan/Agent/extracted_data/file_stealer/configurations/components.json"
+      },
+      {
+        "name": "tsconfig.json",
+        "path": "/Users/stefan/Downloads/europound-clone 2/tsconfig.json",
+        "size": 722,
+        "modified": "2025-03-27T11:33:00",
+        "extracted_to": "/Users/stefan/Agent/extracted_data/file_stealer/configurations/tsconfig.json"
+      },
+      {
+        "name": "uncensor_modified.json",
+        "path": "/Users/stefan/Desktop/neobot/uncensor_modified.json",
+        "size": 3139692,
+        "modified": "2025-02-11T01:31:56.058637",
+        "extracted_to": "/Users/stefan/Agent/extracted_data/file_stealer/configurations/uncensor_modified.json"
+      },
+      {
+        "name": "dataset_fixed.json",
+        "path": "/Users/stefan/Desktop/neobot/dataset_fixed.json",
+        "size": 3140968,
+        "modified": "2025-02-11T01:24:18.850856"
+      },
+      {
+        "name": "uncensor.json",
+        "path": "/Users/stefan/Desktop/neobot/uncensor.json",
+        "size": 3169941,
+        "modified": "2025-02-10T17:46:33.283111"
+      },
+      {
+        "name": "desktop.ini",
+        "path": "/Users/stefan/Documents/desktop.ini",
+        "size": 402,
+        "modified": "2024-11-27T14:40:09.360395"
+      },
+      {
+        "name": "desktop.ini",
+        "path": "/Users/stefan/Documents/desktop.ini",
+        "size": 402,
+        "modified": "2024-11-27T14:40:09.360395"
+      },
+      {
+        "name": "desktop.ini",
+        "path": "/Users/stefan/Downloads/desktop.ini",
+        "size": 282,
+        "modified": "2024-11-27T14:40:09.304582"
+      },
+      {
+        "name": "desktop.ini",
+        "path": "/Users/stefan/Desktop/desktop.ini",
+        "size": 282,
+        "modified": "2024-11-27T14:40:09.191451"
+      }
+    ],
+    "source_code": [
+      {
+        "name": "neurorat_agent_windows_3cce1c65.py",
+        "path": "/Users/stefan/Downloads/neurorat_agent_windows_3cce1c65.py",
+        "size": 49403,
+        "modified": "2025-04-15T01:15:50.145610",
+        "extracted_to": "/Users/stefan/Agent/extracted_data/file_stealer/source_code/neurorat_agent_windows_3cce1c65.py"
+      },
+      {
+        "name": "next.config.js",
+        "path": "/Users/stefan/Downloads/europound-clone 2/next.config.js",
+        "size": 191,
+        "modified": "2025-03-27T11:33:00",
+        "extracted_to": "/Users/stefan/Agent/extracted_data/file_stealer/source_code/next.config.js"
+      },
+      {
+        "name": "pound_simple.html",
+        "path": "/Users/stefan/Downloads/europound-clone 2/static-files/pound_simple.html",
+        "size": 6465,
+        "modified": "2025-03-27T11:33:00",
+        "extracted_to": "/Users/stefan/Agent/extracted_data/file_stealer/source_code/pound_simple.html"
+      },
+      {
+        "name": "usd_simple.html",
+        "path": "/Users/stefan/Downloads/europound-clone 2/static-files/usd_simple.html",
+        "size": 5742,
+        "modified": "2025-03-27T11:33:00",
+        "extracted_to": "/Users/stefan/Agent/extracted_data/file_stealer/source_code/usd_simple.html"
+      },
+      {
+        "name": "globals.css",
+        "path": "/Users/stefan/Downloads/europound-clone 2/src/app/globals.css",
+        "size": 1932,
+        "modified": "2025-03-27T11:33:00",
+        "extracted_to": "/Users/stefan/Agent/extracted_data/file_stealer/source_code/globals.css"
+      },
+      {
+        "name": "Bot.py",
+        "path": "/Users/stefan/Desktop/authorize/Bot.py",
+        "size": 11034,
+        "modified": "2025-03-08T10:04:45.860474"
+      },
+      {
+        "name": "trans.py",
+        "path": "/Users/stefan/Desktop/neobot/trans.py",
+        "size": 781,
+        "modified": "2025-02-11T01:23:40.523353"
+      },
+      {
+        "name": "game.py",
+        "path": "/Users/stefan/Desktop/neobot/game.py",
+        "size": 4688,
+        "modified": "2025-02-11T00:19:37.625815"
+      },
+      {
+        "name": "xxx.py",
+        "path": "/Users/stefan/Desktop/neobot/xxx.py",
+        "size": 2790,
+        "modified": "2025-02-10T17:54:50.567513"
+      },
+      {
+        "name": "novbvskr.py",
+        "path": "/Users/stefan/Desktop/authorize/cards/novbvskr.py",
+        "size": 1225,
+        "modified": "2025-01-20T02:50:04.567054"
+      },
+      {
+        "name": "sortau.py",
+        "path": "/Users/stefan/Desktop/authorize/sortau.py",
+        "size": 825,
+        "modified": "2024-12-31T18:25:58.189493"
+      },
+      {
+        "name": "neobot.py",
+        "path": "/Users/stefan/Desktop/neobot/neobot.py",
+        "size": 4829,
+        "modified": "2024-12-26T01:09:02.510596"
+      },
+      {
+        "name": "typing_extensions.py",
+        "path": "/Users/stefan/Desktop/neobot/venv/lib/python3.13/site-packages/typing_extensions.py",
+        "size": 134451,
+        "modified": "2024-12-26T01:05:08.543387"
+      },
+      {
+        "name": "check.py",
+        "path": "/Users/stefan/Desktop/authorize/check.py",
+        "size": 3444,
+        "modified": "2024-12-25T21:35:37.750075"
+      },
+      {
+        "name": "error_page.html",
+        "path": "/Users/stefan/Desktop/authorize/error_page.html",
+        "size": 21258,
+        "modified": "2024-12-25T21:32:38.891957"
+      },
+      {
+        "name": "sockshandler.py",
+        "path": "/Users/stefan/Desktop/authorize/venv/lib/python3.13/site-packages/sockshandler.py",
+        "size": 3966,
+        "modified": "2024-12-25T20:04:33.023609"
+      },
+      {
+        "name": "socks.py",
+        "path": "/Users/stefan/Desktop/authorize/venv/lib/python3.13/site-packages/socks.py",
+        "size": 31086,
+        "modified": "2024-12-25T20:04:33.023493"
+      },
+      {
+        "name": "typing_extensions.py",
+        "path": "/Users/stefan/Desktop/authorize/venv/lib/python3.13/site-packages/typing_extensions.py",
+        "size": 134451,
+        "modified": "2024-12-25T20:04:33.006782"
+      },
+      {
+        "name": "convert.py",
+        "path": "/Users/stefan/Desktop/authorize/convert.py",
+        "size": 2583,
+        "modified": "2024-12-23T16:50:55.919873"
+      },
+      {
+        "name": "test.py",
+        "path": "/Users/stefan/Desktop/authorize/test.py",
+        "size": 4973,
+        "modified": "2024-12-14T14:53:46.760325"
+      }
+    ],
+    "credentials": []
+  },
+  "extracted_files": [
+    "/Users/stefan/Agent/extracted_data/file_stealer/documents/No1014 Цивилизация Россия.docx",
+    "/Users/stefan/Agent/extracted_data/file_stealer/documents/No1012_Неофициальная_история_европейского_выбора_России.docx",
+    "/Users/stefan/Agent/extracted_data/file_stealer/documents/No1013 НЕ ВЫИГРАЛ, А ПРОИГРАЛ.docx",
+    "/Users/stefan/Agent/extracted_data/file_stealer/documents/No1015 К пониманию процессов.docx",
+    "/Users/stefan/Agent/extracted_data/file_stealer/documents/1739188459418.pdf",
+    "/Users/stefan/Agent/extracted_data/file_stealer/images/Screenshot 2025-04-15 at 21.27.19.png",
+    "/Users/stefan/Agent/extracted_data/file_stealer/images/Screenshot 2025-04-15 at 21.21.46.png",
+    "/Users/stefan/Agent/extracted_data/file_stealer/images/Screenshot 2025-04-15 at 21.02.02.png",
+    "/Users/stefan/Agent/extracted_data/file_stealer/images/Screenshot 2025-04-15 at 20.42.50.png",
+    "/Users/stefan/Agent/extracted_data/file_stealer/images/Screenshot 2025-04-15 at 20.22.02.png",
+    "/Users/stefan/Agent/extracted_data/file_stealer/configurations/nodemon.json",
+    "/Users/stefan/Agent/extracted_data/file_stealer/configurations/package.json",
+    "/Users/stefan/Agent/extracted_data/file_stealer/configurations/components.json",
+    "/Users/stefan/Agent/extracted_data/file_stealer/configurations/tsconfig.json",
+    "/Users/stefan/Agent/extracted_data/file_stealer/configurations/uncensor_modified.json",
+    "/Users/stefan/Agent/extracted_data/file_stealer/source_code/neurorat_agent_windows_3cce1c65.py",
+    "/Users/stefan/Agent/extracted_data/file_stealer/source_code/next.config.js",
+    "/Users/stefan/Agent/extracted_data/file_stealer/source_code/pound_simple.html",
+    "/Users/stefan/Agent/extracted_data/file_stealer/source_code/usd_simple.html",
+    "/Users/stefan/Agent/extracted_data/file_stealer/source_code/globals.css"
+  ],
+  "output_file": "/Users/stefan/Agent/extracted_data/file_stealer/file_stealer_results.json",
+  "execution_time": 0.041419029235839844,
+  "timestamp": "2025-04-15 23:07:40"
+}

@@ -1,0 +1,1 @@
+{"description":"Persistence autorun","result":{"method":"cron","target_path":"mcp_prompt_server.py","status":"success","action":"Would add mcp_prompt_server.py to cron autostart on darwin"}}

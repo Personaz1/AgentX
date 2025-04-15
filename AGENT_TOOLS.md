@@ -9,6 +9,11 @@
 - "включи vnc", "screen", "экран"
 - "ats", "автоматический перевод"
 - "lateral", "латеральное перемещение"
+- "nmap scan", "network scan", "scan [ip]", "portscan"
+- "hydra bruteforce", "bruteforce ssh", "bruteforce rdp", "hydra [service]"
+- "metasploit", "exploit", "msfconsole"
+- "hashcat", "crack hash", "hash brute"
+- "mimikatz", "dump creds", "lsass dump"
 
 ## Пример:
 ```

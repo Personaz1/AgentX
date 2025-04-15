@@ -26,6 +26,7 @@ from agent_state import AgentState, OPERATIONAL_MODE_AUTO, OPERATIONAL_MODE_MANU
 from agent_memory import AgentMemory
 from agent_thinker import AgentThinker
 from agent_modules.environment_manager import EnvironmentManager
+from agent_modules import offensive_tools
 
 
 class TestAgentState(unittest.TestCase):
@@ -666,6 +667,28 @@ class TestEnvironmentManager(unittest.TestCase):
         self.assertIn("processes", summary)
         self.assertIn("network", summary)
         self.assertIn("edr_av", summary)
+
+
+class TestOffensiveTools(unittest.TestCase):
+    def test_run_external_tool(self):
+        result = offensive_tools.run_external_tool('echo test123')
+        self.assertEqual(result['status'], 'success')
+        self.assertIn('test123', result['stdout'])
+
+    def test_run_nmap(self):
+        result = offensive_tools.run_nmap('127.0.0.1', options='-F')
+        self.assertIn(result['status'], ['success', 'error'])
+        self.assertIn('127.0.0.1', result['stdout'] + result['stderr'])
+
+    def test_run_hydra(self):
+        # Ожидаем ошибку, если hydra не установлен или нет файлов
+        result = offensive_tools.run_hydra('127.0.0.1', 'ssh', 'users.txt', 'pass.txt')
+        self.assertIn(result['status'], ['success', 'error'])
+
+    def test_run_hashcat(self):
+        # Ожидаем ошибку, если hashcat не установлен или нет файлов
+        result = offensive_tools.run_hashcat('hashes.txt', 'wordlist.txt')
+        self.assertIn(result['status'], ['success', 'error'])
 
 
 if __name__ == "__main__":

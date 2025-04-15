@@ -134,7 +134,7 @@ class ModuleLoader:
     
     def run_module(self, module_name: str, **kwargs) -> Dict:
         """
-        Run a loaded module
+        Run a loaded module or special offensive tool
         
         Args:
             module_name: Name of the module to run
@@ -143,6 +143,16 @@ class ModuleLoader:
         Returns:
             Results from the module's execution
         """
+        # --- OFFENSIVE TOOLS INTEGRATION ---
+        if module_name.startswith("offensive_tools."):
+            try:
+                from agent_modules import offensive_tools
+                tool_func = getattr(offensive_tools, module_name.split(".", 1)[1])
+                return tool_func(**kwargs)
+            except Exception as e:
+                return {"status": "error", "message": f"Failed to run offensive tool: {e}"}
+        # --- END OFFENSIVE TOOLS ---
+        
         if module_name not in self.modules:
             success = self.load_module(module_name)
             if not success:

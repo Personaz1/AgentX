@@ -1,0 +1,6 @@
+{
+  "status": "success",
+  "stdout": "Starting Nmap 7.95 ( https://nmap.org ) at 2025-04-15 23:08 CEST\nNmap scan report for localhost (127.0.0.1)\nHost is up (0.000068s latency).\nNot shown: 96 closed tcp ports (conn-refused)\nPORT     STATE SERVICE\n80/tcp   open  http\n5000/tcp open  upnp\n5432/tcp open  postgresql\n8081/tcp open  blackice-icecap\n\nNmap done: 1 IP address (1 host up) scanned in 0.05 seconds\n",
+  "stderr": "",
+  "returncode": 0
+}
