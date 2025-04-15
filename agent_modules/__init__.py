@@ -20,6 +20,7 @@ try:
     from . import swarm_intelligence
     from . import module_loader
     from . import file_manager
+    from . import advanced_evasion
 except ImportError as e:
     pass
 
@@ -31,5 +32,6 @@ __all__ = [
     'screen_capture', 
     'swarm_intelligence',
     'module_loader',
-    'file_manager'
+    'file_manager',
+    'advanced_evasion'
 ] 

