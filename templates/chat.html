@@ -3,64 +3,64 @@
 {% block title %}NeuroRAT - Чат с агентом{% endblock %}
 
 {% block extra_styles %}
-.chat-container {
-    display: flex;
+        .chat-container {
+            display: flex;
     height: calc(100vh - 160px);
     margin-top: 20px;
-}
+        }
 
 .chat-main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
     border-radius: 4px;
-    overflow: hidden;
+            overflow: hidden;
     background-color: var(--card);
     box-shadow: var(--shadow);
     margin-right: 20px;
-}
-
-.chat-header {
+        }
+        
+        .chat-header {
     background-color: rgba(0, 0, 0, 0.2);
-    padding: 15px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
     border-bottom: 1px solid var(--border);
-}
-
-.chat-header h2 {
-    margin: 0;
-    display: flex;
-    align-items: center;
-}
-
+        }
+        
+        .chat-header h2 {
+            margin: 0;
+            display: flex;
+            align-items: center;
+        }
+        
 .status-icon {
     display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
     margin-right: 10px;
 }
 
 .status-active {
     background-color: var(--primary);
     box-shadow: 0 0 5px var(--primary-glow);
-}
+        }
 
 .status-inactive {
     background-color: var(--danger);
-}
-
-.chat-messages {
-    flex: 1;
+        }
+        
+        .chat-messages {
+            flex: 1;
     padding: 20px;
-    overflow-y: auto;
+            overflow-y: auto;
     background-color: rgba(0, 0, 0, 0.1);
-}
-
+        }
+        
 .chat-message {
-    margin-bottom: 15px;
+            margin-bottom: 15px;
     max-width: 80%;
 }
 
@@ -68,9 +68,9 @@
     margin-left: auto;
     background: rgba(153, 0, 255, 0.2);
     border-radius: 12px 12px 0 12px;
-    padding: 12px 15px;
+            padding: 12px 15px;
     color: var(--text);
-    position: relative;
+            position: relative;
 }
 
 .message-agent {
@@ -80,8 +80,8 @@
     padding: 12px 15px;
     color: var(--text);
     position: relative;
-}
-
+        }
+        
 .message-error {
     margin: 10px auto;
     background: rgba(255, 0, 0, 0.1);
@@ -90,48 +90,48 @@
     color: var(--danger);
     width: 90%;
     text-align: center;
-}
-
-.message-time {
+        }
+        
+        .message-time {
     font-size: 12px;
     color: var(--text-secondary);
-    text-align: right;
+            text-align: right;
     margin-top: 5px;
-}
-
-.chat-input {
-    padding: 15px;
+        }
+        
+        .chat-input {
+            padding: 15px;
     border-top: 1px solid var(--border);
     background-color: rgba(0, 0, 0, 0.2);
-}
-
+        }
+        
 .chat-form {
-    display: flex;
-}
-
+            display: flex;
+        }
+        
 .chat-textarea {
-    flex: 1;
+            flex: 1;
     border: 1px solid var(--border);
     border-radius: 4px;
     padding: 10px 15px;
-    resize: none;
+            resize: none;
     background-color: rgba(0, 0, 0, 0.3);
     color: var(--text);
     font-family: inherit;
     margin-right: 10px;
     min-height: 44px;
-}
-
+        }
+        
 .chat-textarea:focus {
-    outline: none;
+            outline: none;
     border-color: var(--primary);
     box-shadow: 0 0 0 2px var(--primary-glow);
 }
 
 .send-btn {
-    cursor: pointer;
-}
-
+            cursor: pointer;
+        }
+        
 .send-btn:hover {
     transform: translateY(-2px);
 }
@@ -142,20 +142,20 @@
     border-radius: 4px;
     margin-bottom: 15px;
     font-size: 14px;
-}
-
+        }
+        
 .agent-info p {
     margin: 5px 0;
-    display: flex;
-    align-items: center;
+            display: flex;
+            align-items: center;
 }
 
 .agent-info i {
     width: 20px;
     margin-right: 10px;
     color: var(--primary);
-}
-
+        }
+        
 .thinking-panel {
     width: 400px;
     background-color: var(--card);
@@ -165,18 +165,18 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-}
-
+        }
+        
 .thinking-header {
     background-color: var(--secondary-dark);
     color: white;
     padding: 15px;
-    font-weight: bold;
+            font-weight: bold;
     display: flex;
     justify-content: space-between;
     align-items: center;
-}
-
+        }
+        
 .thinking-close {
     cursor: pointer;
     font-size: 20px;
@@ -187,8 +187,8 @@
     padding: 15px;
     overflow-y: auto;
     background-color: rgba(0, 0, 0, 0.2);
-}
-
+        }
+        
 .thinking-section {
     margin-bottom: 20px;
 }
@@ -198,8 +198,8 @@
     margin-bottom: 10px;
     border-bottom: 1px solid rgba(0, 255, 0, 0.2);
     padding-bottom: 5px;
-}
-
+        }
+        
 .observation h3 {
     color: #00aaff;
 }
@@ -210,31 +210,31 @@
 
 .planning h3 {
     color: #aa00ff;
-}
-
+        }
+        
 .execution h3 {
     color: #ff5500;
 }
 
 .conclusion h3 {
     color: #00ffaa;
-}
-
+        }
+        
 .thinking-footer {
     padding: 10px 15px;
     background-color: rgba(0, 0, 0, 0.3);
     display: flex;
     align-items: center;
     border-top: 1px solid var(--border);
-}
-
+        }
+        
 .toggle-container {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-left: 15px;
-}
-
+        }
+        
 .toggle {
     position: relative;
     display: inline-block;
@@ -243,14 +243,14 @@
     background-color: #ccc;
     border-radius: 12px;
     margin: 0 10px;
-}
-
+        }
+        
 .toggle:after {
     content: '';
-    position: absolute;
+            position: absolute;
     width: 18px;
     height: 18px;
-    border-radius: 50%;
+            border-radius: 50%;
     background-color: white;
     top: 3px;
     left: 3px;
@@ -259,16 +259,16 @@
 
 .toggle.active {
     background-color: var(--primary);
-}
-
+        }
+        
 .toggle.active:after {
     left: 19px;
 }
 
 /* Terminal */
-.terminal-container {
+        .terminal-container {
     width: 100%;
-    height: 300px;
+            height: 300px;
     background-color: #000;
     border-radius: 4px;
     padding: 10px;
@@ -276,33 +276,33 @@
     color: #00ff00;
     overflow: auto;
     display: none;
-}
+        }
 
-.terminal-header {
+        .terminal-header {
     background-color: #333;
     padding: 5px 10px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
     margin: -10px -10px 10px -10px;
-}
+        }
 
 .terminal-title {
     color: #00ff00;
     font-weight: bold;
-}
+        }
 
 .terminal-close {
     cursor: pointer;
     color: #ff0000;
-}
+        }
 
 /* Mode Toggle */
 .mode-toggle {
-    display: flex;
-    align-items: center;
+            display: flex;
+            align-items: center;
     margin-right: 20px;
-}
+        }
 
 .mode-label {
     margin-right: 10px;
@@ -330,68 +330,68 @@
         <div class="mode-toggle">
             <span class="mode-label">Автономный режим</span>
             <div class="toggle" id="autonomousToggle"></div>
-        </div>
+            </div>
         
         <!-- Кнопки для переключения между чатом и терминалом -->
         <div>
             <button id="terminalBtn" class="btn btn-secondary"><i class="fas fa-terminal"></i> Терминал</button>
             <button id="thinkingBtn" class="btn btn-secondary"><i class="fas fa-brain"></i> Ход мысли</button>
+                </div>
+            </div>
         </div>
-    </div>
-</div>
 
-<div class="chat-container">
+        <div class="chat-container">
     <div class="chat-main">
         <div class="chat-header">
             <h2><span class="status-icon status-{{ agent_status }}"></span> Агент: NeuroRAT-Agent</h2>
             <div>Подключен к серверу. Готов к работе.</div>
         </div>
         
-        <div class="chat-messages" id="chatMessages">
+                <div class="chat-messages" id="chatMessages">
             <!-- Здесь будут сообщения чата -->
             <div class="chat-message message-agent">
                 <div class="message-content">Привет! Я - интеллектуальный агент NeuroRAT. Чем я могу помочь?</div>
                 <div class="message-time">{{ current_time }}</div>
-            </div>
-        </div>
+                    </div>
+                </div>
         
         <div class="terminal-container" id="terminal">
-            <div class="terminal-header">
+                    <div class="terminal-header">
                 <span class="terminal-title">Терминал</span>
                 <span class="terminal-close" id="closeTerminal">&times;</span>
-            </div>
+                        </div>
             <!-- Терминал будет инициализирован с помощью xterm.js -->
-        </div>
+                    </div>
         
-        <div class="chat-input">
+                <div class="chat-input">
             <form id="chatForm" class="chat-form">
                 <textarea id="messageInput" class="chat-textarea" placeholder="Введите сообщение..." rows="1"></textarea>
                 <button type="submit" class="btn send-btn"><i class="fas fa-paper-plane"></i> Отправить</button>
             </form>
-        </div>
-    </div>
+                    </div>
+                    </div>
     
     <!-- Панель процесса рассуждения -->
     <div class="thinking-panel" id="thinkingPanel" style="display: none;">
-        <div class="thinking-header">
+                <div class="thinking-header">
             <span>Процесс рассуждения</span>
             <span class="thinking-close" id="closeThinking">&times;</span>
-        </div>
-        <div class="thinking-content" id="thinkingContent">
+                </div>
+                <div class="thinking-content" id="thinkingContent">
             <!-- Здесь будут отображаться этапы рассуждения агента -->
-        </div>
+                </div>
         <div class="thinking-footer">
             <div class="toggle-container">
                 <span>Автоматически показывать рассуждения</span>
                 <div class="toggle" id="autoShowThinking"></div>
             </div>
+            </div>
         </div>
     </div>
-</div>
 {% endblock %}
-
+    
 {% block scripts %}
-<script>
+    <script>
     document.addEventListener('DOMContentLoaded', function() {
         const chatMessages = document.getElementById('chatMessages');
         const messageInput = document.getElementById('messageInput');
@@ -426,26 +426,26 @@
             // Отправляем сообщение на сервер
             sendMessageToAgent(message, autonomousMode);
         });
-        
+                
         // Функция для добавления сообщения в чат
         function addMessage(sender, content, error = false) {
             const messageDiv = document.createElement('div');
             messageDiv.className = error ? 'chat-message message-error' : `chat-message message-${sender}`;
-            
+                    
             const contentDiv = document.createElement('div');
             contentDiv.className = 'message-content';
             contentDiv.textContent = content;
-            
+                
             const timeDiv = document.createElement('div');
             timeDiv.className = 'message-time';
-            const now = new Date();
+                const now = new Date();
             timeDiv.textContent = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
-            
+                
             messageDiv.appendChild(contentDiv);
             if (!error) {
                 messageDiv.appendChild(timeDiv);
-            }
-            
+                }
+                
             chatMessages.appendChild(messageDiv);
             
             // Прокручиваем чат вниз
@@ -455,10 +455,10 @@
         // Функция для отправки сообщения агенту
         function sendMessageToAgent(message, autonomous) {
             fetch(`/api/agent/{{ agent_id }}/chat`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
                 body: JSON.stringify({
                     message: message,
                     autonomous_mode: autonomous
@@ -476,14 +476,14 @@
                     if (autoShowThinking.classList.contains('active')) {
                         // Имитация процесса рассуждения (в реальной системе данные будут приходить с сервера)
                         showThinkingProcess(message);
-                    }
+                }
                 }
             })
             .catch(error => {
                 addMessage(null, `Ошибка обработки запроса: ${error.message}`, true);
             });
         }
-        
+
         // Функция для показа процесса рассуждения
         function showThinkingProcess(query) {
             // Очищаем предыдущие рассуждения
@@ -522,10 +522,10 @@
         // Инициализация терминала
         function initTerminal() {
             if (terminal) return;
-            
+                    
             // Загружаем аддон FitAddon (для автоматического масштабирования терминала)
             Terminal.applyAddon(fit);
-            
+                    
             // Создаем новый терминал
             terminal = new Terminal({
                 cursorBlink: true,
@@ -559,10 +559,10 @@
                     }));
                 }
             });
-            
+                    
             // Выводим сообщение о подключении
             terminal.writeln('Подключено к терминальной сессии');
-        }
+                }
         
         // Подключение к WebSocket для терминала
         function connectTerminalWebSocket() {
@@ -573,14 +573,14 @@
             
             socket.onopen = function() {
                 console.log('WebSocket подключен');
-                
+            
                 // Отправляем начальные размеры терминала
                 socket.send(JSON.stringify({
                     type: 'resize',
                     cols: terminal.cols,
                     rows: terminal.rows
                 }));
-                
+            
                 // Отправляем данные с терминала на сервер
                 terminal.onData(function(data) {
                     socket.send(JSON.stringify({
@@ -658,5 +658,5 @@
             this.style.height = (this.scrollHeight) + 'px';
         });
     });
-</script>
+    </script>
 {% endblock %}

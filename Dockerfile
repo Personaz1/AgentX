@@ -28,6 +28,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Установка python-dotenv для работы с .env файлами
 RUN pip install --no-cache-dir python-dotenv
 
+# Создаем директорию static для FastAPI (исправление ошибки "Directory 'static' does not exist")
+RUN mkdir -p /app/static
+
 # По умолчанию запускаем API сервер
 CMD ["python", "server_api.py"]
 

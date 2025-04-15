@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}NeuroRAT C2 Server{% endblock %}</title>
+    
+    <!-- Общие стили -->
+    <style>
+        :root {
+            --primary: #0f0;
+            --primary-dark: #00a000;
+            --primary-glow: #00ff0080;
+            --secondary: #9900ff;
+            --secondary-dark: #7700cc;
+            --danger: #ff3030;
+            --dark: #1a1a1a;
+            --darker: #121212;
+            --card: #1e1e1e;
+            --text: #e0e0e0;
+            --text-secondary: #999;
+            --border: #333;
+            --shadow: 0 4px 8px rgba(0,0,0,0.3);
+            --glow: 0 0 10px var(--primary-glow);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Consolas', 'Courier New', monospace;
+            background-color: var(--darker);
+            color: var(--text);
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            width: 100%;
+            flex: 1;
+        }
+        
+        header {
+            background-color: var(--dark);
+            padding: 15px 0;
+            border-bottom: 1px solid var(--border);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            position: relative;
+        }
+        
+        header .container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+        }
+        
+        h1, h2, h3 {
+            color: var(--primary);
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+        
+        .logo {
+            font-size: 24px;
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .logo i {
+            font-size: 28px;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .nav-link {
+            color: var(--text);
+            text-decoration: none;
+            padding: 5px 10px;
+            transition: all 0.3s;
+            border-radius: 4px;
+            text-transform: uppercase;
+            font-size: 14px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
+        
+        .nav-link:hover {
+            color: var(--primary);
+            background-color: rgba(0, 255, 0, 0.1);
+        }
+        
+        .nav-link.active {
+            color: var(--primary);
+            background-color: rgba(0, 255, 0, 0.15);
+            box-shadow: 0 0 5px var(--primary-glow);
+        }
+        
+        .card {
+            background-color: var(--card);
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+        }
+        
+        .btn {
+            display: inline-block;
+            background-color: var(--primary-dark);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: center;
+        }
+        
+        .btn:hover {
+            background-color: var(--primary);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,255,0,0.3);
+        }
+        
+        .btn-secondary {
+            background-color: var(--secondary-dark);
+        }
+        
+        .btn-secondary:hover {
+            background-color: var(--secondary);
+            box-shadow: 0 4px 12px rgba(153,0,255,0.3);
+        }
+        
+        .btn-danger {
+            background-color: var(--danger);
+        }
+        
+        .btn-danger:hover {
+            background-color: #ff5050;
+            box-shadow: 0 4px 12px rgba(255,50,50,0.3);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        th {
+            background-color: rgba(0, 0, 0, 0.2);
+            color: var(--primary);
+            font-weight: 500;
+        }
+        
+        tr:hover {
+            background-color: rgba(0, 255, 0, 0.05);
+        }
+        
+        .status-active {
+            color: var(--primary);
+        }
+        
+        .status-inactive {
+            color: var(--danger);
+        }
+        
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+        
+        .back-link:hover {
+            color: var(--primary);
+        }
+        
+        footer {
+            background-color: var(--dark);
+            color: var(--text-secondary);
+            padding: 10px 0;
+            text-align: center;
+            font-size: 12px;
+            border-top: 1px solid var(--border);
+            margin-top: auto;
+        }
+        
+        /* Модальные окна */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.85);
+            z-index: 1000;
+            overflow: auto;
+        }
+        
+        .modal-content {
+            background-color: var(--card);
+            margin: 10% auto;
+            padding: 20px;
+            width: 80%;
+            max-width: 700px;
+            border-radius: 4px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            border: 1px solid var(--border);
+            position: relative;
+            animation: fadeIn 0.3s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .modal-close {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+        
+        .modal-close:hover {
+            color: var(--primary);
+        }
+        
+        /* Анимации и эффекты */
+        @keyframes neon-border {
+            0% { box-shadow: 0 0 5px var(--primary-glow); }
+            50% { box-shadow: 0 0 15px var(--primary-glow); }
+            100% { box-shadow: 0 0 5px var(--primary-glow); }
+        }
+        
+        .neon-box {
+            animation: neon-border 2s infinite;
+            border: 1px solid var(--primary-dark);
+        }
+        
+        /* Satana button */
+        .satan-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #990000;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 4px;
+            font-weight: bold;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            transition: all 0.3s ease;
+            z-index: 999;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .satan-btn:hover {
+            background-color: #cc0000;
+            transform: scale(1.05);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.5);
+        }
+        
+        /* Адаптивность */
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+                flex-direction: column;
+                position: absolute;
+                top: 100%;
+                left: 0;
+                right: 0;
+                background-color: var(--dark);
+                padding: 10px;
+                z-index: 100;
+            }
+            
+            .nav-toggle {
+                display: block;
+            }
+        }
+        
+        /* Дополнительные стили */
+        {% block extra_styles %}{% endblock %}
+    </style>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Дополнительные стили -->
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <header>
+        <div class="container">
+            <a href="/" class="logo">
+                <i class="fas fa-bug"></i>
+                NeuroRAT C2 Server
+            </a>
+            
+            <nav class="nav-links">
+                <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">
+                    <i class="fas fa-tachometer-alt"></i> Dashboard
+                </a>
+                <a href="/builder" class="nav-link {% if '/builder' in request.url.path %}active{% endif %}">
+                    <i class="fas fa-wrench"></i> Builder
+                </a>
+                <a href="/cyberterror" class="nav-link {% if '/cyberterror' in request.url.path %}active{% endif %}">
+                    <i class="fas fa-satellite-dish"></i> Command Center
+                </a>
+                {% if agent_id %}
+                <a href="/agent/{{agent_id}}/chat" class="nav-link {% if '/chat' in request.url.path %}active{% endif %}">
+                    <i class="fas fa-terminal"></i> Agent Chat
+                </a>
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+    
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+    
+    <footer>
+        <div class="container">
+            <p>NeuroRAT C2 Framework © 2025 | v1.0.0 | <i class="fas fa-ghost"></i> Ghost in the Shell</p>
+        </div>
+    </footer>
+    
+    <!-- Общие скрипты -->
+    <script>
+        // Общий функционал для всех страниц
+        document.addEventListener('DOMContentLoaded', function() {
+            // Инициализация UI
+            console.log('NeuroRAT UI initialized');
+        });
+    </script>
+    
+    <!-- Дополнительные скрипты -->
+    {% block scripts %}{% endblock %}
+</body>
+</html>

