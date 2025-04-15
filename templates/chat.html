@@ -1,721 +1,384 @@
 {% extends "shared/base_layout.html" %}
 
-{% block title %}NeuroRAT - Чат с агентом{% endblock %}
+{% block title %}NeuroRAT - Агент{% endblock %}
 
 {% block extra_styles %}
-        .chat-container {
-            display: flex;
-    height: calc(100vh - 160px);
-    margin-top: 20px;
-        }
+    .chat-container {
+        display: flex;
+        height: calc(100vh - 80px);
+        margin-top: 10px;
+    }
 
-.chat-main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-    border-radius: 4px;
-            overflow: hidden;
-    background-color: var(--card);
-    box-shadow: var(--shadow);
-    margin-right: 20px;
-        }
-        
-        .chat-header {
-    background-color: rgba(0, 0, 0, 0.2);
-            padding: 15px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-    border-bottom: 1px solid var(--border);
-        }
-        
-        .chat-header h2 {
-            margin: 0;
-            display: flex;
-            align-items: center;
-        }
-        
-.status-icon {
-    display: inline-block;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-    margin-right: 10px;
-}
+    .chat-main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        border-radius: 4px;
+        overflow: hidden;
+        background-color: #111;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+    }
+    
+    .chat-header {
+        background-color: #181818;
+        padding: 10px 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #222;
+    }
+    
+    .chat-header h2 {
+        margin: 0;
+        display: flex;
+        align-items: center;
+    }
+    
+    .status-icon {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 10px;
+    }
 
-.status-active {
-    background-color: var(--primary);
-    box-shadow: 0 0 5px var(--primary-glow);
-        }
+    .status-active {
+        background-color: #0f0;
+        box-shadow: 0 0 5px rgba(0, 255, 0, 0.7);
+    }
 
-.status-inactive {
-    background-color: var(--danger);
-        }
-        
-        .chat-messages {
-            flex: 1;
-    padding: 20px;
-            overflow-y: auto;
-    background-color: rgba(0, 0, 0, 0.1);
-        }
-        
-.chat-message {
-            margin-bottom: 15px;
-    max-width: 80%;
-}
+    .status-inactive {
+        background-color: #f00;
+    }
+    
+    .chat-messages {
+        flex: 1;
+        padding: 15px;
+        overflow-y: auto;
+        background-color: #0a0a0a;
+        font-family: 'Consolas', 'Monaco', monospace;
+    }
+    
+    .chat-message {
+        margin-bottom: 10px;
+        max-width: 90%;
+    }
 
-.message-user {
-    margin-left: auto;
-    background: rgba(153, 0, 255, 0.2);
-    border-radius: 12px 12px 0 12px;
-            padding: 12px 15px;
-    color: var(--text);
-            position: relative;
-}
+    .message-user {
+        margin-left: auto;
+        background: #1e1e1e;
+        border-left: 3px solid #0f0;
+        border-radius: 3px;
+        padding: 8px 12px;
+        color: #eee;
+    }
 
-.message-agent {
-    margin-right: auto;
-    background: rgba(0, 255, 0, 0.1);
-    border-radius: 12px 12px 12px 0;
-    padding: 12px 15px;
-    color: var(--text);
-    position: relative;
-        }
-        
-.message-error {
-    margin: 10px auto;
-    background: rgba(255, 0, 0, 0.1);
-    border-radius: 12px;
-    padding: 10px 15px;
-    color: var(--danger);
-    width: 90%;
-    text-align: center;
-        }
-        
-        .message-time {
-    font-size: 12px;
-    color: var(--text-secondary);
-            text-align: right;
-    margin-top: 5px;
-        }
-        
-        .chat-input {
-            padding: 15px;
-    border-top: 1px solid var(--border);
-    background-color: rgba(0, 0, 0, 0.2);
-        }
-        
-.chat-form {
-            display: flex;
-        }
-        
-.chat-textarea {
-            flex: 1;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 10px 15px;
-            resize: none;
-    background-color: rgba(0, 0, 0, 0.3);
-    color: var(--text);
-    font-family: inherit;
-    margin-right: 10px;
-    min-height: 44px;
-        }
-        
-.chat-textarea:focus {
-            outline: none;
-    border-color: var(--primary);
-    box-shadow: 0 0 0 2px var(--primary-glow);
-}
+    .message-agent {
+        margin-right: auto;
+        background: #0f0f0f;
+        border-left: 3px solid #0f0;
+        border-radius: 3px;
+        padding: 8px 12px;
+        color: #0f0;
+    }
+    
+    .message-error {
+        margin: 10px auto;
+        background: rgba(255, 0, 0, 0.1);
+        border-left: 3px solid #f00;
+        border-radius: 3px;
+        padding: 8px 12px;
+        color: #f00;
+        width: 90%;
+    }
+    
+    .message-time {
+        font-size: 10px;
+        color: #555;
+        text-align: right;
+        margin-top: 3px;
+    }
+    
+    .chat-input {
+        padding: 10px;
+        border-top: 1px solid #222;
+        background-color: #181818;
+    }
+    
+    .chat-form {
+        display: flex;
+    }
+    
+    .chat-textarea {
+        flex: 1;
+        border: 1px solid #333;
+        border-radius: 2px;
+        padding: 8px 10px;
+        resize: none;
+        background-color: #0f0f0f;
+        color: #0f0;
+        font-family: 'Consolas', 'Monaco', monospace;
+        margin-right: 10px;
+        min-height: 35px;
+    }
+    
+    .chat-textarea:focus {
+        outline: none;
+        border-color: #0f0;
+        box-shadow: 0 0 3px rgba(0, 255, 0, 0.5);
+    }
 
-.send-btn {
-            cursor: pointer;
-        }
-        
-.send-btn:hover {
-    transform: translateY(-2px);
-}
+    .send-btn {
+        cursor: pointer;
+        background-color: #111;
+        color: #0f0;
+        border: 1px solid #0f0;
+        border-radius: 2px;
+        padding: 0 15px;
+        font-family: 'Consolas', 'Monaco', monospace;
+    }
+    
+    .send-btn:hover {
+        background-color: #0f0;
+        color: #000;
+    }
 
-.agent-info {
-    background-color: var(--dark);
-    padding: 15px;
-    border-radius: 4px;
-    margin-bottom: 15px;
-    font-size: 14px;
-        }
-        
-.agent-info p {
-    margin: 5px 0;
-            display: flex;
-            align-items: center;
-}
+    .control-bar {
+        display: flex;
+        align-items: center;
+        padding: 8px 10px;
+        background-color: #0a0a0a;
+        border-bottom: 1px solid #222;
+    }
 
-.agent-info i {
-    width: 20px;
-    margin-right: 10px;
-    color: var(--primary);
-        }
-        
-.thinking-panel {
-    width: 400px;
-    background-color: var(--card);
-    border-radius: 4px;
-    overflow: hidden;
-    box-shadow: var(--shadow);
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-        }
-        
-.thinking-header {
-    background-color: var(--secondary-dark);
-    color: white;
-    padding: 15px;
-            font-weight: bold;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-        }
-        
-.thinking-close {
-    cursor: pointer;
-    font-size: 20px;
-}
+    .control-option {
+        display: flex;
+        align-items: center;
+        margin-right: 20px;
+        color: #666;
+        font-size: 12px;
+    }
 
-.thinking-content {
-    flex: 1;
-    padding: 15px;
-    overflow-y: auto;
-    background-color: rgba(0, 0, 0, 0.2);
-        }
-        
-.thinking-section {
-    margin-bottom: 20px;
-}
+    .toggle {
+        position: relative;
+        display: inline-block;
+        width: 36px;
+        height: 20px;
+        background-color: #333;
+        border-radius: 10px;
+        margin: 0 8px;
+    }
+    
+    .toggle:after {
+        content: '';
+        position: absolute;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background-color: #666;
+        top: 2px;
+        left: 2px;
+        transition: all 0.2s;
+    }
 
-.thinking-section h3 {
-    color: var(--primary);
-    margin-bottom: 10px;
-    border-bottom: 1px solid rgba(0, 255, 0, 0.2);
-    padding-bottom: 5px;
-        }
-        
-.observation h3 {
-    color: #00aaff;
-}
+    .toggle.active {
+        background-color: #004400;
+    }
+    
+    .toggle.active:after {
+        left: 18px;
+        background-color: #0f0;
+    }
 
-.analysis h3 {
-    color: #ffaa00;
-}
+    .auto-command {
+        display: inline-block;
+        background-color: #181818;
+        color: #0f0;
+        border: 1px solid #333;
+        border-radius: 2px;
+        padding: 4px 8px;
+        margin: 0 4px;
+        cursor: pointer;
+        font-size: 12px;
+        font-family: 'Consolas', 'Monaco', monospace;
+    }
 
-.planning h3 {
-    color: #aa00ff;
-        }
-        
-.execution h3 {
-    color: #ff5500;
-}
+    .auto-command:hover {
+        background-color: #222;
+        border-color: #0f0;
+    }
 
-.conclusion h3 {
-    color: #00ffaa;
-        }
-        
-.thinking-footer {
-    padding: 10px 15px;
-    background-color: rgba(0, 0, 0, 0.3);
-    display: flex;
-    align-items: center;
-    border-top: 1px solid var(--border);
-        }
-        
-.toggle-container {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-left: 15px;
-        }
-        
-.toggle {
-    position: relative;
-    display: inline-block;
-    width: 40px;
-    height: 24px;
-    background-color: #ccc;
-    border-radius: 12px;
-    margin: 0 10px;
-        }
-        
-.toggle:after {
-    content: '';
-            position: absolute;
-    width: 18px;
-    height: 18px;
-            border-radius: 50%;
-    background-color: white;
-    top: 3px;
-    left: 3px;
-    transition: all 0.3s;
-}
-
-.toggle.active {
-    background-color: var(--primary);
-        }
-        
-.toggle.active:after {
-    left: 19px;
-}
-
-/* Terminal */
-        .terminal-container {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 80%;
-    max-width: 800px;
-    height: 400px;
-    background-color: #000;
-    border-radius: 4px;
-    padding: 10px;
-    font-family: 'Courier New', monospace;
-    color: #00ff00;
-    overflow: auto;
-            display: none;
-    z-index: 1000;
-    box-shadow: 0 0 15px rgba(0, 0, 0, 0.8);
-    border: 1px solid #333;
-        }
-
-        .terminal-header {
-    background-color: #333;
-    padding: 5px 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-    margin: -10px -10px 10px -10px;
-        }
-
-.terminal-title {
-    color: #00ff00;
-    font-weight: bold;
-        }
-
-.terminal-close {
-    cursor: pointer;
-    color: #ff0000;
-        }
-
-/* Mode Toggle */
-.mode-toggle {
-            display: flex;
-            align-items: center;
-    margin-right: 20px;
-        }
-
-.mode-label {
-    margin-right: 10px;
-    color: var(--text-secondary);
-}
+    .quick-commands {
+        padding: 5px 10px;
+    }
 {% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/xterm/3.18.0/xterm.min.css" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xterm/3.18.0/xterm.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xterm/3.18.0/addons/fit/fit.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
 {% endblock %}
 
 {% block content %}
-<div class="agent-info card">
-    <h2><span class="status-icon status-{{ agent_status }}"></span> Агент: NeuroRAT-Agent</h2>
-    <div style="display: flex; justify-content: space-between; margin-top: 10px;">
-        <p><i class="fas fa-desktop"></i> {{ agent_os }}</p>
-        <p><i class="fas fa-server"></i> {{ agent_hostname }}</p>
-        <p><i class="fas fa-user"></i> {{ agent_username }}</p>
-        <p><i class="fas fa-network-wired"></i> {{ agent_ip }}</p>
-        
-        <!-- Переключатель автономного режима -->
-        <div class="mode-toggle">
-            <span class="mode-label">Автономный режим</span>
-            <div class="toggle" id="autonomousToggle"></div>
-            </div>
-        
-        <!-- Кнопки для переключения между чатом и терминалом -->
-        <div>
-            <button id="terminalBtn" class="btn btn-secondary"><i class="fas fa-terminal"></i> Терминал</button>
-            <button id="thinkingBtn" class="btn btn-secondary"><i class="fas fa-brain"></i> Ход мысли</button>
-                </div>
-            </div>
-        </div>
-
-        <div class="chat-container">
+<div class="chat-container">
     <div class="chat-main">
         <div class="chat-header">
-            <h2><span class="status-icon status-{{ agent_status }}"></span> Агент: NeuroRAT-Agent</h2>
-            <div>Подключен к серверу. Готов к работе.</div>
+            <h2><span class="status-icon status-{{ agent_status }}"></span> NeuroRAT-Agent [{{ agent_id }}]</h2>
+            <div>{{ agent_os }} | {{ agent_ip }}</div>
         </div>
         
-                <div class="chat-messages" id="chatMessages">
+        <div class="control-bar">
+            <div class="control-option">
+                <span>Автономный режим</span>
+                <div class="toggle" id="autonomousToggle"></div>
+            </div>
+            
+            <div class="quick-commands">
+                <span class="auto-command" data-cmd="!collect_system_info">system_info</span>
+                <span class="auto-command" data-cmd="!scan">scan</span>
+                <span class="auto-command" data-cmd="!collect_browser_data">browser_data</span>
+                <span class="auto-command" data-cmd="!take_screenshot">screenshot</span>
+            </div>
+        </div>
+        
+        <div class="chat-messages" id="chatMessages">
             <!-- Здесь будут сообщения чата -->
             <div class="chat-message message-agent">
-                <div class="message-content">Привет! Я - интеллектуальный агент NeuroRAT. Чем я могу помочь?</div>
+                <div class="message-content">Система готова к эксплуатации. Ожидаю команды.</div>
                 <div class="message-time">{{ current_time }}</div>
-                    </div>
-                </div>
-        
-        <div class="terminal-container" id="terminal">
-                    <div class="terminal-header">
-                <span class="terminal-title">Терминал</span>
-                <span class="terminal-close" id="closeTerminal">&times;</span>
-                        </div>
-            <!-- Терминал будет инициализирован с помощью xterm.js -->
-                    </div>
-        
-                <div class="chat-input">
-            <form id="chatForm" class="chat-form">
-                <textarea id="messageInput" class="chat-textarea" placeholder="Введите сообщение..." rows="1"></textarea>
-                <button type="submit" class="btn send-btn"><i class="fas fa-paper-plane"></i> Отправить</button>
-            </form>
-                    </div>
-                    </div>
-    
-    <!-- Панель процесса рассуждения -->
-    <div class="thinking-panel" id="thinkingPanel" style="display: none;">
-                <div class="thinking-header">
-            <span>Процесс рассуждения</span>
-            <span class="thinking-close" id="closeThinking">&times;</span>
-                </div>
-                <div class="thinking-content" id="thinkingContent">
-            <!-- Здесь будут отображаться этапы рассуждения агента -->
-                </div>
-        <div class="thinking-footer">
-            <div class="toggle-container">
-                <span>Автоматически показывать рассуждения</span>
-                <div class="toggle" id="autoShowThinking"></div>
-            </div>
             </div>
         </div>
+        
+        <div class="chat-input">
+            <form id="chatForm" class="chat-form">
+                <textarea id="messageInput" class="chat-textarea" placeholder="Введите команду..." rows="1"></textarea>
+                <button type="submit" class="send-btn">▶</button>
+            </form>
+        </div>
     </div>
+</div>
 {% endblock %}
-    
-{% block scripts %}
-    <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const chatMessages = document.getElementById('chatMessages');
-        const messageInput = document.getElementById('messageInput');
-        const chatForm = document.getElementById('chatForm');
-        const terminalContainer = document.getElementById('terminal');
-        const terminalBtn = document.getElementById('terminalBtn');
-        const closeTerminal = document.getElementById('closeTerminal');
-        const thinkingPanel = document.getElementById('thinkingPanel');
-        const thinkingBtn = document.getElementById('thinkingBtn');
-        const closeThinking = document.getElementById('closeThinking');
-        const thinkingContent = document.getElementById('thinkingContent');
-        const autoShowThinking = document.getElementById('autoShowThinking');
-        const autonomousToggle = document.getElementById('autonomousToggle');
-        
-        let autonomousMode = false;  // По умолчанию автономный режим выключен
-        let terminal = null;
-        let socket = null;
-        
-        // Обработчик формы отправки сообщения
-        chatForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const message = messageInput.value.trim();
-            if (!message) return;
-            
-            // Добавляем сообщение пользователя в чат
-            addMessage('user', message);
-            
-            // Очищаем поле ввода
-            messageInput.value = '';
-            
-            // Отправляем сообщение на сервер
-            sendMessageToAgent(message, autonomousMode);
-        });
-                
-        // Функция для добавления сообщения в чат
-        function addMessage(sender, content, error = false) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = error ? 'chat-message message-error' : `chat-message message-${sender}`;
-                    
-            const contentDiv = document.createElement('div');
-            contentDiv.className = 'message-content';
-            contentDiv.textContent = content;
-                
-            const timeDiv = document.createElement('div');
-            timeDiv.className = 'message-time';
-                const now = new Date();
-            timeDiv.textContent = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
-                
-            messageDiv.appendChild(contentDiv);
-            if (!error) {
-                messageDiv.appendChild(timeDiv);
-                }
-                
-            chatMessages.appendChild(messageDiv);
-            
-            // Прокручиваем чат вниз
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-        
-        // Функция для отправки сообщения агенту
-        function sendMessageToAgent(message, autonomous) {
-            fetch(`/api/agent/{{ agent_id }}/chat`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                body: JSON.stringify({
-                    message: message,
-                    autonomous_mode: autonomous
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    addMessage(null, `Ошибка: ${data.error}`, true);
-            } else {
-                    // Добавляем ответ агента в чат
-                    addMessage('agent', data.response);
-                    
-                    // Если включен автоматический показ рассуждений
-                    if (autoShowThinking.classList.contains('active')) {
-                        // Имитация процесса рассуждения (в реальной системе данные будут приходить с сервера)
-                        showThinkingProcess(message);
-                }
-                }
-            })
-            .catch(error => {
-                addMessage(null, `Ошибка обработки запроса: ${error.message}`, true);
-            });
-        }
 
-        // Функция для показа процесса рассуждения
-        function showThinkingProcess(query) {
-            // Очищаем предыдущие рассуждения
-            thinkingContent.innerHTML = '';
-            
-            // Показываем панель рассуждений
-            thinkingPanel.style.display = 'flex';
-            
-            // Получаем рассуждения с сервера
-            fetch(`/api/agent/{{ agent_id }}/reasoning`, {
-                method: 'POST'
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error || data.status === 'error') {
-                    // Показываем ошибку
-                    const errorDiv = document.createElement('div');
-                    errorDiv.className = 'thinking-section observation';
-                    errorDiv.innerHTML = `<h3>Ошибка</h3><p>${data.message || data.error || 'Не удалось получить данные рассуждения'}</p>`;
-                    thinkingContent.appendChild(errorDiv);
-                } else {
-                    // Показываем полученные рассуждения
-                    if (data.reasoning_logs && data.reasoning_logs.length > 0) {
-                        const logsDiv = document.createElement('div');
-                        logsDiv.className = 'thinking-section observation';
-                        logsDiv.innerHTML = '<h3>Логи рассуждений</h3>';
-                        
-                        const logsList = document.createElement('ul');
-                        logsList.style.listStyleType = 'none';
-                        logsList.style.padding = '0';
-                        
-                        data.reasoning_logs.forEach(log => {
-                            const logItem = document.createElement('li');
-                            logItem.innerHTML = `<span style="color:#aaa">[${log.timestamp}]</span> <span style="color:${getLogTypeColor(log.type)}">[${log.type}]</span> ${log.message}`;
-                            logsList.appendChild(logItem);
-                        });
-                        
-                        logsDiv.appendChild(logsList);
-                        thinkingContent.appendChild(logsDiv);
-                    }
-                    
-                    // Показываем рекомендации
-                    if (data.recommendations && data.recommendations.length > 0) {
-                        const recommendationsDiv = document.createElement('div');
-                        recommendationsDiv.className = 'thinking-section planning';
-                        recommendationsDiv.innerHTML = '<h3>Рекомендуемые действия</h3>';
-                        
-                        const recommendationsList = document.createElement('ul');
-                        data.recommendations.forEach(recommendation => {
-                            const recommendationItem = document.createElement('li');
-                            recommendationItem.textContent = recommendation;
-                            recommendationsList.appendChild(recommendationItem);
-                        });
-                        
-                        recommendationsDiv.appendChild(recommendationsList);
-                        thinkingContent.appendChild(recommendationsDiv);
-                    }
-                    
-                    // Если нет данных
-                    if ((!data.reasoning_logs || data.reasoning_logs.length === 0) && 
-                        (!data.recommendations || data.recommendations.length === 0)) {
-                        const noDataDiv = document.createElement('div');
-                        noDataDiv.className = 'thinking-section';
-                        noDataDiv.innerHTML = '<h3>Нет данных</h3><p>Еще нет данных рассуждений для анализа</p>';
-                        thinkingContent.appendChild(noDataDiv);
-                    }
-                }
-            })
-            .catch(error => {
-                const errorDiv = document.createElement('div');
-                errorDiv.className = 'thinking-section observation';
-                errorDiv.innerHTML = `<h3>Ошибка</h3><p>Не удалось загрузить данные рассуждения: ${error.message}</p>`;
-                thinkingContent.appendChild(errorDiv);
-            });
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const chatMessages = document.getElementById('chatMessages');
+    const messageInput = document.getElementById('messageInput');
+    const chatForm = document.getElementById('chatForm');
+    const autonomousToggle = document.getElementById('autonomousToggle');
+    const autoCommands = document.querySelectorAll('.auto-command');
+    
+    let autonomousMode = false;  // По умолчанию автономный режим выключен
+    
+    // Автофокус на поле ввода при загрузке
+    messageInput.focus();
+
+    // Отправка по Enter (без Shift)
+    messageInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            chatForm.requestSubmit();
         }
-        
-        // Вспомогательная функция для цвета логов
-        function getLogTypeColor(type) {
-            const colors = {
-                'init': '#aaaaff',
-                'info': '#66ccff',
-                'thought': '#ff66ff',
-                'action': '#ffaa00',
-                'result': '#00cc66',
-                'error': '#ff6666'
-            };
-            return colors[type] || '#ffffff';
+        // Альтернативно: Ctrl+Enter/Command+Enter — всегда отправлять
+        if ((e.key === 'Enter') && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            chatForm.requestSubmit();
         }
-        
-        // Инициализация терминала
-        function initTerminal() {
-            if (terminal) return;
-                    
-            // Загружаем аддон FitAddon (для автоматического масштабирования терминала)
-            Terminal.applyAddon(fit);
-                    
-            // Создаем новый терминал
-            terminal = new Terminal({
-                cursorBlink: true,
-                theme: {
-                    background: '#000000',
-                    foreground: '#00ff00'
-                }
-            });
-            
-            // Открываем терминал в контейнере
-            terminal.open(terminalContainer.querySelector('.terminal-header').nextSibling);
-            
-            // Используем FitAddon для правильного масштабирования
-            const fitAddon = new Terminal.FitAddon();
-            terminal.loadAddon(fitAddon);
-            fitAddon.fit();
-            
-            // Подключаемся к WebSocket для терминала
-            connectTerminalWebSocket();
-            
-            // Обработчик изменения размера окна
-            window.addEventListener('resize', function() {
-                fitAddon.fit();
-                
-                // Отправляем новый размер терминала на сервер
-                if (socket && socket.readyState === WebSocket.OPEN) {
-                    socket.send(JSON.stringify({
-                        type: 'resize',
-                        cols: terminal.cols,
-                        rows: terminal.rows
-                    }));
-                }
-            });
-                    
-            // Выводим сообщение о подключении
-            terminal.writeln('Подключено к терминальной сессии');
-                }
-        
-        // Подключение к WebSocket для терминала
-        function connectTerminalWebSocket() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/api/agent/terminal/ws`;
-            
-            socket = new WebSocket(wsUrl);
-            
-            socket.onopen = function() {
-                console.log('WebSocket подключен');
-            
-                // Отправляем начальные размеры терминала
-                socket.send(JSON.stringify({
-                    type: 'resize',
-                    cols: terminal.cols,
-                    rows: terminal.rows
-                }));
-            
-                // Отправляем данные с терминала на сервер
-                terminal.onData(function(data) {
-                    socket.send(JSON.stringify({
-                        type: 'input',
-                        data: data
-                    }));
-                });
-            };
-            
-            socket.onmessage = function(event) {
-                const data = JSON.parse(event.data);
-                
-                if (data.type === 'output') {
-                    terminal.write(data.data);
-                }
-            };
-            
-            socket.onclose = function() {
-                console.log('WebSocket закрыт');
-                terminal.writeln('\r\nТерминальная сессия закрыта');
-            };
-            
-            socket.onerror = function(error) {
-                console.error('Ошибка WebSocket:', error);
-                terminal.writeln('\r\nОшибка подключения к терминалу');
-            };
-        }
-        
-        // Обработчики кнопок
-        terminalBtn.addEventListener('click', function() {
-            if (terminalContainer.style.display === 'block') {
-                terminalContainer.style.display = 'none';
-            } else {
-                terminalContainer.style.display = 'block';
-                initTerminal();
-            }
-        });
-        
-        closeTerminal.addEventListener('click', function() {
-            terminalContainer.style.display = 'none';
-        });
-        
-        thinkingBtn.addEventListener('click', function() {
-            thinkingPanel.style.display = thinkingPanel.style.display === 'none' ? 'flex' : 'none';
-        });
-        
-        closeThinking.addEventListener('click', function() {
-            thinkingPanel.style.display = 'none';
-        });
-        
-        // Переключатель автоматического показа рассуждений
-        autoShowThinking.addEventListener('click', function() {
-            this.classList.toggle('active');
-        });
-        
-        // Переключатель автономного режима
-        autonomousToggle.addEventListener('click', function() {
-            this.classList.toggle('active');
-            autonomousMode = this.classList.contains('active');
-            
-            // Добавляем информационное сообщение в чат
-            const statusMsg = autonomousMode ? 
-                'Автономный режим активирован. Агент будет действовать самостоятельно.' : 
-                'Автономный режим деактивирован.';
-            
-            addMessage(null, statusMsg, false);
-        });
-        
-        // Авто-ресайз поля ввода
-        messageInput.addEventListener('input', function() {
-            this.style.height = 'auto';
-            this.style.height = (this.scrollHeight) + 'px';
+    });
+
+    // Обработчик формы отправки сообщения
+    chatForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const message = messageInput.value.trim();
+        if (!message) return;
+        // Добавляем сообщение пользователя в чат
+        addMessage('user', message);
+        // Очищаем поле ввода и возвращаем фокус
+        messageInput.value = '';
+        messageInput.style.height = 'auto';
+        messageInput.focus();
+        // Добавляем placeholder "Загрузка..." для UX
+        addMessage('agent', '...', false, true);
+        // Отправляем сообщение на сервер
+        sendMessageToAgent(message, autonomousMode);
+    });
+    
+    // Обработчики быстрых команд
+    autoCommands.forEach(cmd => {
+        cmd.addEventListener('click', function() {
+            const command = this.getAttribute('data-cmd');
+            messageInput.value = command;
+            messageInput.focus();
         });
     });
-    </script>
+    
+    // Функция для добавления сообщения в чат
+    function addMessage(sender, content, error = false, isLoading = false) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = error ? 'chat-message message-error' : `chat-message message-${sender}`;
+        if (isLoading) messageDiv.classList.add('loading');
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+        contentDiv.textContent = content;
+        const timeDiv = document.createElement('div');
+        timeDiv.className = 'message-time';
+        const now = new Date();
+        timeDiv.textContent = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+        messageDiv.appendChild(contentDiv);
+        if (!error) {
+            messageDiv.appendChild(timeDiv);
+        }
+        chatMessages.appendChild(messageDiv);
+        // Плавный скролл вниз
+        chatMessages.scrollTo({ top: chatMessages.scrollHeight, behavior: 'smooth' });
+        return messageDiv;
+    }
+    
+    // Функция для отправки сообщения агенту
+    function sendMessageToAgent(message, autonomous) {
+        fetch(`/api/agent/{{ agent_id }}/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                message: message,
+                autonomous_mode: autonomous
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Удаляем placeholder "..." (последний loading)
+            const loadingMsg = chatMessages.querySelector('.chat-message.loading');
+            if (loadingMsg) loadingMsg.remove();
+            if (data.error) {
+                addMessage(null, `Ошибка: ${data.error}`, true);
+            } else {
+                // Добавляем ответ агента в чат
+                addMessage('agent', data.response);
+            }
+        })
+        .catch(error => {
+            const loadingMsg = chatMessages.querySelector('.chat-message.loading');
+            if (loadingMsg) loadingMsg.remove();
+            addMessage(null, `Ошибка обработки запроса: ${error.message}`, true);
+        });
+    }
+    
+    // Переключатель автономного режима
+    autonomousToggle.addEventListener('click', function() {
+        this.classList.toggle('active');
+        autonomousMode = this.classList.contains('active');
+        // Добавляем информационное сообщение в чат
+        const statusMsg = autonomousMode ? 
+            '[+] Автономный режим активирован' : 
+            '[-] Автономный режим деактивирован';
+        addMessage('agent', statusMsg, false);
+    });
+    
+    // Авто-ресайз поля ввода
+    messageInput.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
+    });
+});
+</script>
 {% endblock %}
