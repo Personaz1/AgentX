@@ -22,6 +22,7 @@ if [ ! -f "$TEMP_DIR/install_server.sh" ]; then
     echo -e "${RED}Не найден файл install_server.sh! Создаем его...${NC}"
     # Создаем скрипт установки сервера
     cat > "$TEMP_DIR/install_server.sh" << 'EOF'
+
 #!/bin/bash
 
 # Цвета для вывода

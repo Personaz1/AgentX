@@ -25,6 +25,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from agent_state import AgentState, OPERATIONAL_MODE_AUTO, OPERATIONAL_MODE_MANUAL, OPERATIONAL_MODE_HYBRID
 from agent_memory import AgentMemory
 from agent_thinker import AgentThinker
+from agent_modules.environment_manager import EnvironmentManager
 
 
 class TestAgentState(unittest.TestCase):
@@ -627,6 +628,44 @@ class TestAgentThinker(unittest.TestCase):
         
         # Проверяем, что для сбора наблюдений и мыслей вызваны методы памяти
         self.memory.search_long_term.assert_called()
+
+
+class TestEnvironmentManager(unittest.TestCase):
+    def setUp(self):
+        self.em = EnvironmentManager(log_path="test_environment_manager.log")
+
+    def test_collect_system_info(self):
+        info = self.em.collect_system_info()
+        self.assertIn("os", info)
+        self.assertIn("hostname", info)
+        self.assertTrue(info["os"])
+        self.assertTrue(info["hostname"])
+
+    def test_collect_processes(self):
+        processes = self.em.collect_processes(max_lines=10)
+        self.assertIsInstance(processes, list)
+        self.assertGreater(len(processes), 0)
+
+    def test_collect_network_info(self):
+        net = self.em.collect_network_info()
+        self.assertIn("ifconfig", net)
+        self.assertTrue(net["ifconfig"])
+
+    def test_detect_edr_av(self):
+        suspicious = self.em.detect_edr_av()
+        self.assertIsInstance(suspicious, list)
+        # Не проверяем наличие EDR, только что функция работает
+
+    def test_summary(self):
+        self.em.collect_system_info()
+        self.em.collect_processes()
+        self.em.collect_network_info()
+        self.em.detect_edr_av()
+        summary = self.em.summary()
+        self.assertIn("system", summary)
+        self.assertIn("processes", summary)
+        self.assertIn("network", summary)
+        self.assertIn("edr_av", summary)
 
 
 if __name__ == "__main__":

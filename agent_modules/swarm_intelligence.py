@@ -31,6 +31,8 @@ import subprocess
 from typing import Dict, List, Set, Any, Optional, Union, Tuple
 from datetime import datetime
 from pathlib import Path
+from nacl.public import PrivateKey, PublicKey, Box
+import nacl.utils
 
 # Настройка логирования
 logging.basicConfig(
@@ -1328,3 +1330,19 @@ if __name__ == "__main__":
         # Останавливаем узел при прерывании
         node.stop()
 """ 
+
+class SecureSwarmComm:
+    def __init__(self):
+        self.private_key = PrivateKey.generate()
+        self.public_key = self.private_key.public_key
+    def encrypt(self, peer_pubkey_bytes, message: bytes) -> bytes:
+        peer_pubkey = PublicKey(peer_pubkey_bytes)
+        box = Box(self.private_key, peer_pubkey)
+        nonce = nacl.utils.random(Box.NONCE_SIZE)
+        return nonce + box.encrypt(message, nonce).ciphertext
+    def decrypt(self, peer_pubkey_bytes, data: bytes) -> bytes:
+        peer_pubkey = PublicKey(peer_pubkey_bytes)
+        box = Box(self.private_key, peer_pubkey)
+        nonce = data[:Box.NONCE_SIZE]
+        ciphertext = data[Box.NONCE_SIZE:]
+        return box.decrypt(ciphertext, nonce) 

