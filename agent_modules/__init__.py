@@ -1,11 +1,14 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 """
-NeuroRAT Agent Modules Package
-------------------------------
-This package contains extension modules for the NeuroRAT agent.
+NeuroRAT Agent Modules
+
+Коллекция модулей для удаленного управления и мониторинга агентов.
 """
 
-__version__ = "1.0.0"
-__author__ = "Mr. Thomas Anderson"
+__version__ = '0.1.0'
+__author__ = 'NeuroRAT Team'
 
 # Import modules for easier access
 try:
@@ -16,6 +19,7 @@ try:
     from . import screen_capture
     from . import swarm_intelligence
     from . import module_loader
+    from . import file_manager
 except ImportError as e:
     pass
 
@@ -26,5 +30,6 @@ __all__ = [
     'system_stealer', 
     'screen_capture', 
     'swarm_intelligence',
-    'module_loader'
+    'module_loader',
+    'file_manager'
 ] 

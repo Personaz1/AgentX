@@ -49,3 +49,16 @@ fi
 
 echo -e "${BLUE}====== Завершение работы ======${NC}"
 exit 0 
+
+echo "=== Запуск NeuroRAT C2 Server ==="
+echo "Остановка существующих процессов..."
+pkill -f "python3 server_api.py" || true
+
+echo "Проверка зависимостей..."
+pip3 install fastapi uvicorn psutil || echo "Ошибка установки зависимостей"
+
+echo "Запуск сервера..."
+python3 server_api.py &
+
+echo "Сервер запущен! Откройте в браузере: http://localhost:8080"
+echo "Для остановки выполните: pkill -f 'python3 server_api.py'" 

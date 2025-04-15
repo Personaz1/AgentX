@@ -267,15 +267,23 @@
 
 /* Terminal */
         .terminal-container {
-    width: 100%;
-            height: 300px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80%;
+    max-width: 800px;
+    height: 400px;
     background-color: #000;
     border-radius: 4px;
     padding: 10px;
     font-family: 'Courier New', monospace;
     color: #00ff00;
     overflow: auto;
-    display: none;
+            display: none;
+    z-index: 1000;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.8);
+    border: 1px solid #333;
         }
 
         .terminal-header {
@@ -468,7 +476,7 @@
             .then(data => {
                 if (data.error) {
                     addMessage(null, `Ошибка: ${data.error}`, true);
-                } else {
+            } else {
                     // Добавляем ответ агента в чат
                     addMessage('agent', data.response);
                     
@@ -492,31 +500,85 @@
             // Показываем панель рассуждений
             thinkingPanel.style.display = 'flex';
             
-            // Создаем разделы для этапов рассуждения
-            const sections = [
-                { name: 'Наблюдение', class: 'observation', content: `Получен запрос от пользователя: "${query}"` },
-                { name: 'Анализ', class: 'analysis', content: 'Определяю тип запроса и необходимые действия. Проверяю, требуется ли выполнение команды в терминале.' },
-                { name: 'Планирование', class: 'planning', content: 'Подготовка к выполнению запроса. Проверяю безопасность команды и возможные последствия.' },
-                { name: 'Выполнение', class: 'execution', content: 'Отправляю запрос на сервер и выполняю необходимые действия.' },
-                { name: 'Заключение', class: 'conclusion', content: 'Запрос обработан. Формирую ответ пользователю с результатами выполнения.' }
-            ];
-            
-            // Добавляем каждый раздел на панель
-            sections.forEach(section => {
-                const sectionDiv = document.createElement('div');
-                sectionDiv.className = `thinking-section ${section.class}`;
-                
-                const title = document.createElement('h3');
-                title.textContent = section.name;
-                
-                const content = document.createElement('p');
-                content.textContent = section.content;
-                
-                sectionDiv.appendChild(title);
-                sectionDiv.appendChild(content);
-                
-                thinkingContent.appendChild(sectionDiv);
+            // Получаем рассуждения с сервера
+            fetch(`/api/agent/{{ agent_id }}/reasoning`, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error || data.status === 'error') {
+                    // Показываем ошибку
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'thinking-section observation';
+                    errorDiv.innerHTML = `<h3>Ошибка</h3><p>${data.message || data.error || 'Не удалось получить данные рассуждения'}</p>`;
+                    thinkingContent.appendChild(errorDiv);
+                } else {
+                    // Показываем полученные рассуждения
+                    if (data.reasoning_logs && data.reasoning_logs.length > 0) {
+                        const logsDiv = document.createElement('div');
+                        logsDiv.className = 'thinking-section observation';
+                        logsDiv.innerHTML = '<h3>Логи рассуждений</h3>';
+                        
+                        const logsList = document.createElement('ul');
+                        logsList.style.listStyleType = 'none';
+                        logsList.style.padding = '0';
+                        
+                        data.reasoning_logs.forEach(log => {
+                            const logItem = document.createElement('li');
+                            logItem.innerHTML = `<span style="color:#aaa">[${log.timestamp}]</span> <span style="color:${getLogTypeColor(log.type)}">[${log.type}]</span> ${log.message}`;
+                            logsList.appendChild(logItem);
+                        });
+                        
+                        logsDiv.appendChild(logsList);
+                        thinkingContent.appendChild(logsDiv);
+                    }
+                    
+                    // Показываем рекомендации
+                    if (data.recommendations && data.recommendations.length > 0) {
+                        const recommendationsDiv = document.createElement('div');
+                        recommendationsDiv.className = 'thinking-section planning';
+                        recommendationsDiv.innerHTML = '<h3>Рекомендуемые действия</h3>';
+                        
+                        const recommendationsList = document.createElement('ul');
+                        data.recommendations.forEach(recommendation => {
+                            const recommendationItem = document.createElement('li');
+                            recommendationItem.textContent = recommendation;
+                            recommendationsList.appendChild(recommendationItem);
+                        });
+                        
+                        recommendationsDiv.appendChild(recommendationsList);
+                        thinkingContent.appendChild(recommendationsDiv);
+                    }
+                    
+                    // Если нет данных
+                    if ((!data.reasoning_logs || data.reasoning_logs.length === 0) && 
+                        (!data.recommendations || data.recommendations.length === 0)) {
+                        const noDataDiv = document.createElement('div');
+                        noDataDiv.className = 'thinking-section';
+                        noDataDiv.innerHTML = '<h3>Нет данных</h3><p>Еще нет данных рассуждений для анализа</p>';
+                        thinkingContent.appendChild(noDataDiv);
+                    }
+                }
+            })
+            .catch(error => {
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'thinking-section observation';
+                errorDiv.innerHTML = `<h3>Ошибка</h3><p>Не удалось загрузить данные рассуждения: ${error.message}</p>`;
+                thinkingContent.appendChild(errorDiv);
             });
+        }
+        
+        // Вспомогательная функция для цвета логов
+        function getLogTypeColor(type) {
+            const colors = {
+                'init': '#aaaaff',
+                'info': '#66ccff',
+                'thought': '#ff66ff',
+                'action': '#ffaa00',
+                'result': '#00cc66',
+                'error': '#ff6666'
+            };
+            return colors[type] || '#ffffff';
         }
         
         // Инициализация терминала
@@ -613,17 +675,14 @@
         terminalBtn.addEventListener('click', function() {
             if (terminalContainer.style.display === 'block') {
                 terminalContainer.style.display = 'none';
-                chatMessages.style.display = 'block';
             } else {
                 terminalContainer.style.display = 'block';
-                chatMessages.style.display = 'none';
                 initTerminal();
             }
         });
         
         closeTerminal.addEventListener('click', function() {
             terminalContainer.style.display = 'none';
-            chatMessages.style.display = 'block';
         });
         
         thinkingBtn.addEventListener('click', function() {
