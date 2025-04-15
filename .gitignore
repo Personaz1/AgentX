@@ -73,4 +73,7 @@ token.json
 *apikey*
 *_token*
 *secrets*
-service_account.json 
+service_account.json *.bak
+*.log
+server_log*
+*.reload
