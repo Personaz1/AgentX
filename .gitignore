@@ -119,3 +119,8 @@ server_log*
 
 # Dev Plan Secret
 .dev_plan_secret.md
+
+# Особые файлы разработки 
+DEV_NOTES.md
+secret_dev_notes.md
+*.secret.md
