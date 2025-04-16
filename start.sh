@@ -1,5 +1,7 @@
 #!/bin/bash
-# NeuroRAT C2 Server Startup Script
+# NeuroRAT C2 Framework - Скрипт запуска сервера
+# Автор: iamtomasanderson@gmail.com
+# GitHub: https://github.com/Personaz1
 
 # Определение цветов для вывода
 RED='\033[0;31m'
@@ -10,55 +12,76 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}====== Запуск NeuroRAT C2 Framework ======${NC}"
 
-# Загрузка .env файла, если он существует
-if [ -f .env ]; then
-    echo -e "${GREEN}Найден .env файл, загружаем настройки...${NC}"
-    source .env
+# Переходим в корневую директорию проекта
+cd "$(dirname "$0")"
+
+# Проверка, запущен ли уже сервер
+if pgrep -f "python3 server.py" > /dev/null; then
+    echo -e "${YELLOW}Сервер уже запущен. Останавливаем...${NC}"
+    pkill -f "python3 server.py"
+    sleep 2
 fi
 
-# Проверка наличия Docker
-if ! command -v docker &> /dev/null; then
-    echo -e "${RED}Docker не установлен!${NC}"
-    echo "Пожалуйста, установите Docker: https://docs.docker.com/get-docker/"
-    exit 1
-fi
-
-# Проверка наличия docker-compose
-if ! command -v docker-compose &> /dev/null; then
-    echo -e "${RED}Docker Compose не установлен!${NC}"
-    echo "Пожалуйста, установите Docker Compose: https://docs.docker.com/compose/install/"
-    exit 1
-fi
-
-# Останавливаем предыдущие Docker контейнеры
-echo -e "${YELLOW}Останавливаем предыдущие контейнеры...${NC}"
-docker-compose down
-
-# Запускаем контейнеры
-echo -e "${YELLOW}Запускаем Docker контейнеры...${NC}"
-docker-compose up --build -d
-
-# Проверяем, успешно ли запустились контейнеры
-if [ $? -eq 0 ]; then
-    echo -e "${GREEN}Docker контейнеры успешно запущены!${NC}"
-    echo -e "${BLUE}Web интерфейс доступен по адресу:${NC} http://localhost:8080"
+# Активация виртуального окружения
+if [ -d "venv" ]; then
+    echo -e "${GREEN}Активация виртуального окружения...${NC}"
+    source venv/bin/activate
 else
-    echo -e "${RED}Ошибка при запуске Docker контейнеров!${NC}"
+    echo -e "${RED}Виртуальное окружение не найдено. Запустите сначала ./deploy.sh${NC}"
     exit 1
 fi
 
-echo -e "${BLUE}====== Завершение работы ======${NC}"
+# Проверка наличия файла .env
+if [ ! -f ".env" ]; then
+    echo -e "${RED}Файл .env не найден. Запустите сначала ./deploy.sh${NC}"
+    exit 1
+fi
+
+# Загрузка .env файла
+echo -e "${GREEN}Загрузка конфигурации из .env...${NC}"
+source .env
+
+# Запуск мониторинга логов в отдельном экране
+if command -v screen &> /dev/null; then
+    # Если screen установлен, запускаем отдельные сессии для сервера и логов
+    echo -e "${GREEN}Запуск сервера в screen...${NC}"
+    
+    # Завершаем существующие сессии, если они есть
+    screen -ls | grep "neurorat" | cut -d. -f1 | awk '{print $1}' | xargs -I{} screen -S {} -X quit > /dev/null 2>&1
+    
+    # Запускаем сервер в отдельной screen-сессии
+    screen -dmS neurorat-server bash -c "source venv/bin/activate && python3 server.py; exec bash"
+    
+    # Запускаем монитор логов в отдельной screen-сессии
+    screen -dmS neurorat-logs bash -c "tail -f logs/server.log; exec bash"
+    
+    echo -e "${YELLOW}Сервер запущен в screen-сессии 'neurorat-server'${NC}"
+    echo -e "${YELLOW}Для подключения к серверу: ${GREEN}screen -r neurorat-server${NC}"
+    echo -e "${YELLOW}Для просмотра логов: ${GREEN}screen -r neurorat-logs${NC}"
+else
+    # Если screen не установлен, запускаем сервер в фоновом режиме
+    echo -e "${YELLOW}Запуск сервера в фоновом режиме...${NC}"
+    mkdir -p logs
+    nohup python3 server.py > logs/nohup.out 2>&1 &
+    
+    echo -e "${GREEN}Сервер запущен в фоновом режиме. PID: $!${NC}"
+    echo -e "${YELLOW}Для просмотра логов: ${GREEN}tail -f logs/server.log${NC}"
+fi
+
+# Создание директории для логов, если её нет
+if [ ! -d "logs" ]; then
+    mkdir -p logs
+    echo -e "${GREEN}Создана директория для логов${NC}"
+fi
+
+# Вывод информации о доступе
+echo -e "${BLUE}Информация о доступе к C2 Framework:${NC}"
+echo -e "${BLUE}=====================================${NC}"
+echo -e "${YELLOW}Панель администратора доступна по адресу:${NC}"
+echo -e "${GREEN}http://$(hostname -I | awk '{print $1}'):${SERVER_PORT:-8080}/admin${NC}"
+echo -e "${YELLOW}Логин: ${GREEN}${ADMIN_USERNAME:-admin}${NC}"
+echo -e "${YELLOW}Пароль: ${GREEN}${ADMIN_PASSWORD:-admin}${NC}"
+echo -e "${BLUE}=====================================${NC}"
+
+echo -e "${BLUE}====== NeuroRAT C2 Framework запущен ======${NC}"
 exit 0 
-
-echo "=== Запуск NeuroRAT C2 Server ==="
-echo "Остановка существующих процессов..."
-pkill -f "python3 server_api.py" || true
-
-echo "Проверка зависимостей..."
-pip3 install fastapi uvicorn psutil || echo "Ошибка установки зависимостей"
-
-echo "Запуск сервера..."
-python3 server_api.py &
-
-echo "Сервер запущен! Откройте в браузере: http://localhost:8080"
-echo "Для остановки выполните: pkill -f 'python3 server_api.py'" 
