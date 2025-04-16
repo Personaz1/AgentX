@@ -1,83 +1,91 @@
-export interface ThemeColors {
-  bg: {
-    primary: string;
-    secondary: string;
-    tertiary: string;
-    input: string;
-    hover: string;
-  };
-  text: {
-    primary: string;
-    secondary: string;
-    placeholder: string;
-    inverted: string;
-  };
-  border: {
-    primary: string;
-    secondary: string;
-  };
-  accent: {
-    primary: string;
-    secondary: string;
-  };
-  success: string;
-  warning: string;
-  danger: string;
-  info: string;
+// Определение типов темы для styled-components
+import 'styled-components';
+
+// Расширение DefaultTheme
+declare module 'styled-components' {
+  export interface DefaultTheme {
+    bg: {
+      primary: string;
+      secondary: string;
+      tertiary: string;
+      input: string;
+      hover: string;
+    };
+    text: {
+      primary: string;
+      secondary: string;
+      tertiary: string;
+      placeholder: string;
+    };
+    accent: {
+      primary: string;
+      secondary: string;
+    };
+    border: {
+      primary: string;
+      secondary: string;
+    };
+    success: string;
+    warning: string;
+    danger: string;
+    info: string;
+  }
 }
 
-export const darkTheme: ThemeColors = {
+// Темная тема по умолчанию
+export const darkTheme = {
   bg: {
-    primary: '#121212',
-    secondary: '#1E1E1E',
-    tertiary: '#2D2D2D',
-    input: '#252525',
-    hover: '#333333',
+    primary: '#1A202C',
+    secondary: '#2D3748',
+    tertiary: '#4A5568',
+    input: '#2D3748',
+    hover: '#3A4A5F',
   },
   text: {
-    primary: '#FFFFFF',
-    secondary: '#A0A0A0',
-    placeholder: '#6C6C6C',
-    inverted: '#000000',
-  },
-  border: {
-    primary: '#3A3A3A',
-    secondary: '#4D4D4D',
+    primary: '#F7FAFC',
+    secondary: '#A0AEC0',
+    tertiary: '#718096',
+    placeholder: '#718096',
   },
   accent: {
-    primary: '#0F94FF',
-    secondary: '#107EFF',
+    primary: '#3683DC',
+    secondary: '#4299E1',
   },
-  success: '#10B981',
-  warning: '#F59E0B',
-  danger: '#EF4444',
-  info: '#3B82F6',
+  border: {
+    primary: '#4A5568',
+    secondary: '#2D3748',
+  },
+  success: '#38A169',
+  warning: '#DD6B20',
+  danger: '#E53E3E',
+  info: '#3182CE',
 };
 
-export const lightTheme: ThemeColors = {
+// Светлая тема (для будущего использования)
+export const lightTheme = {
   bg: {
-    primary: '#F5F5F5',
-    secondary: '#FFFFFF',
-    tertiary: '#EEEEEE',
+    primary: '#F7FAFC',
+    secondary: '#EDF2F7',
+    tertiary: '#E2E8F0',
     input: '#FFFFFF',
-    hover: '#E0E0E0',
+    hover: '#EDF2F7',
   },
   text: {
-    primary: '#121212',
-    secondary: '#666666',
-    placeholder: '#AAAAAA',
-    inverted: '#FFFFFF',
-  },
-  border: {
-    primary: '#E0E0E0',
-    secondary: '#CCCCCC',
+    primary: '#1A202C',
+    secondary: '#4A5568',
+    tertiary: '#718096',
+    placeholder: '#A0AEC0',
   },
   accent: {
-    primary: '#0F84FF',
-    secondary: '#0070E0',
+    primary: '#3683DC',
+    secondary: '#4299E1',
   },
-  success: '#10B981',
-  warning: '#F59E0B',
-  danger: '#EF4444',
-  info: '#3B82F6',
+  border: {
+    primary: '#E2E8F0',
+    secondary: '#EDF2F7',
+  },
+  success: '#38A169',
+  warning: '#DD6B20',
+  danger: '#E53E3E',
+  info: '#3182CE',
 }; 
