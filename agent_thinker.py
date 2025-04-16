@@ -979,6 +979,10 @@ class AgentThinker:
         # Выполняем каждое действие
         for i, action in enumerate(actions):
             try:
+                # Логируем команду перед выполнением (для теста и аудита)
+                if hasattr(self.state, 'log_command'):
+                    self.state.log_command(action, source="autonomous")
+                
                 # Проверяем, содержит ли действие специальные команды обхода защиты
                 if action.startswith("!obfuscate "):
                     cmd = action.replace("!obfuscate ", "")

