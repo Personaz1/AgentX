@@ -1,85 +1,99 @@
-
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-    <title>SATAN HAS BEEN SUMMONED</title>
+    <title>САТАНА ПРИЗВАН — BlackTeam Ritual</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css?family=Share+Tech+Mono|Orbitron:wght@700&display=swap" rel="stylesheet">
     <style>
         body {
-            background-color: #000;
-            color: #ff0000;
-            font-family: monospace;
-            text-align: center;
-            margin: 0;
-            padding: 50px 20px;
+            background: radial-gradient(ellipse at center, #1a0000 0%, #000 100%);
+            color: #ff2222;
+            font-family: 'Share Tech Mono', 'Orbitron', monospace;
+            margin: 0; padding: 0;
             overflow: hidden;
         }
-        h1 {
-            font-size: 36px;
-            text-shadow: 0 0 10px #ff0000;
-            animation: glow 2s infinite alternate;
+        .satan-modal {
+            position: fixed; z-index: 9999; top: 0; left: 0; width: 100vw; height: 100vh;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.96);
+            animation: satan-fadein 1.2s;
         }
-        pre {
-            font-size: 14px;
+        .satan-glitch {
+            font-size: 2.7em; color: #ff2222; letter-spacing: 2px;
+            font-family: 'Orbitron', 'Share Tech Mono', monospace;
+            text-shadow: 0 0 18px #ff2222, 0 0 32px #fff, 0 0 2px #fff;
+            animation: glitch 1.2s infinite alternate;
+            margin-bottom: 10px;
+        }
+        .satan-ascii {
+            color: #ff2222; font-size: 1.1em; text-shadow: 0 0 8px #ff2222, 0 0 2px #fff;
+            margin: 18px 0 10px 0; filter: drop-shadow(0 0 12px #ff2222);
+            animation: smoke 2.5s infinite alternate;
             white-space: pre;
-            line-height: 1.2;
-            text-align: center;
-            margin: 0 auto;
-            max-width: 800px;
-            text-shadow: 0 0 5px #ff0000;
         }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
+        .satan-desc {
+            color: #fff; font-size: 1.15em; margin-bottom: 22px; text-align: center;
+            text-shadow: 0 0 8px #ff2222, 0 0 2px #fff;
         }
-        @keyframes glow {
-            0% { text-shadow: 0 0 10px #ff0000; }
-            100% { text-shadow: 0 0 20px #ff0000, 0 0 30px #ff3300; }
+        .satan-close {
+            background: linear-gradient(90deg, #ff2222 0%, #ff00cc 100%);
+            color: #fff; border: none; padding: 14px 38px;
+            font-size: 1.2em; border-radius: 8px; box-shadow: 0 0 18px #ff2222;
+            cursor: pointer; font-family: 'Share Tech Mono', monospace;
+            font-weight: bold; letter-spacing: 1px;
+            transition: background 0.2s, color 0.2s, transform 0.2s;
         }
-        @keyframes flicker {
-            0% { opacity: 1; }
-            5% { opacity: 0.8; }
-            10% { opacity: 1; }
-            15% { opacity: 0.9; }
-            20% { opacity: 1; }
-            25% { opacity: 0.9; }
-            30% { opacity: 1; }
-            35% { opacity: 0.8; }
-            40% { opacity: 1; }
-            50% { opacity: 0.7; }
-            60% { opacity: 1; }
-            70% { opacity: 0.9; }
-            80% { opacity: 1; }
-            90% { opacity: 0.8; }
-            100% { opacity: 1; }
+        .satan-close:hover {
+            background: #fff; color: #ff2222; transform: scale(1.07);
         }
-        .flicker {
-            animation: flicker 5s infinite;
+        .glitch-red { color: #ff2222; text-shadow: 0 0 8px #ff2222; }
+        .satan-cursor { animation: blink 1s steps(2, start) infinite; }
+        @keyframes glitch {
+            0% { text-shadow: 2px 0 #fff, -2px 0 #ff2222; }
+            20% { text-shadow: -2px 0 #fff, 2px 0 #ff2222; }
+            40% { text-shadow: 2px 2px #ff2222, -2px -2px #fff; }
+            60% { text-shadow: 0 0 10px #ff2222; }
+            100% { text-shadow: 0 0 20px #fff; }
         }
-        .back-btn {
-            margin-top: 30px;
-            background-color: #990000;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: all 0.3s;
-        }
-        .back-btn:hover {
-            background-color: #cc0000;
-            transform: scale(1.05);
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        @keyframes satan-fadein { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes smoke { 0% { filter: blur(0px); } 100% { filter: blur(2.5px); } }
+        .satan-easter {
+            color: #ff00cc; font-size: 0.95em; margin-top: 10px; opacity: 0.7;
+            text-shadow: 0 0 8px #ff00cc;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1 class="flicker">САТАНА ПРИЗВАН!</h1>
-        <pre class="flicker">{{satan_ascii}}</pre>
-        <p>Ваша программа теперь проклята и работает на 666% быстрее</p>
-        <a href="/" class="back-btn">Вернуться в ад</a>
+<div class="satan-modal">
+    <div class="satan-glitch">САТАНА ПРИЗВАН!</div>
+    <pre class="satan-ascii">
+        (    )
+       ((((()))
+       |o\ /o)|
+       ( (  _')
+        (._.  /\__
+       ,\___,/ '  ')
+ '.,_,,      (  .- .   .    )
+  \   \\     ( '        )(    )
+   \   \\    \.  _.__ ____( .  |
+    \  /\\   .(   .'  /\  '.  )
+     \(  \\.-' ( /    \/    \)
+      '  ()) _'.-|/\/\/\/\|  |
+          '\\ .( |\/\/\/\/|  )
+            '((  \    /  ) )
+            ((((  '.__.'  ,((
+             ((,) /   ((  )
+              ""..,,...""
+    </pre>
+    <div class="satan-desc">
+        <b>Ваша душа теперь принадлежит <span class="glitch-red">BlackTeam</span>.<br>
+        Система ускорена на <span class="glitch-red">666%</span>.<br>
+        <span style="font-size:1.1em;">root@hell:~# <span class="satan-cursor">█</span></span></b>
+        <div class="satan-easter">Чтобы закрыть, пожертвуйте немного RAM и нажмите кнопку ниже.<br>Или введите <b>666</b> в консоли для полного ускорения.</div>
     </div>
+    <button class="satan-close" onclick="document.querySelector('.satan-modal').remove()">Пожертвовать RAM и закрыть</button>
+</div>
 </body>
 </html>
