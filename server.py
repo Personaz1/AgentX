@@ -19,7 +19,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__, static_folder='admin-panel-new/dist', static_url_path='')
+app = Flask(__name__, static_folder='neurorat-ui/dist', static_url_path='')
 
 @app.route('/')
 def index():
@@ -31,7 +31,7 @@ def admin():
 
 @app.route('/assets/<path:path>')
 def serve_assets(path):
-    return send_from_directory('admin-panel-new/dist/assets', path)
+    return send_from_directory('neurorat-ui/dist/assets', path)
 
 @app.route('/api/status')
 def status():

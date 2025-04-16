@@ -1,495 +1,545 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
-import { FiShield, FiAlertTriangle, FiLock, FiBell, FiRefreshCw, FiSettings, FiPlusCircle } from 'react-icons/fi';
+import { 
+  SecurityThreat, 
+  ThreatStatus, 
+  ThreatSeverity, 
+  SecurityVulnerability, 
+  VulnerabilityStatus, 
+  SecuritySetting,
+  VulnerabilitySeverity
+} from '../types/security';
 
-// Интерфейсы
-interface Threat {
-  id: string;
-  timestamp: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  source: string;
-  description: string;
-  status: 'active' | 'mitigated' | 'investigating';
-  affectedSystem: string;
-}
-
-interface Vulnerability {
-  id: string;
-  name: string;
-  description: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  discoveredAt: string;
-  status: 'open' | 'patched' | 'ignored';
-  affectedZonds: number;
-  cveId?: string;
-  exploitAvailable: boolean;
-}
-
-interface SecurityConfig {
-  id: string;
-  name: string;
-  description: string;
-  type: 'firewall' | 'ids' | 'encryption' | 'authentication';
-  status: 'enabled' | 'disabled';
-}
-
-// Styled Components
-const PageContainer = styled.div`
-  padding: 20px;
-  height: 100%;
-  overflow-y: auto;
+// Стилизованные компоненты
+const Container = styled.div`
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
 `;
 
 const Header = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 `;
 
 const Title = styled.h1`
   font-size: 24px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
 `;
 
-const ActionButtons = styled.div`
-  display: flex;
-  gap: 10px;
+const StatsGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
 `;
 
-const Button = styled.button<{ primary?: boolean }>`
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 8px 15px;
-  border-radius: 5px;
-  border: none;
-  background: ${props => props.primary ? '#3182ce' : '#2D3748'};
-  color: white;
-  cursor: pointer;
-  font-weight: 500;
-  
-  &:hover {
-    opacity: 0.9;
-  }
+const StatCard = styled.div<{ $accent?: string }>`
+  background: ${props => props.$accent ? `linear-gradient(to right, ${props.$accent}15, transparent)` : '#ffffff'};
+  border-left: ${props => props.$accent ? `4px solid ${props.$accent}` : '4px solid #e0e0e0'};
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  padding: 16px;
 `;
 
-const Grid = styled.div`
+const StatValue = styled.div`
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 8px;
+`;
+
+const StatLabel = styled.div`
+  font-size: 14px;
+  color: #666;
+`;
+
+const ContentGrid = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto;
-  gap: 20px;
-  margin-bottom: 20px;
-  
-  @media (max-width: 1200px) {
-    grid-template-columns: 1fr;
-  }
+  gap: 24px;
+  margin-bottom: 24px;
 `;
 
 const Panel = styled.div`
-  background: #1A202C;
+  background: #ffffff;
   border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
 `;
 
 const PanelHeader = styled.div`
+  background: #f5f5f5;
+  padding: 16px;
+  border-bottom: 1px solid #e0e0e0;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 15px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid #2D3748;
 `;
 
 const PanelTitle = styled.h2`
   font-size: 18px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  font-weight: 600;
+  margin: 0;
 `;
 
-const ListItem = styled.div<{ severity?: string }>`
-  padding: 12px;
-  margin-bottom: 10px;
-  border-radius: 6px;
-  background: #2D3748;
+const PanelContent = styled.div`
+  padding: 16px;
+  max-height: 400px;
+  overflow-y: auto;
+`;
+
+const ListItem = styled.div`
+  padding: 14px;
+  border-bottom: 1px solid #eee;
   display: flex;
   justify-content: space-between;
-  position: relative;
-  border-left: 4px solid ${props => {
-    if (props.severity === 'critical') return '#E53E3E';
-    if (props.severity === 'high') return '#DD6B20';
-    if (props.severity === 'medium') return '#D69E2E';
-    if (props.severity === 'low') return '#38A169';
-    return '#3182CE';
-  }};
+  align-items: center;
+
+  &:last-child {
+    border-bottom: none;
+  }
 `;
 
-const ItemDetails = styled.div`
+const ItemInfo = styled.div`
   flex: 1;
 `;
 
 const ItemTitle = styled.div`
   font-weight: 600;
-  margin-bottom: 5px;
+  margin-bottom: 4px;
 `;
 
 const ItemDescription = styled.div`
-  font-size: 13px;
-  color: #A0AEC0;
+  font-size: 14px;
+  color: #666;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 `;
 
-const ItemMetadata = styled.div`
+const ItemMeta = styled.div`
   display: flex;
-  gap: 10px;
-  margin-top: 5px;
+  gap: 8px;
+  margin-top: 8px;
   font-size: 12px;
+  color: #999;
 `;
 
-const Badge = styled.span<{ type?: string }>`
-  padding: 3px 8px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 600;
-  background: ${props => {
-    switch(props.type) {
-      case 'active': return '#2C7A7B';
-      case 'mitigated': return '#38A169';
-      case 'investigating': return '#D69E2E';
-      case 'open': return '#E53E3E';
-      case 'patched': return '#38A169';
-      case 'ignored': return '#718096';
-      case 'enabled': return '#38A169';
-      case 'disabled': return '#718096';
-      case 'critical': return '#E53E3E';
-      case 'high': return '#DD6B20';
-      case 'medium': return '#D69E2E';
-      case 'low': return '#38A169';
-      default: return '#4A5568';
+const Badge = styled.span<{ $color: string }>`
+  background-color: ${props => props.$color};
+  color: white;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-block;
+`;
+
+const ActionButton = styled.button<{ $variant?: 'primary' | 'danger' | 'success' }>`
+  background-color: ${props => {
+    switch (props.$variant) {
+      case 'danger': return '#ff4d4f';
+      case 'success': return '#52c41a';
+      default: return '#1890ff';
     }
   }};
-  color: white;
-`;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
 
-const StatsContainer = styled.div`
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 15px;
-  margin-bottom: 20px;
-  
-  @media (max-width: 1100px) {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  @media (max-width: 600px) {
-    grid-template-columns: 1fr;
+  &:hover {
+    opacity: 0.85;
   }
 `;
 
-const StatCard = styled.div<{ severity?: string }>`
-  background: #2D3748;
-  border-radius: 8px;
-  padding: 15px;
+const SettingRow = styled.div`
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  border-left: 4px solid ${props => {
-    if (props.severity === 'critical') return '#E53E3E';
-    if (props.severity === 'high') return '#DD6B20';
-    if (props.severity === 'medium') return '#D69E2E';
-    if (props.severity === 'low') return '#38A169';
-    return '#3182CE';
-  }};
-`;
+  padding: 12px 0;
+  border-bottom: 1px solid #eee;
 
-const StatIcon = styled.div`
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: #1A202C;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 15px;
-  
-  svg {
-    color: #A0AEC0;
-    font-size: 20px;
+  &:last-child {
+    border-bottom: none;
   }
 `;
 
-const StatInfo = styled.div`
+const SettingInfo = styled.div`
   flex: 1;
 `;
 
-const StatValue = styled.div`
-  font-size: 20px;
+const SettingName = styled.div`
   font-weight: 600;
+  margin-bottom: 4px;
 `;
 
-const StatLabel = styled.div`
-  font-size: 13px;
-  color: #A0AEC0;
+const SettingDescription = styled.div`
+  font-size: 14px;
+  color: #666;
+`;
+
+const Toggle = styled.div<{ $enabled: boolean }>`
+  width: 50px;
+  height: 28px;
+  background-color: ${props => props.$enabled ? '#52c41a' : '#d9d9d9'};
+  border-radius: 14px;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.3s;
+  
+  &:after {
+    content: '';
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    border-radius: 12px;
+    background-color: #fff;
+    top: 2px;
+    left: ${props => props.$enabled ? '24px' : '2px'};
+    transition: all 0.3s;
+  }
 `;
 
 const SecurityPage: React.FC = () => {
-  // Состояние
-  const [threats, setThreats] = useState<Threat[]>([
+  // Состояние для угроз безопасности
+  const [threats, setThreats] = useState<SecurityThreat[]>([
     {
-      id: "t1",
-      timestamp: "2023-05-15T14:32:00",
-      severity: "high",
-      source: "IDS",
-      description: "Обнаружена попытка брутфорс-атаки на систему аутентификации",
-      status: "active",
-      affectedSystem: "Компонент аутентификации"
+      id: '1',
+      title: 'Подозрительная активность SSH',
+      description: 'Обнаружено несколько неудачных попыток входа по SSH с IP-адреса 192.168.1.150',
+      severity: ThreatSeverity.HIGH,
+      status: ThreatStatus.PENDING,
+      detectedAt: '2023-07-15T10:30:45Z',
+      source: 'log-analyzer',
+      affectedSystem: 'server-01',
     },
     {
-      id: "t2",
-      timestamp: "2023-05-15T10:17:00",
-      severity: "critical",
-      source: "Firewall",
-      description: "Зафиксирована подозрительная активность из IP-диапазона, известного фишинговыми атаками",
-      status: "investigating",
-      affectedSystem: "Сетевая подсистема"
+      id: '2',
+      title: 'Обнаружена попытка перебора паролей',
+      description: 'Зафиксировано большое количество запросов аутентификации с одного IP-адреса',
+      severity: ThreatSeverity.CRITICAL,
+      status: ThreatStatus.IN_PROGRESS,
+      detectedAt: '2023-07-16T08:15:20Z',
+      source: 'auth-monitor',
+      affectedSystem: 'auth-service',
     },
     {
-      id: "t3",
-      timestamp: "2023-05-14T08:45:00",
-      severity: "medium",
-      source: "ATS",
-      description: "Выявлена аномалия в шаблонах транзакций",
-      status: "mitigated",
-      affectedSystem: "Финансовый модуль"
+      id: '3',
+      title: 'Потенциальная утечка данных',
+      description: 'Обнаружен необычный объем исходящего трафика на нестандартный порт',
+      severity: ThreatSeverity.MEDIUM,
+      status: ThreatStatus.PENDING,
+      detectedAt: '2023-07-14T22:45:10Z',
+      source: 'network-monitor',
+      affectedSystem: 'data-storage',
     }
   ]);
-  
-  const [vulnerabilities, setVulnerabilities] = useState<Vulnerability[]>([
+
+  // Состояние для уязвимостей
+  const [vulnerabilities, setVulnerabilities] = useState<SecurityVulnerability[]>([
     {
-      id: "v1",
-      name: "SQL-инъекция в модуле поиска",
-      description: "Уязвимость позволяет выполнять произвольные SQL-запросы через недостаточно фильтруемые поля ввода",
-      severity: "high",
-      discoveredAt: "2023-05-10",
-      status: "open",
-      affectedZonds: 12,
-      cveId: "CVE-2023-4567",
-      exploitAvailable: true
+      id: '1',
+      title: 'Устаревшая версия OpenSSL',
+      description: 'Используется версия OpenSSL, подверженная CVE-2023-0286',
+      severity: VulnerabilitySeverity.HIGH,
+      status: VulnerabilityStatus.PENDING,
+      detectedAt: '2023-07-10T14:20:30Z',
+      affectedSystem: 'server-01',
+      cve: 'CVE-2023-0286',
+      patchUrl: 'https://openssl.org/patches/CVE-2023-0286',
     },
     {
-      id: "v2",
-      name: "Устаревшие библиотеки OpenSSL",
-      description: "Используется уязвимая версия OpenSSL с известными проблемами безопасности",
-      severity: "medium",
-      discoveredAt: "2023-05-05",
-      status: "patched",
-      affectedZonds: 8,
-      cveId: "CVE-2023-1234",
-      exploitAvailable: true
+      id: '2',
+      title: 'Незащищенный конфигурационный файл',
+      description: 'Обнаружен конфигурационный файл с небезопасными разрешениями',
+      severity: VulnerabilitySeverity.MEDIUM,
+      status: VulnerabilityStatus.IN_PROGRESS,
+      detectedAt: '2023-07-12T09:15:40Z',
+      affectedSystem: 'config-server',
+      cve: null,
     },
     {
-      id: "v3",
-      name: "Отсутствие защиты от XSS в веб-интерфейсе",
-      description: "Веб-интерфейс не обеспечивает достаточную защиту от межсайтового скриптинга",
-      severity: "medium",
-      discoveredAt: "2023-05-02",
-      status: "open",
-      affectedZonds: 15,
-      exploitAvailable: false
+      id: '3',
+      title: 'Уязвимость SQL инъекции',
+      description: 'Обнаружена потенциальная уязвимость SQL инъекции в API эндпоинте',
+      severity: VulnerabilitySeverity.CRITICAL,
+      status: VulnerabilityStatus.PENDING,
+      detectedAt: '2023-07-13T11:30:15Z',
+      affectedSystem: 'api-service',
+      cve: null,
     }
   ]);
-  
-  const [securityConfig, setSecurityConfig] = useState<SecurityConfig[]>([
+
+  // Состояние для настроек безопасности
+  const [securitySettings, setSecuritySettings] = useState<SecuritySetting[]>([
     {
-      id: "cf1",
-      name: "Адаптивный файрвол",
-      description: "Интеллектуальный файрвол с динамическими правилами и обнаружением аномалий",
-      type: "firewall",
-      status: "enabled"
+      id: '1',
+      name: 'Двухфакторная аутентификация',
+      description: 'Требовать 2ФА для всех пользователей при входе в систему',
+      enabled: true,
+      category: 'authentication',
     },
     {
-      id: "cf2",
-      name: "Система предотвращения вторжений",
-      description: "Нейросетевая IDS с поведенческим анализом",
-      type: "ids",
-      status: "enabled"
+      id: '2',
+      name: 'Автоматическое обновление',
+      description: 'Автоматически устанавливать обновления безопасности',
+      enabled: true,
+      category: 'updates',
     },
     {
-      id: "cf3",
-      name: "Шифрование диска",
-      description: "Полное шифрование данных всех зондов",
-      type: "encryption",
-      status: "disabled"
+      id: '3',
+      name: 'Мониторинг сетевого трафика',
+      description: 'Анализировать весь сетевой трафик на предмет вредоносной активности',
+      enabled: false,
+      category: 'monitoring',
     },
     {
-      id: "cf4",
-      name: "Двухфакторная аутентификация",
-      description: "2FA для всех критических операций и доступа к панели управления",
-      type: "authentication",
-      status: "enabled"
+      id: '4',
+      name: 'Блокировка подозрительных IP',
+      description: 'Автоматически блокировать IP-адреса с подозрительной активностью',
+      enabled: true,
+      category: 'firewall',
+    },
+    {
+      id: '5',
+      name: 'Резервное копирование данных',
+      description: 'Ежедневное резервное копирование критически важных данных',
+      enabled: true,
+      category: 'backup',
     }
   ]);
+
+  // Подсчет статистики
+  const activeThreatCount = threats.filter(t => t.status !== ThreatStatus.RESOLVED).length;
+  const criticalThreatCount = threats.filter(t => t.severity === ThreatSeverity.CRITICAL).length;
+  const highThreatCount = threats.filter(t => t.severity === ThreatSeverity.HIGH).length;
   
-  // Статистика
-  const activeThreats = threats.filter(t => t.status === 'active').length;
-  const criticalVulnerabilities = vulnerabilities.filter(v => v.severity === 'critical' && v.status === 'open').length;
-  const highVulnerabilities = vulnerabilities.filter(v => v.severity === 'high' && v.status === 'open').length;
-  const securityScore = Math.round(70 - (activeThreats * 5) - (criticalVulnerabilities * 10) - (highVulnerabilities * 3));
+  const activeVulnCount = vulnerabilities.filter(v => v.status !== VulnerabilityStatus.PATCHED).length;
+  const criticalVulnCount = vulnerabilities.filter(v => v.severity === VulnerabilitySeverity.CRITICAL).length;
+  const highVulnCount = vulnerabilities.filter(v => v.severity === VulnerabilitySeverity.HIGH).length;
   
+  const enabledSettingsCount = securitySettings.filter(s => s.enabled).length;
+  const securityScore = Math.round((enabledSettingsCount / securitySettings.length) * 100 - 
+                                  (criticalThreatCount * 10) - 
+                                  (highThreatCount * 5) - 
+                                  (criticalVulnCount * 8) - 
+                                  (highVulnCount * 4));
+
   // Обработчики
-  const toggleSecurityConfig = (id: string) => {
-    setSecurityConfig(prev => 
-      prev.map(config => 
-        config.id === id 
-          ? {...config, status: config.status === 'enabled' ? 'disabled' : 'enabled'} 
-          : config
+  const toggleSetting = (id: string) => {
+    setSecuritySettings(prev => 
+      prev.map(setting => 
+        setting.id === id 
+          ? { ...setting, enabled: !setting.enabled } 
+          : setting
       )
     );
   };
-  
+
   const mitigateThreat = (id: string) => {
     setThreats(prev => 
       prev.map(threat => 
         threat.id === id 
-          ? {...threat, status: 'mitigated'} 
+          ? { ...threat, status: ThreatStatus.IN_PROGRESS } 
           : threat
       )
     );
   };
-  
+
+  const resolveThreat = (id: string) => {
+    setThreats(prev => 
+      prev.map(threat => 
+        threat.id === id 
+          ? { ...threat, status: ThreatStatus.RESOLVED } 
+          : threat
+      )
+    );
+  };
+
   const patchVulnerability = (id: string) => {
     setVulnerabilities(prev => 
       prev.map(vuln => 
         vuln.id === id 
-          ? {...vuln, status: 'patched'} 
+          ? { ...vuln, status: VulnerabilityStatus.PATCHED } 
           : vuln
       )
     );
   };
-  
-  // Рендер
+
+  // Вспомогательные функции
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const translateThreatStatus = (status: ThreatStatus): string => {
+    const translations: Record<ThreatStatus, string> = {
+      [ThreatStatus.PENDING]: 'Ожидает',
+      [ThreatStatus.IN_PROGRESS]: 'В работе',
+      [ThreatStatus.RESOLVED]: 'Решено'
+    };
+    return translations[status];
+  };
+
+  const translateVulnStatus = (status: VulnerabilityStatus): string => {
+    const translations: Record<VulnerabilityStatus, string> = {
+      [VulnerabilityStatus.PENDING]: 'Ожидает',
+      [VulnerabilityStatus.IN_PROGRESS]: 'В работе',
+      [VulnerabilityStatus.PATCHED]: 'Исправлено',
+      [VulnerabilityStatus.IGNORED]: 'Игнорируется'
+    };
+    return translations[status];
+  };
+
+  const getSeverityColor = (severity: ThreatSeverity | VulnerabilitySeverity): string => {
+    const colors: Record<string, string> = {
+      [ThreatSeverity.LOW]: '#52c41a',
+      [ThreatSeverity.MEDIUM]: '#faad14',
+      [ThreatSeverity.HIGH]: '#ff7a45',
+      [ThreatSeverity.CRITICAL]: '#f5222d'
+    };
+    return colors[severity];
+  };
+
+  const translateSeverity = (severity: ThreatSeverity | VulnerabilitySeverity): string => {
+    const translations: Record<string, string> = {
+      [ThreatSeverity.LOW]: 'Низкая',
+      [ThreatSeverity.MEDIUM]: 'Средняя',
+      [ThreatSeverity.HIGH]: 'Высокая',
+      [ThreatSeverity.CRITICAL]: 'Критическая'
+    };
+    return translations[severity];
+  };
+
   return (
-    <PageContainer>
+    <Container>
       <Header>
-        <Title><FiShield size={22} /> Управление безопасностью</Title>
-        <ActionButtons>
-          <Button><FiBell /> Оповещения</Button>
-          <Button><FiRefreshCw /> Сканировать</Button>
-          <Button primary><FiSettings /> Настройки</Button>
-        </ActionButtons>
+        <Title>Управление безопасностью</Title>
+        <ActionButton>Запустить сканирование</ActionButton>
       </Header>
-      
-      <StatsContainer>
-        <StatCard>
-          <StatIcon><FiAlertTriangle /></StatIcon>
-          <StatInfo>
-            <StatValue>{activeThreats}</StatValue>
-            <StatLabel>Активные угрозы</StatLabel>
-          </StatInfo>
+
+      <StatsGrid>
+        <StatCard $accent="#f5222d">
+          <StatValue>{activeThreatCount}</StatValue>
+          <StatLabel>Активные угрозы</StatLabel>
         </StatCard>
-        
-        <StatCard severity="high">
-          <StatIcon><FiLock /></StatIcon>
-          <StatInfo>
-            <StatValue>{criticalVulnerabilities + highVulnerabilities}</StatValue>
-            <StatLabel>Критические уязвимости</StatLabel>
-          </StatInfo>
+        <StatCard $accent="#ff7a45">
+          <StatValue>{activeVulnCount}</StatValue>
+          <StatLabel>Активные уязвимости</StatLabel>
         </StatCard>
-        
-        <StatCard severity={securityScore > 80 ? 'low' : securityScore > 60 ? 'medium' : 'high'}>
-          <StatIcon><FiShield /></StatIcon>
-          <StatInfo>
-            <StatValue>{securityScore}%</StatValue>
-            <StatLabel>Оценка безопасности</StatLabel>
-          </StatInfo>
+        <StatCard $accent={securityScore < 60 ? "#f5222d" : securityScore < 80 ? "#faad14" : "#52c41a"}>
+          <StatValue>{securityScore}%</StatValue>
+          <StatLabel>Рейтинг безопасности</StatLabel>
         </StatCard>
-        
-        <StatCard>
-          <StatIcon><FiSettings /></StatIcon>
-          <StatInfo>
-            <StatValue>{securityConfig.filter(c => c.status === 'enabled').length}/{securityConfig.length}</StatValue>
-            <StatLabel>Активные защиты</StatLabel>
-          </StatInfo>
+        <StatCard $accent="#1890ff">
+          <StatValue>{enabledSettingsCount}/{securitySettings.length}</StatValue>
+          <StatLabel>Активные настройки</StatLabel>
         </StatCard>
-      </StatsContainer>
-      
-      <Grid>
+      </StatsGrid>
+
+      <ContentGrid>
         <Panel>
           <PanelHeader>
-            <PanelTitle><FiAlertTriangle size={18} /> Активные угрозы</PanelTitle>
-            <Button><FiPlusCircle size={14} /> Добавить</Button>
+            <PanelTitle>Активные угрозы</PanelTitle>
           </PanelHeader>
-          
-          {threats.map(threat => (
-            <ListItem key={threat.id} severity={threat.severity}>
-              <ItemDetails>
-                <ItemTitle>{threat.description}</ItemTitle>
-                <ItemDescription>Система: {threat.affectedSystem} | Источник: {threat.source}</ItemDescription>
-                <ItemMetadata>
-                  <Badge type={threat.severity}>{threat.severity}</Badge>
-                  <Badge type={threat.status}>{threat.status}</Badge>
-                </ItemMetadata>
-              </ItemDetails>
-              {threat.status !== 'mitigated' && (
-                <Button onClick={() => mitigateThreat(threat.id)}>Устранить</Button>
-              )}
-            </ListItem>
-          ))}
+          <PanelContent>
+            {threats
+              .filter(threat => threat.status !== ThreatStatus.RESOLVED)
+              .map(threat => (
+                <ListItem key={threat.id}>
+                  <ItemInfo>
+                    <ItemTitle>{threat.title}</ItemTitle>
+                    <ItemDescription>{threat.description}</ItemDescription>
+                    <ItemMeta>
+                      <span>Обнаружено: {formatDate(threat.detectedAt)}</span>
+                      <span>Система: {threat.affectedSystem}</span>
+                    </ItemMeta>
+                  </ItemInfo>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+                    <Badge $color={getSeverityColor(threat.severity)}>
+                      {translateSeverity(threat.severity)}
+                    </Badge>
+                    {threat.status === ThreatStatus.PENDING ? (
+                      <ActionButton $variant="primary" onClick={() => mitigateThreat(threat.id)}>
+                        Устранить
+                      </ActionButton>
+                    ) : (
+                      <ActionButton $variant="success" onClick={() => resolveThreat(threat.id)}>
+                        Решено
+                      </ActionButton>
+                    )}
+                  </div>
+                </ListItem>
+              ))}
+          </PanelContent>
         </Panel>
-        
+
         <Panel>
           <PanelHeader>
-            <PanelTitle><FiLock size={18} /> Уязвимости</PanelTitle>
-            <Button><FiRefreshCw size={14} /> Сканировать</Button>
+            <PanelTitle>Уязвимости</PanelTitle>
           </PanelHeader>
-          
-          {vulnerabilities.map(vuln => (
-            <ListItem key={vuln.id} severity={vuln.severity}>
-              <ItemDetails>
-                <ItemTitle>{vuln.name}</ItemTitle>
-                <ItemDescription>{vuln.description}</ItemDescription>
-                <ItemMetadata>
-                  <Badge type={vuln.severity}>{vuln.severity}</Badge>
-                  <Badge type={vuln.status}>{vuln.status}</Badge>
-                  {vuln.cveId && <Badge>{vuln.cveId}</Badge>}
-                  {vuln.exploitAvailable && <Badge type="high">Есть эксплойт</Badge>}
-                </ItemMetadata>
-              </ItemDetails>
-              {vuln.status === 'open' && (
-                <Button onClick={() => patchVulnerability(vuln.id)}>Исправить</Button>
-              )}
-            </ListItem>
-          ))}
+          <PanelContent>
+            {vulnerabilities
+              .filter(vuln => vuln.status !== VulnerabilityStatus.PATCHED)
+              .map(vuln => (
+                <ListItem key={vuln.id}>
+                  <ItemInfo>
+                    <ItemTitle>{vuln.title}</ItemTitle>
+                    <ItemDescription>{vuln.description}</ItemDescription>
+                    <ItemMeta>
+                      <span>Обнаружено: {formatDate(vuln.detectedAt)}</span>
+                      <span>Система: {vuln.affectedSystem}</span>
+                      {vuln.cve && <span>CVE: {vuln.cve}</span>}
+                    </ItemMeta>
+                  </ItemInfo>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+                    <Badge $color={getSeverityColor(vuln.severity)}>
+                      {translateSeverity(vuln.severity)}
+                    </Badge>
+                    <ActionButton $variant="primary" onClick={() => patchVulnerability(vuln.id)}>
+                      Исправить
+                    </ActionButton>
+                  </div>
+                </ListItem>
+              ))}
+          </PanelContent>
         </Panel>
-      </Grid>
-      
+      </ContentGrid>
+
       <Panel>
         <PanelHeader>
-          <PanelTitle><FiSettings size={18} /> Настройки защиты</PanelTitle>
-          <Button><FiPlusCircle size={14} /> Добавить</Button>
+          <PanelTitle>Настройки безопасности</PanelTitle>
         </PanelHeader>
-        
-        <Grid>
-          {securityConfig.map(config => (
-            <ListItem key={config.id}>
-              <ItemDetails>
-                <ItemTitle>{config.name}</ItemTitle>
-                <ItemDescription>{config.description}</ItemDescription>
-                <ItemMetadata>
-                  <Badge type={config.type}>{config.type}</Badge>
-                  <Badge type={config.status}>{config.status}</Badge>
-                </ItemMetadata>
-              </ItemDetails>
-              <Button onClick={() => toggleSecurityConfig(config.id)}>
-                {config.status === 'enabled' ? 'Отключить' : 'Включить'}
-              </Button>
-            </ListItem>
+        <PanelContent>
+          {securitySettings.map(setting => (
+            <SettingRow key={setting.id}>
+              <SettingInfo>
+                <SettingName>{setting.name}</SettingName>
+                <SettingDescription>{setting.description}</SettingDescription>
+              </SettingInfo>
+              <Toggle 
+                $enabled={setting.enabled} 
+                onClick={() => toggleSetting(setting.id)}
+              />
+            </SettingRow>
           ))}
-        </Grid>
+        </PanelContent>
       </Panel>
-    </PageContainer>
+    </Container>
   );
 };
 

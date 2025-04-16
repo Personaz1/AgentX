@@ -162,15 +162,18 @@ const AnomalyList: React.FC<AnomalyListProps> = ({
     
     // Применение фильтров
     if (statusFilter !== 'all') {
-      filtered = filtered.filter(a => a.status === statusFilter as AnomalyStatus);
+      const statusValue = statusFilter as AnomalyStatus;
+      filtered = filtered.filter(a => a.status === statusValue);
     }
     
     if (severityFilter !== 'all') {
-      filtered = filtered.filter(a => a.severity === severityFilter as AnomalySeverity);
+      const severityValue = severityFilter as AnomalySeverity;
+      filtered = filtered.filter(a => a.severity === severityValue);
     }
     
     if (typeFilter !== 'all') {
-      filtered = filtered.filter(a => a.type === typeFilter as AnomalyType);
+      const typeValue = typeFilter as AnomalyType;
+      filtered = filtered.filter(a => a.type === typeValue);
     }
     
     // Поиск по тексту
