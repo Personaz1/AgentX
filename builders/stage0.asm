@@ -265,10 +265,15 @@ handle_pop_reg:
     je      pop_to_r14
     cmp     bl, 1
     je      pop_to_r13
-    ; TODO: Добавить r12, r11
+    cmp     bl, 2
+    je      pop_to_r12
+    cmp     bl, 3
+    je      pop_to_r11
     jmp     vm_loop ; Неизвестный регистр, пока просто продолжаем
 pop_to_r14: mov r14, rax; jmp vm_loop
 pop_to_r13: mov r13, rax; jmp vm_loop
+pop_to_r12: mov r12, rax; jmp vm_loop
+pop_to_r11: mov r11, rax; jmp vm_loop
 
 handle_push_reg:
     ; Читаем номер регистра VM
@@ -279,24 +284,34 @@ handle_push_reg:
     je      push_from_r14
     cmp     bl, 1
     je      push_from_r13
-    ; TODO: Добавить r12, r11
+    cmp     bl, 2
+    je      push_from_r12
+    cmp     bl, 3
+    je      push_from_r11
     jmp     vm_loop ; Неизвестный регистр
 push_from_r14: push r14; mov r15, rsp; jmp vm_loop
 push_from_r13: push r13; mov r15, rsp; jmp vm_loop
+push_from_r12: push r12; mov r15, rsp; jmp vm_loop
+push_from_r11: push r11; mov r15, rsp; jmp vm_loop
 
 handle_jmp_reg:
-    ; Читаем номер регистра VM (1 байт)
+    ; Читаем номер регистра VM с адресом для прыжка (1 байт)
     movzx   rbx, byte [r10]
     inc     r10
     ; Прыгаем на адрес в регистре VM
     cmp     bl, 0
-    je      jmp_to_r14
+    je      jmp_to_r14_vm
     cmp     bl, 1
-    je      jmp_to_r13
-    ; TODO: Добавить r12, r11
-    jmp     vm_loop ; Неизвестный регистр
-jmp_to_r14: jmp r14 ; Непрямой прыжок на адрес в r14
-jmp_to_r13: jmp r13 ; Непрямой прыжок на адрес в r13
+    je      jmp_to_r13_vm
+    cmp     bl, 2
+    je      jmp_to_r12_vm
+    cmp     bl, 3
+    je      jmp_to_r11_vm
+    jmp     vm_loop ; Неизвестный регистр, просто продолжаем цикл
+jmp_to_r14_vm: jmp r14 ; Непрямой прыжок на адрес в r14
+jmp_to_r13_vm: jmp r13 ; Непрямой прыжок на адрес в r13
+jmp_to_r12_vm: jmp r12
+jmp_to_r11_vm: jmp r11
 
 handle_mov_reg_const:
     ; Читаем номер регистра VM (1 байт)
@@ -310,10 +325,15 @@ handle_mov_reg_const:
     je      mov_to_r14
     cmp     bl, 1
     je      mov_to_r13
-    ; TODO: Добавить r12, r11
+    cmp     bl, 2
+    je      mov_to_r12
+    cmp     bl, 3
+    je      mov_to_r11
     jmp     vm_loop ; Неизвестный регистр
 mov_to_r14: mov r14, rax; jmp vm_loop
 mov_to_r13: mov r13, rax; jmp vm_loop
+mov_to_r12: mov r12, rax; jmp vm_loop
+mov_to_r11: mov r11, rax; jmp vm_loop
 
 handle_jz_reg: ; Jump if Zero (based on VM_R0/r14)
     ; Читаем номер регистра VM с адресом для прыжка (1 байт)
@@ -328,10 +348,15 @@ handle_jz_reg: ; Jump if Zero (based on VM_R0/r14)
     je      jz_to_r14
     cmp     bl, 1
     je      jz_to_r13
-    ; TODO: Добавить r12, r11
-    jmp     vm_loop ; Неизвестный регистр
-jz_to_r14: jmp r14
+    cmp     bl, 2
+    je      jz_to_r12
+    cmp     bl, 3
+    je      jz_to_r11
+    jmp     vm_loop ; Неизвестный регистр, просто продолжаем цикл
+jz_to_r14: jmp r14 ; Непрямой прыжок
 jz_to_r13: jmp r13
+jz_to_r12: jmp r12
+jz_to_r11: jmp r11
 
 handle_xor_mem:
     ; Снимаем аргументы со стека VM (адрес данных, размер, ключ)
