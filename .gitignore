@@ -265,3 +265,6 @@ secret_dev_notes.md
 
 # Игнорировать папку codex
 /codex/
+
+# User prompts
+config/prompts/user_prompt.json
