@@ -69,7 +69,6 @@ env/
 
 # VS Code
 .vscode/
-*.code-workspace
 
 # Logs
 logs/
@@ -121,8 +120,6 @@ server_log*
 .dev_plan_secret.md
 
 # Особые файлы разработки 
-DEV_NOTES.md
-secret_dev_notes.md
 *.secret.md
 
 # Byte-compiled / optimized / DLL files
@@ -229,3 +226,35 @@ extracted_data/
 # Ignore старые директории тестов
 /test/
 /neurozond/test/
+
+# Временные файлы
+*~
+*.swp
+*.swo
+
+# Директории сборки
+/build/
+/bin/
+/dist/
+/target/
+/.idea/
+/.vscode/
+
+# Объектные файлы и библиотеки
+*.o
+*.so
+*.a
+*.dll
+*.dylib
+*.obj
+*.exe
+*.out
+
+# Логи и временные файлы
+*.log
+*.tmp
+core
+
+# Специфичные для системы файлы
+.DS_Store
+Thumbs.db
