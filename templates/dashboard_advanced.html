@@ -12,6 +12,42 @@ body {
     margin: 0 auto;
     padding: 2rem 1rem 1rem 1rem;
 }
+
+/* Навигационная панель */
+.dashboard-navbar {
+    display: flex;
+    gap: 1em;
+    margin-bottom: 1.5em;
+    background: #1a1e26;
+    padding: 0.5em 1em;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.nav-link-button {
+    background: #232b36;
+    color: #00ffe7;
+    border: none;
+    border-radius: 4px;
+    padding: 0.6em 1.2em;
+    font-weight: bold;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    transition: all 0.2s;
+}
+
+.nav-link-button:hover {
+    background: #2a3340;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 5px rgba(0, 255, 231, 0.2);
+}
+
+.nav-link-button i {
+    font-size: 1.1em;
+}
+
 .tabs {
     display: flex;
     border-bottom: 2px solid #222;
@@ -194,6 +230,19 @@ body.theme-matrix .action-btn:hover { background: #00ffe7; color: #000; }
 </div>
 <button id="panic-btn"><i class="fa-solid fa-skull-crossbones"></i> Panic mode</button>
 <div class="advanced-dashboard">
+    <!-- Добавляем навигационную панель -->
+    <div class="dashboard-navbar">
+        <a href="/neurorat" class="nav-link-button">
+            <i class="fa-solid fa-home"></i> Основная панель
+        </a>
+        <a href="/advanced_dashboard" class="nav-link-button" style="background: #2a3340;">
+            <i class="fa-solid fa-cogs"></i> Расширенная панель
+        </a>
+        <a href="/logout" class="nav-link-button">
+            <i class="fa-solid fa-sign-out-alt"></i> Выход
+        </a>
+    </div>
+
     <h1><i class="fa-solid fa-brain-circuit"></i> Advanced Botnet Dashboard</h1>
     <div class="card-metrics">
         <div class="metric-card">

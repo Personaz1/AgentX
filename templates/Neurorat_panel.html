@@ -282,177 +282,226 @@ body {
         grid-template-columns: 1fr;
     }
 }
+
+/* Добавляем стиль для панели навигации */
+.nav-panel {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 30px;
+    gap: 20px;
+}
+
+.nav-button {
+    background: rgba(10, 10, 20, 0.8);
+    border: 1px solid #00c3ff;
+    color: #00c3ff;
+    padding: 10px 20px;
+    border-radius: 4px;
+    font-family: 'Orbitron', sans-serif;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s;
+}
+
+.nav-button:hover {
+    background: rgba(0, 195, 255, 0.1);
+    box-shadow: 0 0 15px rgba(0, 195, 255, 0.5);
+    transform: translateY(-2px);
+}
+
+.nav-button i {
+    font-size: 1.2em;
+}
 </style>
 
-<!-- Шапка с информацией -->
-<div class="cyber-panel">
-    <div class="panel-header">
-        <h2 class="neon-blue glitch">NeuroRAT Control Panel v2.0</h2>
-        <div id="status-display">
-            <span class="neon-yellow">Online Agents: </span>
-            <span class="neon-pink">25/45</span>
-        </div>
+<div class="cyberpunk-dashboard">
+    <h1 class="neon-blue">NeuroRAT <span class="neon-pink">C2</span> Command & Control</h1>
+    
+    <!-- Навигационная панель с кнопкой на продвинутую панель -->
+    <div class="nav-panel">
+        <a href="/neurorat" class="nav-button">
+            <i class="fas fa-home"></i> Главная панель
+        </a>
+        <a href="/advanced_dashboard" class="nav-button">
+            <i class="fas fa-cogs"></i> Расширенная панель
+        </a>
+        <a href="/logout" class="nav-button">
+            <i class="fas fa-sign-out-alt"></i> Выход
+        </a>
     </div>
     
-    <div class="panel-controls">
-        <button class="cyber-btn"><i class="fa-solid fa-satellite-dish"></i> Broadcast Command</button>
-        <button class="cyber-btn"><i class="fa-solid fa-shield-virus"></i> Stealth Mode</button>
-        <button class="cyber-btn"><i class="fa-solid fa-radiation"></i> Mass Deploy</button>
-        <button class="cyber-btn" style="color: #ff3a5e; border-color: #ff3a5e;"><i class="fa-solid fa-skull"></i> Terminate All</button>
+    <!-- Шапка с информацией -->
+    <div class="cyber-panel">
+        <div class="panel-header">
+            <h2 class="neon-blue glitch">NeuroRAT Control Panel v2.0</h2>
+            <div id="status-display">
+                <span class="neon-yellow">Online Agents: </span>
+                <span class="neon-pink">25/45</span>
+            </div>
+        </div>
+        
+        <div class="panel-controls">
+            <button class="cyber-btn"><i class="fa-solid fa-satellite-dish"></i> Broadcast Command</button>
+            <button class="cyber-btn"><i class="fa-solid fa-shield-virus"></i> Stealth Mode</button>
+            <button class="cyber-btn"><i class="fa-solid fa-radiation"></i> Mass Deploy</button>
+            <button class="cyber-btn" style="color: #ff3a5e; border-color: #ff3a5e;"><i class="fa-solid fa-skull"></i> Terminate All</button>
+        </div>
     </div>
-</div>
 
-<!-- Основной контент в сетке -->
-<div class="grid-panels">
-    <!-- Панель агентов -->
-    <div class="cyber-panel">
-        <div class="panel-header">
-            <h2 class="neon-pink"><i class="fa-solid fa-robot"></i> Active Agents</h2>
-            <button class="cyber-btn"><i class="fa-solid fa-filter"></i> Filter</button>
-        </div>
-        
-        <table class="cyber-table">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Status</th>
-                    <th>Location</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>NEURO-01</td>
-                    <td><span class="status-indicator status-active"></span>Active</td>
-                    <td>Tokyo</td>
-                    <td>
-                        <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-terminal"></i></button>
-                        <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-file"></i></button>
-                        <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-skull"></i></button>
-                    </td>
-                </tr>
-                <tr>
-                    <td>NEURO-05</td>
-                    <td><span class="status-indicator status-offline"></span>Offline</td>
-                    <td>London</td>
-                    <td>
-                        <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-terminal"></i></button>
-                        <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-file"></i></button>
-                        <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-skull"></i></button>
-                    </td>
-                </tr>
-                <tr>
-                    <td>NEURO-12</td>
-                    <td><span class="status-indicator status-waiting"></span>Waiting</td>
-                    <td>New York</td>
-                    <td>
-                        <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-terminal"></i></button>
-                        <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-file"></i></button>
-                        <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-skull"></i></button>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-    
-    <!-- Панель терминала -->
-    <div class="cyber-panel">
-        <div class="panel-header">
-            <h2 class="neon-blue"><i class="fa-solid fa-terminal"></i> Command Center</h2>
-            <button class="cyber-btn"><i class="fa-solid fa-broom"></i> Clear</button>
-        </div>
-        
-        <div class="terminal">
-            <div class="terminal-line">> Initializing NeuroRAT kernel modules...</div>
-            <div class="terminal-line">> Loading EDR evasion routines...</div>
-            <div class="terminal-line">> Establishing covert channels...</div>
-            <div class="terminal-line">> Connection established with 25 agents</div>
-            <div class="terminal-line">> System ready. Awaiting commands.</div>
-            <div class="terminal-line" style="margin-top: 10px;">
-                > <input type="text" class="terminal-input" placeholder="Enter command...">
-            </div>
-        </div>
-    </div>
-    
-    <!-- Карта распределения -->
-    <div class="cyber-panel">
-        <div class="panel-header">
-            <h2 class="neon-yellow"><i class="fa-solid fa-map"></i> Global Network</h2>
-            <button class="cyber-btn"><i class="fa-solid fa-expand"></i> Expand</button>
-        </div>
-        
-        <div class="map-widget" id="global-map">
-            <!-- Маркеры будут добавлены через JavaScript -->
-            <div class="map-marker" style="top: 35%; left: 80%;"></div>
-            <div class="map-marker" style="top: 25%; left: 45%;"></div>
-            <div class="map-marker" style="top: 30%; left: 25%;"></div>
-            <div class="map-marker" style="top: 40%; left: 50%;"></div>
-            <div class="map-marker" style="top: 70%; left: 60%;"></div>
-        </div>
-    </div>
-    
-    <!-- Панель статистики -->
-    <div class="cyber-panel">
-        <div class="panel-header">
-            <h2 class="neon-pink"><i class="fa-solid fa-chart-line"></i> Operation Stats</h2>
-            <button class="cyber-btn"><i class="fa-solid fa-download"></i> Export</button>
-        </div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-            <div>
-                <h3 class="neon-blue">Targets</h3>
-                <div style="margin: 15px 0; font-size: 2rem; font-weight: bold;">156</div>
-                <div style="color: #aaa;">Active targets in network</div>
+    <!-- Основной контент в сетке -->
+    <div class="grid-panels">
+        <!-- Панель агентов -->
+        <div class="cyber-panel">
+            <div class="panel-header">
+                <h2 class="neon-pink"><i class="fa-solid fa-robot"></i> Active Agents</h2>
+                <button class="cyber-btn"><i class="fa-solid fa-filter"></i> Filter</button>
             </div>
             
-            <div>
-                <h3 class="neon-yellow">Data Extracted</h3>
-                <div style="margin: 15px 0; font-size: 2rem; font-weight: bold;">2.3 TB</div>
-                <div style="color: #aaa;">Total exfiltrated data</div>
+            <table class="cyber-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Status</th>
+                        <th>Location</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>NEURO-01</td>
+                        <td><span class="status-indicator status-active"></span>Active</td>
+                        <td>Tokyo</td>
+                        <td>
+                            <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-terminal"></i></button>
+                            <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-file"></i></button>
+                            <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-skull"></i></button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>NEURO-05</td>
+                        <td><span class="status-indicator status-offline"></span>Offline</td>
+                        <td>London</td>
+                        <td>
+                            <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-terminal"></i></button>
+                            <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-file"></i></button>
+                            <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-skull"></i></button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>NEURO-12</td>
+                        <td><span class="status-indicator status-waiting"></span>Waiting</td>
+                        <td>New York</td>
+                        <td>
+                            <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-terminal"></i></button>
+                            <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-file"></i></button>
+                            <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-skull"></i></button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Панель терминала -->
+        <div class="cyber-panel">
+            <div class="panel-header">
+                <h2 class="neon-blue"><i class="fa-solid fa-terminal"></i> Command Center</h2>
+                <button class="cyber-btn"><i class="fa-solid fa-broom"></i> Clear</button>
             </div>
             
-            <div>
-                <h3 class="neon-blue">Wallets</h3>
-                <div style="margin: 15px 0; font-size: 2rem; font-weight: bold;">45</div>
-                <div style="color: #aaa;">Crypto wallets compromised</div>
+            <div class="terminal">
+                <div class="terminal-line">> Initializing NeuroRAT kernel modules...</div>
+                <div class="terminal-line">> Loading EDR evasion routines...</div>
+                <div class="terminal-line">> Establishing covert channels...</div>
+                <div class="terminal-line">> Connection established with 25 agents</div>
+                <div class="terminal-line">> System ready. Awaiting commands.</div>
+                <div class="terminal-line" style="margin-top: 10px;">
+                    > <input type="text" class="terminal-input" placeholder="Enter command...">
+                </div>
+            </div>
+        </div>
+        
+        <!-- Карта распределения -->
+        <div class="cyber-panel">
+            <div class="panel-header">
+                <h2 class="neon-yellow"><i class="fa-solid fa-map"></i> Global Network</h2>
+                <button class="cyber-btn"><i class="fa-solid fa-expand"></i> Expand</button>
             </div>
             
-            <div>
-                <h3 class="neon-yellow">Uptime</h3>
-                <div style="margin: 15px 0; font-size: 2rem; font-weight: bold;">72d 14h</div>
-                <div style="color: #aaa;">System operational time</div>
+            <div class="map-widget" id="global-map">
+                <!-- Маркеры будут добавлены через JavaScript -->
+                <div class="map-marker" style="top: 35%; left: 80%;"></div>
+                <div class="map-marker" style="top: 25%; left: 45%;"></div>
+                <div class="map-marker" style="top: 30%; left: 25%;"></div>
+                <div class="map-marker" style="top: 40%; left: 50%;"></div>
+                <div class="map-marker" style="top: 70%; left: 60%;"></div>
+            </div>
+        </div>
+        
+        <!-- Панель статистики -->
+        <div class="cyber-panel">
+            <div class="panel-header">
+                <h2 class="neon-pink"><i class="fa-solid fa-chart-line"></i> Operation Stats</h2>
+                <button class="cyber-btn"><i class="fa-solid fa-download"></i> Export</button>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div>
+                    <h3 class="neon-blue">Targets</h3>
+                    <div style="margin: 15px 0; font-size: 2rem; font-weight: bold;">156</div>
+                    <div style="color: #aaa;">Active targets in network</div>
+                </div>
+                
+                <div>
+                    <h3 class="neon-yellow">Data Extracted</h3>
+                    <div style="margin: 15px 0; font-size: 2rem; font-weight: bold;">2.3 TB</div>
+                    <div style="color: #aaa;">Total exfiltrated data</div>
+                </div>
+                
+                <div>
+                    <h3 class="neon-blue">Wallets</h3>
+                    <div style="margin: 15px 0; font-size: 2rem; font-weight: bold;">45</div>
+                    <div style="color: #aaa;">Crypto wallets compromised</div>
+                </div>
+                
+                <div>
+                    <h3 class="neon-yellow">Uptime</h3>
+                    <div style="margin: 15px 0; font-size: 2rem; font-weight: bold;">72d 14h</div>
+                    <div style="color: #aaa;">System operational time</div>
+                </div>
             </div>
         </div>
     </div>
-</div>
 
-<!-- Модальное окно Reasoning -->
-<div id="ai-reasoning" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000;">
-    <div style="max-width: 600px; margin: 50px auto; background: #0a0a14; border: 1px solid #ff00e1; padding: 20px; border-radius: 5px; box-shadow: 0 0 20px rgba(255, 0, 225, 0.5);">
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ff00e1; padding-bottom: 10px; margin-bottom: 15px;">
-            <h2 class="neon-pink">AI Reasoning Module</h2>
-            <span style="cursor: pointer; font-size: 1.5rem; color: #ff00e1;" onclick="document.getElementById('ai-reasoning').style.display='none';">&times;</span>
-        </div>
-        
-        <div id="reasoning-content">
-            <h3 class="neon-blue">Target Analysis</h3>
-            <p>Target appears to be running Windows 11 with updated security measures. Recommend using memory corruption technique bypass-11 with UAC evasion module.</p>
+    <!-- Модальное окно Reasoning -->
+    <div id="ai-reasoning" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000;">
+        <div style="max-width: 600px; margin: 50px auto; background: #0a0a14; border: 1px solid #ff00e1; padding: 20px; border-radius: 5px; box-shadow: 0 0 20px rgba(255, 0, 225, 0.5);">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ff00e1; padding-bottom: 10px; margin-bottom: 15px;">
+                <h2 class="neon-pink">AI Reasoning Module</h2>
+                <span style="cursor: pointer; font-size: 1.5rem; color: #ff00e1;" onclick="document.getElementById('ai-reasoning').style.display='none';">&times;</span>
+            </div>
             
-            <h3 class="neon-yellow" style="margin-top: 15px;">Attack Vectors</h3>
-            <ul style="list-style: none; padding-left: 0;">
-                <li><span class="neon-pink">✓</span> Supply Chain Vulnerability</li>
-                <li><span class="neon-pink">✓</span> Zero-day Browser Exploit</li>
-                <li><span class="neon-pink">✗</span> Social Engineering (Low success probability)</li>
-            </ul>
-            
-            <h3 class="neon-blue" style="margin-top: 15px;">Recommended Actions</h3>
-            <p>Deploy browser zero-day with EDR evasion module. Exfiltrate data through DNS covert channel with packet fragmentation.</p>
+            <div id="reasoning-content">
+                <h3 class="neon-blue">Target Analysis</h3>
+                <p>Target appears to be running Windows 11 with updated security measures. Recommend using memory corruption technique bypass-11 with UAC evasion module.</p>
+                
+                <h3 class="neon-yellow" style="margin-top: 15px;">Attack Vectors</h3>
+                <ul style="list-style: none; padding-left: 0;">
+                    <li><span class="neon-pink">✓</span> Supply Chain Vulnerability</li>
+                    <li><span class="neon-pink">✓</span> Zero-day Browser Exploit</li>
+                    <li><span class="neon-pink">✗</span> Social Engineering (Low success probability)</li>
+                </ul>
+                
+                <h3 class="neon-blue" style="margin-top: 15px;">Recommended Actions</h3>
+                <p>Deploy browser zero-day with EDR evasion module. Exfiltrate data through DNS covert channel with packet fragmentation.</p>
+            </div>
         </div>
     </div>
-</div>
 
-<!-- Кнопка PANIC -->
-<button class="panic-btn">PANIC</button>
+    <!-- Кнопка PANIC -->
+    <button class="panic-btn">PANIC</button>
+</div>
 
 <script>
 // Имитация работы терминала
