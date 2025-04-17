@@ -19,7 +19,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__, static_folder='neurorat-ui/dist', static_url_path='')
+# Определяем путь к UI
+FRONTEND_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'neurorat-ui/dist')
+if not os.path.exists(FRONTEND_PATH):
+    logger.warning(f"Путь к UI не найден: {FRONTEND_PATH}")
+    logger.warning("Возможно, UI не был скомпилирован. Запустите 'cd neurorat-ui && npm run build'")
+
+app = Flask(__name__, static_folder=FRONTEND_PATH, static_url_path='')
 
 @app.route('/')
 def index():
@@ -31,7 +37,7 @@ def admin():
 
 @app.route('/assets/<path:path>')
 def serve_assets(path):
-    return send_from_directory('neurorat-ui/dist/assets', path)
+    return send_from_directory(os.path.join(FRONTEND_PATH, 'assets'), path)
 
 @app.route('/api/status')
 def status():

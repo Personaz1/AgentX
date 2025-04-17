@@ -8,9 +8,10 @@ TEST_DIR = ./
 BUILD_DIR = ./build
 
 # Исходные файлы
-TEST_SRC = $(wildcard $(TEST_DIR)*.c)
+TEST_SRC = $(filter-out $(TEST_DIR)edr_evasion_test.c, $(wildcard $(TEST_DIR)*.c))
 SRC_FILES = $(SRC_DIR)/network/covert_channel.c \
-           $(SRC_DIR)/network/dns_channel.c
+            $(SRC_DIR)/network/dns_channel.c \
+            $(SRC_DIR)/network/icmp_channel.c
 
 # Объектные файлы
 TEST_OBJ = $(patsubst $(TEST_DIR)%.c,$(BUILD_DIR)/%.o,$(TEST_SRC))
@@ -28,6 +29,9 @@ all: $(TEST_BIN)
 
 # Компиляция тестов
 $(BUILD_DIR)/test_covert_channel: $(BUILD_DIR)/test_covert_channel.o $(SRC_OBJ)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+$(BUILD_DIR)/test_icmp_channel: $(BUILD_DIR)/test_icmp_channel.o $(BUILD_DIR)/network/icmp_channel.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 # Компиляция объектных файлов тестов

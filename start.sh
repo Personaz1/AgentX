@@ -59,7 +59,16 @@ if [ ! -d "neurorat-ui/dist" ]; then
     cd ..
     echo -e "${GREEN}Фронтенд успешно собран!${NC}"
 else
-    echo -e "${GREEN}Фронтенд уже собран.${NC}"
+    # Проверим, нужна ли пересборка
+    if [ -n "$(find neurorat-ui/src -newer neurorat-ui/dist -type f 2>/dev/null)" ]; then
+        echo -e "${YELLOW}Обнаружены изменения в исходном коде. Пересборка фронтенда...${NC}"
+        cd neurorat-ui
+        npm run build
+        cd ..
+        echo -e "${GREEN}Фронтенд успешно пересобран!${NC}"
+    else
+        echo -e "${GREEN}Фронтенд актуален.${NC}"
+    fi
 fi
 
 # Настройка nginx (если установлен)
