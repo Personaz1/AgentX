@@ -1,6 +1,6 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c99 -g
-LDFLAGS = -lm -pthread
+CFLAGS = -Wall -Wextra -Werror -O2 -g
+LDFLAGS = 
 
 # В зависимости от операционной системы добавляем нужные флаги и библиотеки
 ifeq ($(OS),Windows_NT)
@@ -75,6 +75,10 @@ run_test_icmp_channel: $(BIN_DIR)/test_icmp_channel
 run_test_main: $(BIN_DIR)/test_main
 	$(BIN_DIR)/test_main
 
+# Правило для run_test_crypto
+run_test_crypto: $(BIN_DIR)/test_crypto
+	$(BIN_DIR)/test_crypto
+
 # Очистка сборки
 clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR)
@@ -82,4 +86,4 @@ clean:
 # Цель по умолчанию
 all: $(TARGET) tests
 
-.PHONY: all clean tests run_tests run_test_dns_channel run_test_https_channel run_test_icmp_channel run_test_main 
+.PHONY: all clean tests run_tests run_test_dns_channel run_test_https_channel run_test_icmp_channel run_test_main run_test_crypto 
