@@ -5,6 +5,7 @@ import styled, { ThemeProvider as StyledThemeProvider } from 'styled-components'
 
 // Components
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import Sidebar from './components/Sidebar';
 
 // Pages
 import Dashboard from './pages/Dashboard';
@@ -14,14 +15,25 @@ import AnomalyDetectionPage from './pages/AnomalyDetectionPage';
 import AnomalyDetailsPage from './pages/AnomalyDetailsPage';
 import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
+import CodexPage from './pages/CodexPage';
+import C1BrainPage from './pages/C1BrainPage';
+import SecurityPage from './pages/SecurityPage';
+import TasksPage from './pages/TasksPage';
+import ReportsPage from './pages/ReportsPage';
+import SettingsPage from './pages/SettingsPage';
 
 // Styles
 const AppContainer = styled.div`
   display: flex;
-  flex-direction: column;
   min-height: 100vh;
   background-color: #121212;
   color: #e0e0e0;
+`;
+
+const ContentArea = styled.div`
+  flex: 1;
+  margin-left: 250px;
+  padding: 20px;
 `;
 
 // Custom theme
@@ -77,24 +89,31 @@ const App: React.FC = () => {
       <StyledThemeProvider theme={styledTheme}>
         <AppContainer>
           <Router>
-            <Routes>
-              {/* Public routes */}
-              <Route path="/login" element={<LoginPage />} />
-              
-              {/* Protected routes */}
-              <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-              <Route path="/zonds" element={<ProtectedRoute><ZondsManagementPage /></ProtectedRoute>} />
-              <Route path="/incidents" element={<ProtectedRoute><IncidentsListPage /></ProtectedRoute>} />
-              <Route path="/anomalies" element={<ProtectedRoute><AnomalyDetectionPage /></ProtectedRoute>} />
-              <Route path="/anomalies/:id" element={<ProtectedRoute><AnomalyDetailsPage /></ProtectedRoute>} />
-              
-              {/* Redirects */}
-              <Route path="/home" element={<Navigate to="/" replace />} />
-              <Route path="/dashboard" element={<Navigate to="/" replace />} />
-              
-              {/* 404 Not Found */}
-              <Route path="*" element={<NotFoundPage />} />
-            </Routes>
+            <Sidebar />
+            <ContentArea>
+              <Routes>
+                {/* Public routes */}
+                <Route path="/login" element={<LoginPage />} />
+                
+                {/* Protected routes */}
+                <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                <Route path="/zonds" element={<ProtectedRoute><ZondsManagementPage /></ProtectedRoute>} />
+                <Route path="/incidents" element={<ProtectedRoute><IncidentsListPage /></ProtectedRoute>} />
+                <Route path="/anomalies" element={<ProtectedRoute><AnomalyDetectionPage /></ProtectedRoute>} />
+                <Route path="/anomalies/:id" element={<ProtectedRoute><AnomalyDetailsPage /></ProtectedRoute>} />
+                <Route path="/c1brain" element={<ProtectedRoute><C1BrainPage /></ProtectedRoute>} />
+                <Route path="/codex" element={<ProtectedRoute><CodexPage /></ProtectedRoute>} />
+                <Route path="/security" element={<ProtectedRoute><SecurityPage /></ProtectedRoute>} />
+                <Route path="/operations" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
+                <Route path="/analytics" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
+                <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+                <Route path="/billing" element={<ProtectedRoute><NotFoundPage /></ProtectedRoute>} />
+                
+                {/* 404 Not Found */}
+                <Route path="*" element={<NotFoundPage />} />
+              </Routes>
+            </ContentArea>
           </Router>
         </AppContainer>
       </StyledThemeProvider>

@@ -108,7 +108,7 @@ const StatusBadge = styled.span<{ status: IncidentStatus }>`
           background-color: rgba(251, 146, 60, 0.2);
           color: #F97316;
         `;
-      case IncidentStatus.MITIGATING:
+      case IncidentStatus.MITIGATED:
         return `
           background-color: rgba(14, 165, 233, 0.2);
           color: #0EA5E9;

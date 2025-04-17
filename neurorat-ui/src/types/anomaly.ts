@@ -50,13 +50,15 @@ export interface AnomalyStats {
   investigating: number;
   resolved: number;
   falsePositive: number;
-  bySeverity: {
-    low: number;
-    medium: number;
-    high: number;
-    critical: number;
+  byStatus: {
+    [key in AnomalyStatus]: number;
   };
-  byType: Record<AnomalyType, number>;
+  bySeverity: {
+    [key in AnomalySeverity]: number;
+  };
+  byType: {
+    [key in AnomalyType]: number;
+  };
 }
 
 // Типы для запросов API

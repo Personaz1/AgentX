@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import styled from 'styled-components';
-import { FiHome, FiServer, FiList, FiBrain, FiDollarSign, FiSettings, FiFileText, FiAlertTriangle } from 'react-icons/fi';
+import { FiHome, FiServer, FiList, FiBrain, FiDollarSign, FiSettings, FiFileText, FiAlertTriangle, FiCode } from 'react-icons/fi';
 
 const SidebarContainer = styled.div`
   width: 250px;
@@ -109,6 +109,10 @@ const Sidebar: React.FC = () => {
         <NavItem to="/c1brain">
           <NavIcon><FiBrain /></NavIcon>
           C1Brain
+        </NavItem>
+        <NavItem to="/codex">
+          <NavIcon><FiCode /></NavIcon>
+          Codex
         </NavItem>
         <NavItem to="/ats">
           <NavIcon><FiDollarSign /></NavIcon>

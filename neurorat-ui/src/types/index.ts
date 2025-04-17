@@ -181,7 +181,7 @@ export interface SystemStats {
 export enum IncidentStatus {
   NEW = 'NEW',
   INVESTIGATING = 'INVESTIGATING',
-  MITIGATING = 'MITIGATING', 
+  MITIGATED = 'MITIGATED', 
   RESOLVED = 'RESOLVED',
   CLOSED = 'CLOSED'
 }
@@ -268,7 +268,7 @@ export interface IncidentStats {
   total: number;
   new: number;
   investigating: number;
-  mitigating: number;
+  mitigated: number;
   resolved: number;
   closed: number;
   bySeverity: {
@@ -386,61 +386,4 @@ export interface ATSState {
   totalOperations: number;
   successRate: number;
   lastOperation?: ATSOperation;
-}
-
-// Типы инцидентов
-export enum IncidentType {
-  UNAUTHORIZED_ACCESS = 'UNAUTHORIZED_ACCESS',
-  DATA_BREACH = 'DATA_BREACH',
-  MALWARE = 'MALWARE',
-  DDOS = 'DDOS',
-  PHISHING = 'PHISHING',
-  INSIDER_THREAT = 'INSIDER_THREAT',
-  RANSOMWARE = 'RANSOMWARE',
-  SYSTEM_COMPROMISE = 'SYSTEM_COMPROMISE',
-  NETWORK_INTRUSION = 'NETWORK_INTRUSION',
-  SOCIAL_ENGINEERING = 'SOCIAL_ENGINEERING',
-  UNKNOWN = 'UNKNOWN'
-}
-
-// Комментарий к инциденту
-export interface IncidentComment {
-  id: string;
-  author: string;
-  text: string;
-  createdAt: string;
-}
-
-// Действие в хронологии инцидента
-export interface IncidentAction {
-  id: string;
-  type: 'status_change' | 'assignment' | 'comment' | 'remediation' | 'other';
-  description: string;
-  performedBy: string;
-  performedAt: string;
-}
-
-// Инцидент
-export interface Incident {
-  id: string;
-  title: string;
-  description: string;
-  status: IncidentStatus;
-  severity: IncidentSeverity;
-  type: IncidentType;
-  affectedSystems?: string[];
-  affectedZonds?: string[];
-  detectionSource: string;
-  detectedAt: string;
-  reportedBy: string;
-  assignedTo?: string;
-  resolvedAt?: string;
-  resolvedBy?: string;
-  closedAt?: string;
-  rootCause?: string;
-  resolution?: string;
-  tags: string[];
-  impactDescription?: string;
-  comments?: IncidentComment[];
-  actions?: IncidentAction[];
 } 

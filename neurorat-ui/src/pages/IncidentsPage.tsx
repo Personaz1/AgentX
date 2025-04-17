@@ -5,8 +5,11 @@ import {
   Incident, 
   IncidentStatus, 
   IncidentSeverity, 
-  IncidentType 
-} from '../types';
+  IncidentType,
+  IncidentListParams,
+  IncidentFilter
+} from '../types/incident';
+import { incidentService } from '../services/api';
 
 // Styled Components
 const Container = styled.div`
@@ -25,7 +28,7 @@ const Header = styled.div`
 const Title = styled.h1`
   font-size: 24px;
   font-weight: bold;
-  color: ${props => props.theme.colors.text.primary};
+  color: ${props => props.theme.text?.primary || '#F8F8F2'};
 `;
 
 const StatsContainer = styled.div`
@@ -35,7 +38,7 @@ const StatsContainer = styled.div`
 `;
 
 const StatCard = styled.div`
-  background: ${props => props.theme.colors.background.card};
+  background: ${props => props.theme.bg?.secondary || '#1E1E2E'};
   border-radius: 8px;
   padding: 16px;
   flex: 1;
@@ -48,12 +51,12 @@ const StatCard = styled.div`
 const StatValue = styled.div`
   font-size: 24px;
   font-weight: bold;
-  color: ${props => props.theme.colors.text.primary};
+  color: ${props => props.theme.text?.primary || '#F8F8F2'};
 `;
 
 const StatLabel = styled.div`
   font-size: 14px;
-  color: ${props => props.theme.colors.text.secondary};
+  color: ${props => props.theme.text?.secondary || '#6C7293'};
   margin-top: 4px;
 `;
 
@@ -67,68 +70,68 @@ const FiltersContainer = styled.div`
 const SearchInput = styled.input`
   padding: 8px 16px;
   border-radius: 4px;
-  border: 1px solid ${props => props.theme.colors.border.main};
-  background: ${props => props.theme.colors.background.input};
-  color: ${props => props.theme.colors.text.primary};
+  border: 1px solid ${props => props.theme.border?.primary || '#44475A'};
+  background: ${props => props.theme.bg?.input || '#1E1E2E'};
+  color: ${props => props.theme.text?.primary || '#F8F8F2'};
   flex: 1;
   min-width: 250px;
 
   &:focus {
     outline: none;
-    border-color: ${props => props.theme.colors.primary.main};
+    border-color: ${props => props.theme.colors?.primary || '#0F94FF'};
   }
 `;
 
 const Select = styled.select`
   padding: 8px 16px;
   border-radius: 4px;
-  border: 1px solid ${props => props.theme.colors.border.main};
-  background: ${props => props.theme.colors.background.input};
-  color: ${props => props.theme.colors.text.primary};
+  border: 1px solid ${props => props.theme.border?.primary || '#44475A'};
+  background: ${props => props.theme.bg?.input || '#1E1E2E'};
+  color: ${props => props.theme.text?.primary || '#F8F8F2'};
 
   &:focus {
     outline: none;
-    border-color: ${props => props.theme.colors.primary.main};
+    border-color: ${props => props.theme.colors?.primary || '#0F94FF'};
   }
 `;
 
 const Button = styled.button`
   padding: 8px 16px;
   border-radius: 4px;
-  background: ${props => props.theme.colors.primary.main};
+  background: ${props => props.theme.colors?.primary || '#0F94FF'};
   color: white;
   border: none;
   cursor: pointer;
   font-weight: bold;
 
   &:hover {
-    background: ${props => props.theme.colors.primary.dark};
+    background: ${props => props.theme.accent?.primary || '#BD93F9'};
   }
 `;
 
 const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
-  background: ${props => props.theme.colors.background.card};
+  background: ${props => props.theme.bg?.secondary || '#1E1E2E'};
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 `;
 
 const TableHead = styled.thead`
-  background: ${props => props.theme.colors.background.paper};
-  border-bottom: 1px solid ${props => props.theme.colors.border.main};
+  background: ${props => props.theme.bg?.tertiary || '#282A36'};
+  border-bottom: 1px solid ${props => props.theme.border?.primary || '#44475A'};
 `;
 
 const TableRow = styled.tr`
   cursor: pointer;
   
   &:hover {
-    background: ${props => props.theme.colors.background.hover};
+    background: ${props => props.theme.bg?.hover || '#333333'};
   }
 
   &:not(:last-child) {
-    border-bottom: 1px solid ${props => props.theme.colors.border.light};
+    border-bottom: 1px solid ${props => props.theme.border?.secondary || '#6C7293'};
   }
 `;
 
@@ -136,12 +139,12 @@ const TableHeaderCell = styled.th`
   text-align: left;
   padding: 16px;
   font-weight: bold;
-  color: ${props => props.theme.colors.text.primary};
+  color: ${props => props.theme.text?.primary || '#F8F8F2'};
 `;
 
 const TableCell = styled.td`
   padding: 16px;
-  color: ${props => props.theme.colors.text.primary};
+  color: ${props => props.theme.text?.primary || '#F8F8F2'};
 `;
 
 const SeverityBadge = styled.span<{ severity: IncidentSeverity }>`
@@ -190,7 +193,7 @@ const StatusBadge = styled.span<{ status: IncidentStatus }>`
         return '#E3F2FD';
       case IncidentStatus.INVESTIGATING:
         return '#FFF3E0';
-      case IncidentStatus.MITIGATING:
+      case IncidentStatus.MITIGATED:
         return '#E1F5FE';
       case IncidentStatus.RESOLVED:
         return '#E8F5E9';
@@ -206,7 +209,7 @@ const StatusBadge = styled.span<{ status: IncidentStatus }>`
         return '#1565C0';
       case IncidentStatus.INVESTIGATING:
         return '#EF6C00';
-      case IncidentStatus.MITIGATING:
+      case IncidentStatus.MITIGATED:
         return '#0288D1';
       case IncidentStatus.RESOLVED:
         return '#2E7D32';
@@ -224,7 +227,7 @@ const EmptyState = styled.div`
   align-items: center;
   justify-content: center;
   padding: 48px;
-  color: ${props => props.theme.colors.text.secondary};
+  color: ${props => props.theme.text?.secondary || '#6C7293'};
   text-align: center;
 `;
 
@@ -245,208 +248,111 @@ const PageButton = styled.button<{ active?: boolean }>`
   height: 36px;
   border-radius: 4px;
   border: 1px solid ${props => props.active 
-    ? props.theme.colors.primary.main 
-    : props.theme.colors.border.main};
+    ? props.theme.colors?.primary || '#0F94FF'
+    : props.theme.border?.primary || '#44475A'};
   background: ${props => props.active 
-    ? props.theme.colors.primary.main 
-    : props.theme.colors.background.input};
+    ? props.theme.colors?.primary || '#0F94FF'
+    : props.theme.bg?.input || '#1E1E2E'};
   color: ${props => props.active 
     ? 'white' 
-    : props.theme.colors.text.primary};
+    : props.theme.text?.primary || '#F8F8F2'};
   cursor: pointer;
   
   &:hover {
     background: ${props => props.active 
-      ? props.theme.colors.primary.dark 
-      : props.theme.colors.background.hover};
+      ? props.theme.accent?.primary || '#BD93F9'
+      : props.theme.bg?.hover || '#383A59'};
   }
 `;
 
-// Моковые данные для инцидентов
-const mockIncidents: Incident[] = [
-  {
-    id: '1',
-    title: 'Атака методом перебора на веб-сервер',
-    description: 'Обнаружено большое количество неудачных попыток аутентификации с различных IP-адресов',
-    status: IncidentStatus.INVESTIGATING,
-    severity: IncidentSeverity.MEDIUM,
-    type: IncidentType.UNAUTHORIZED_ACCESS,
-    affectedSystems: ['Веб-сервер', 'Система аутентификации'],
-    affectedZonds: ['zond-001', 'zond-005'],
-    detectionSource: 'IDS',
-    detectedAt: '2023-11-15T14:30:00Z',
-    reportedBy: 'system',
-    tags: ['brute-force', 'authentication', 'web'],
-    comments: [
-      {
-        id: '1',
-        author: 'Иван Петров',
-        text: 'Начато расследование. Обнаружено более 3000 попыток входа за 2 часа.',
-        createdAt: '2023-11-15T14:45:00Z'
-      }
-    ],
-    actions: [
-      {
-        id: '1',
-        type: 'status_change',
-        description: 'Статус изменён на "Расследуется"',
-        performedBy: 'Иван Петров',
-        performedAt: '2023-11-15T14:45:00Z'
-      }
-    ]
-  },
-  {
-    id: '2',
-    title: 'Подозрительная активность вредоносного ПО на рабочей станции',
-    description: 'Обнаружены признаки активности трояна на рабочей станции маркетингового отдела',
-    status: IncidentStatus.MITIGATING,
-    severity: IncidentSeverity.HIGH,
-    type: IncidentType.MALWARE,
-    affectedSystems: ['Рабочая станция RK-234', 'Файловый сервер'],
-    affectedZonds: ['zond-008'],
-    detectionSource: 'EDR',
-    detectedAt: '2023-11-14T09:15:00Z',
-    reportedBy: 'system',
-    assignedTo: 'Алексей Смирнов',
-    tags: ['trojan', 'marketing', 'workstation'],
-    comments: [
-      {
-        id: '1',
-        author: 'Алексей Смирнов',
-        text: 'Начат анализ активности. Изолировал систему от сети.',
-        createdAt: '2023-11-14T09:30:00Z'
-      }
-    ],
-    actions: [
-      {
-        id: '1',
-        type: 'status_change',
-        description: 'Статус изменён на "Смягчение последствий"',
-        performedBy: 'Алексей Смирнов',
-        performedAt: '2023-11-14T11:20:00Z'
-      }
-    ]
-  },
-  {
-    id: '3',
-    title: 'Утечка данных через API',
-    description: 'Обнаружена подозрительная активность с повышенным объемом запросов к API с данными клиентов',
-    status: IncidentStatus.NEW,
-    severity: IncidentSeverity.CRITICAL,
-    type: IncidentType.DATA_BREACH,
-    affectedSystems: ['API-сервер', 'База данных клиентов'],
-    detectionSource: 'SIEM',
-    detectedAt: '2023-11-15T18:10:00Z',
-    reportedBy: 'system',
-    tags: ['api', 'data-leak', 'customer-data'],
-    comments: [],
-    actions: []
-  },
-  {
-    id: '4',
-    title: 'Фишинговая кампания на сотрудников',
-    description: 'Обнаружена массовая рассылка фишинговых писем, имитирующих корпоративные уведомления',
-    status: IncidentStatus.RESOLVED,
-    severity: IncidentSeverity.MEDIUM,
-    type: IncidentType.PHISHING,
-    affectedSystems: ['Почтовый сервер', 'Корпоративные учетные записи'],
-    detectionSource: 'Email Security Gateway',
-    detectedAt: '2023-11-12T08:45:00Z',
-    reportedBy: 'system',
-    assignedTo: 'Мария Козлова',
-    resolvedAt: '2023-11-13T16:30:00Z',
-    resolvedBy: 'Мария Козлова',
-    rootCause: 'Внешняя фишинговая кампания, нацеленная на сотрудников компании',
-    resolution: 'Блокировка отправителей, удаление писем из почтовых ящиков, проведение обучения по информационной безопасности',
-    tags: ['phishing', 'email', 'training'],
-    comments: [
-      {
-        id: '1',
-        author: 'Мария Козлова',
-        text: 'Выполнен анализ всех писем. 23 сотрудника открыли ссылки, 5 ввели учетные данные.',
-        createdAt: '2023-11-12T12:30:00Z'
-      }
-    ],
-    actions: [
-      {
-        id: '1',
-        type: 'status_change',
-        description: 'Статус изменён на "Решено"',
-        performedBy: 'Мария Козлова',
-        performedAt: '2023-11-13T16:30:00Z'
-      }
-    ]
-  },
-  {
-    id: '5',
-    title: 'DDoS-атака на корпоративный веб-сайт',
-    description: 'Зафиксирована распределенная атака типа "отказ в обслуживании" на корпоративный веб-сайт',
-    status: IncidentStatus.CLOSED,
-    severity: IncidentSeverity.LOW,
-    type: IncidentType.DDOS,
-    affectedSystems: ['Веб-сайт', 'Балансировщики нагрузки'],
-    detectionSource: 'Network Monitoring',
-    detectedAt: '2023-11-10T11:20:00Z',
-    reportedBy: 'system',
-    assignedTo: 'Дмитрий Волков',
-    resolvedAt: '2023-11-10T14:45:00Z',
-    resolvedBy: 'Дмитрий Волков',
-    closedAt: '2023-11-11T09:00:00Z',
-    rootCause: 'Целенаправленная DDoS-атака с ботнета',
-    resolution: 'Активация защиты от DDoS у провайдера, фильтрация трафика, масштабирование ресурсов',
-    tags: ['ddos', 'website', 'availability'],
-    comments: [],
-    actions: [
-      {
-        id: '1',
-        type: 'status_change',
-        description: 'Статус изменён на "Закрыт"',
-        performedBy: 'Дмитрий Волков',
-        performedAt: '2023-11-11T09:00:00Z'
-      }
-    ]
-  },
-];
+const LoadingContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+  width: 100%;
+`;
+
+const ErrorContainer = styled.div`
+  background-color: #ffebee;
+  color: #b71c1c;
+  padding: 16px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+`;
 
 const IncidentsPage: React.FC = () => {
   const navigate = useNavigate();
-  const [incidents, setIncidents] = useState<Incident[]>(mockIncidents);
-  const [filteredIncidents, setFilteredIncidents] = useState<Incident[]>(mockIncidents);
+  
+  // Состояние для API данных
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [filteredIncidents, setFilteredIncidents] = useState<Incident[]>([]);
+  
+  // Состояние для пагинации и фильтрации
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const itemsPerPage = 10;
+  
+  // Состояние для фильтров
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [severityFilter, setSeverityFilter] = useState<string>('');
   const [typeFilter, setTypeFilter] = useState<string>('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
 
+  // Загрузка данных с сервера
   useEffect(() => {
-    // Применяем фильтры
-    let result = incidents;
-    
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(incident => 
-        incident.title.toLowerCase().includes(query) || 
-        incident.description.toLowerCase().includes(query) ||
-        incident.tags.some(tag => tag.toLowerCase().includes(query))
-      );
+    fetchIncidents();
+  }, [currentPage, statusFilter, severityFilter, typeFilter, searchQuery]);
+
+  const fetchIncidents = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Формируем параметры запроса
+      const filters: IncidentFilter = {};
+      
+      if (statusFilter) {
+        filters.status = [statusFilter as IncidentStatus];
+      }
+      
+      if (severityFilter) {
+        filters.severity = [severityFilter as IncidentSeverity];
+      }
+      
+      if (typeFilter) {
+        filters.type = [typeFilter as IncidentType];
+      }
+      
+      if (searchQuery) {
+        filters.searchTerm = searchQuery;
+      }
+      
+      const params: IncidentListParams = {
+        page: currentPage,
+        pageSize: itemsPerPage,
+        sortBy: 'detectedAt',
+        sortDirection: 'desc',
+        filters
+      };
+      
+      const result = await incidentService.getIncidents(params);
+      
+      setTotalCount(result.totalCount);
+      setTotalPages(result.totalPages);
+      setIncidents(result.incidents);
+      setFilteredIncidents(result.incidents);
+      
+    } catch (err) {
+      console.error('Ошибка при загрузке инцидентов:', err);
+      setError('Не удалось загрузить список инцидентов. Пожалуйста, попробуйте позже.');
+    } finally {
+      setLoading(false);
     }
-    
-    if (statusFilter) {
-      result = result.filter(incident => incident.status === statusFilter);
-    }
-    
-    if (severityFilter) {
-      result = result.filter(incident => incident.severity === severityFilter);
-    }
-    
-    if (typeFilter) {
-      result = result.filter(incident => incident.type === typeFilter);
-    }
-    
-    setFilteredIncidents(result);
-    setCurrentPage(1);
-  }, [incidents, searchQuery, statusFilter, severityFilter, typeFilter]);
+  };
 
   const handleIncidentClick = (incidentId: string) => {
     navigate(`/incidents/${incidentId}`);
@@ -456,17 +362,11 @@ const IncidentsPage: React.FC = () => {
     navigate('/incidents/new');
   };
 
-  // Пагинация
-  const totalPages = Math.ceil(filteredIncidents.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedIncidents = filteredIncidents.slice(startIndex, startIndex + itemsPerPage);
-
   // Статистика
-  const totalIncidents = incidents.length;
   const newIncidents = incidents.filter(inc => inc.status === IncidentStatus.NEW).length;
   const inProgressIncidents = incidents.filter(inc => 
     inc.status === IncidentStatus.INVESTIGATING || 
-    inc.status === IncidentStatus.MITIGATING
+    inc.status === IncidentStatus.MITIGATED
   ).length;
   const criticalIncidents = incidents.filter(inc => inc.severity === IncidentSeverity.CRITICAL).length;
 
@@ -479,7 +379,7 @@ const IncidentsPage: React.FC = () => {
 
       <StatsContainer>
         <StatCard>
-          <StatValue>{totalIncidents}</StatValue>
+          <StatValue>{totalCount}</StatValue>
           <StatLabel>Всего инцидентов</StatLabel>
         </StatCard>
         <StatCard>
@@ -531,7 +431,13 @@ const IncidentsPage: React.FC = () => {
         </Select>
       </FiltersContainer>
 
-      {filteredIncidents.length > 0 ? (
+      {error && <ErrorContainer>{error}</ErrorContainer>}
+      
+      {loading ? (
+        <LoadingContainer>
+          <div>Загрузка инцидентов...</div>
+        </LoadingContainer>
+      ) : filteredIncidents.length > 0 ? (
         <>
           <Table>
             <TableHead>
@@ -546,7 +452,7 @@ const IncidentsPage: React.FC = () => {
               </tr>
             </TableHead>
             <tbody>
-              {paginatedIncidents.map(incident => (
+              {filteredIncidents.map(incident => (
                 <TableRow key={incident.id} onClick={() => handleIncidentClick(incident.id)}>
                   <TableCell>{incident.id}</TableCell>
                   <TableCell>{incident.title}</TableCell>
@@ -562,7 +468,7 @@ const IncidentsPage: React.FC = () => {
                   </TableCell>
                   <TableCell>{incident.type}</TableCell>
                   <TableCell>{new Date(incident.detectedAt).toLocaleString()}</TableCell>
-                  <TableCell>{incident.assignedTo || "—"}</TableCell>
+                  <TableCell>{incident.assignedTo ? incident.assignedTo.username : "—"}</TableCell>
                 </TableRow>
               ))}
             </tbody>

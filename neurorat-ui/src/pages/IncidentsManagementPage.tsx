@@ -104,7 +104,7 @@ const StatusBadge = styled.span<{ status: IncidentStatus }>`
           background-color: rgba(251, 146, 60, 0.2);
           color: #F97316;
         `;
-      case IncidentStatus.MITIGATING:
+      case IncidentStatus.MITIGATED:
         return `
           background-color: rgba(14, 165, 233, 0.2);
           color: #0EA5E9;
@@ -285,7 +285,7 @@ const mockIncidents: Incident[] = [
     id: '2',
     title: 'Подозрительная активность Mimikatz',
     description: 'Обнаружены признаки работы инструмента Mimikatz на рабочей станции финансового департамента.',
-    status: IncidentStatus.MITIGATING,
+    status: IncidentStatus.MITIGATED,
     severity: IncidentSeverity.HIGH,
     type: IncidentType.CREDENTIAL_COMPROMISE,
     affectedSystems: ['WS-FIN-023'],
@@ -363,7 +363,7 @@ const IncidentsManagementPage: React.FC = () => {
     total: incidents.length,
     new: incidents.filter(inc => inc.status === IncidentStatus.NEW).length,
     investigating: incidents.filter(inc => inc.status === IncidentStatus.INVESTIGATING).length,
-    mitigating: incidents.filter(inc => inc.status === IncidentStatus.MITIGATING).length,
+    mitigating: incidents.filter(inc => inc.status === IncidentStatus.MITIGATED).length,
     resolved: incidents.filter(inc => inc.status === IncidentStatus.RESOLVED).length,
     closed: incidents.filter(inc => inc.status === IncidentStatus.CLOSED).length,
     critical: incidents.filter(inc => inc.severity === IncidentSeverity.CRITICAL).length,
@@ -550,13 +550,13 @@ const IncidentsManagementPage: React.FC = () => {
                       {incident.status === IncidentStatus.INVESTIGATING && (
                         <Button 
                           variant="primary"
-                          onClick={() => handleUpdateStatus(incident.id, IncidentStatus.MITIGATING)}
+                          onClick={() => handleUpdateStatus(incident.id, IncidentStatus.MITIGATED)}
                         >
                           Начать устранение
                         </Button>
                       )}
                       
-                      {incident.status === IncidentStatus.MITIGATING && (
+                      {incident.status === IncidentStatus.MITIGATED && (
                         <Button 
                           variant="primary"
                           onClick={() => handleUpdateStatus(incident.id, IncidentStatus.RESOLVED)}

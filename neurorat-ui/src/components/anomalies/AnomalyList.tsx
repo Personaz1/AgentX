@@ -138,12 +138,16 @@ interface AnomalyListProps {
   anomalies: Anomaly[];
   loading?: boolean;
   onAnomalyClick?: (anomaly: Anomaly) => void;
+  onStatusChange?: (anomalyId: string, newStatus: AnomalyStatus) => Promise<void>;
+  onCreateIncident?: (anomalyId: string) => Promise<void>;
 }
 
 const AnomalyList: React.FC<AnomalyListProps> = ({ 
   anomalies, 
   loading = false,
-  onAnomalyClick 
+  onAnomalyClick,
+  onStatusChange,
+  onCreateIncident
 }) => {
   const [filteredAnomalies, setFilteredAnomalies] = useState<Anomaly[]>(anomalies);
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -211,7 +215,7 @@ const AnomalyList: React.FC<AnomalyListProps> = ({
     } else {
       // Всегда показываем первую и последнюю страницу
       let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
-      let endPage = Math.min(pageCount, startPage + maxPagesToShow - 1);
+      const endPage = Math.min(pageCount, startPage + maxPagesToShow - 1);
       
       // Корректировка, если мы близко к концу
       if (endPage - startPage + 1 < maxPagesToShow) {

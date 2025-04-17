@@ -262,3 +262,6 @@ Thumbs.db
 # Исключение заметок разработчика
 DEV_NOTES.md
 secret_dev_notes.md
+
+# Игнорировать папку codex
+/codex/

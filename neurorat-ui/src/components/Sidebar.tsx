@@ -1,106 +1,130 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import styled from 'styled-components';
+import { FiHome, FiServer, FiList, FiActivity, FiDollarSign, FiSettings, FiFileText, FiAlertTriangle, FiCode, FiCpu } from 'react-icons/fi';
+import { darkTheme } from '../theme';
 
-const SidebarContainer = styled.div`
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+// Типизация для темы styled-components
+type Theme = typeof darkTheme;
+
+const SidebarContainer = styled.div<{ theme: Theme }>`
+  width: 250px;
+  height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+  background-color: ${({ theme }) => theme.bg.secondary};
+  color: ${({ theme }) => theme.text.primary};
+  padding: 20px 0;
+  border-right: 1px solid ${({ theme }) => theme.border.primary};
   overflow-y: auto;
 `;
 
-const Logo = styled.div`
-  padding: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-bottom: 1px solid #333;
-`;
-
-const LogoText = styled.h1`
-  font-size: 1.5rem;
+const Logo = styled.div<{ theme: Theme }>`
+  font-size: 22px;
   font-weight: bold;
-  color: ${props => props.theme.accent.primary};
-  margin: 0;
+  text-align: center;
+  margin-bottom: 30px;
+  padding: 0 20px;
+  color: ${({ theme }) => theme.accent.primary};
 `;
 
 const NavSection = styled.div`
-  padding: 15px 0;
-  border-bottom: 1px solid #333;
+  margin-bottom: 25px;
+  padding: 0 15px;
 `;
 
-const SectionTitle = styled.h3`
-  font-size: 0.75rem;
+const SectionTitle = styled.div<{ theme: Theme }>`
+  font-size: 12px;
   text-transform: uppercase;
-  color: ${props => props.theme.text.tertiary};
-  padding: 0 20px;
+  color: ${({ theme }) => theme.text.secondary};
   margin-bottom: 10px;
+  padding: 0 10px;
+  letter-spacing: 0.5px;
 `;
 
-const NavItem = styled(NavLink)`
+const NavItem = styled(NavLink)<{ theme: Theme }>`
   display: flex;
   align-items: center;
-  padding: 10px 20px;
-  color: ${props => props.theme.text.secondary};
+  padding: 10px;
+  margin-bottom: 5px;
   text-decoration: none;
-  transition: all 0.2s;
-  
+  color: ${({ theme }) => theme.text.primary};
+  border-radius: 5px;
+  transition: all 0.2s ease;
+
   &:hover {
-    background-color: rgba(255, 255, 255, 0.05);
+    background-color: ${({ theme }) => theme.bg.hover};
   }
-  
+
   &.active {
-    background-color: rgba(0, 114, 245, 0.1);
-    color: ${props => props.theme.accent.primary};
-    border-left: 3px solid ${props => props.theme.accent.primary};
+    background-color: ${({ theme }) => theme.accent.primary};
+    color: ${({ theme }) => theme.text.inverted};
   }
 `;
 
-const NavIcon = styled.span`
+const NavIcon = styled.div`
   margin-right: 10px;
   display: flex;
   align-items: center;
-  font-size: 1.1rem;
+  justify-content: center;
+  font-size: 18px;
 `;
 
 const Sidebar: React.FC = () => {
   return (
     <SidebarContainer>
-      <Logo>
-        <LogoText>NeuroRAT</LogoText>
-      </Logo>
-      
+      <Logo>NeuroZond</Logo>
+
       <NavSection>
         <SectionTitle>Основное</SectionTitle>
-        <NavItem to="/" className={({ isActive }) => isActive ? 'active' : ''}>
-          <NavIcon>📊</NavIcon> Дашборд
+        <NavItem to="/dashboard">
+          <NavIcon><FiHome /></NavIcon>
+          Обзор
         </NavItem>
-        <NavItem to="/zonds" className={({ isActive }) => isActive ? 'active' : ''}>
-          <NavIcon>🖥️</NavIcon> Зонды
+        <NavItem to="/zonds">
+          <NavIcon><FiServer /></NavIcon>
+          Зонды
         </NavItem>
-        <NavItem to="/tasks" className={({ isActive }) => isActive ? 'active' : ''}>
-          <NavIcon>📋</NavIcon> Задачи
+        <NavItem to="/incidents">
+          <NavIcon><FiAlertTriangle /></NavIcon>
+          Инциденты
         </NavItem>
       </NavSection>
-      
+
       <NavSection>
         <SectionTitle>Управление</SectionTitle>
-        <NavItem to="/c1brain" className={({ isActive }) => isActive ? 'active' : ''}>
-          <NavIcon>🧠</NavIcon> C1Brain
+        <NavItem to="/codex">
+          <NavIcon><FiCode /></NavIcon>
+          Codex
         </NavItem>
-        <NavItem to="/ats" className={({ isActive }) => isActive ? 'active' : ''}>
-          <NavIcon>💰</NavIcon> ATS Модуль
+        <NavItem to="/c1brain">
+          <NavIcon><FiCpu /></NavIcon>
+          C1 Brain
+        </NavItem>
+        <NavItem to="/operations">
+          <NavIcon><FiList /></NavIcon>
+          Операции
+        </NavItem>
+        <NavItem to="/analytics">
+          <NavIcon><FiActivity /></NavIcon>
+          Аналитика
         </NavItem>
       </NavSection>
-      
+
       <NavSection>
         <SectionTitle>Система</SectionTitle>
-        <NavItem to="/settings" className={({ isActive }) => isActive ? 'active' : ''}>
-          <NavIcon>⚙️</NavIcon> Настройки
+        <NavItem to="/settings">
+          <NavIcon><FiSettings /></NavIcon>
+          Настройки
         </NavItem>
-        <NavItem to="/logs" className={({ isActive }) => isActive ? 'active' : ''}>
-          <NavIcon>📜</NavIcon> Журнал
+        <NavItem to="/security">
+          <NavIcon><FiFileText /></NavIcon>
+          Безопасность
+        </NavItem>
+        <NavItem to="/billing">
+          <NavIcon><FiDollarSign /></NavIcon>
+          Биллинг
         </NavItem>
       </NavSection>
     </SidebarContainer>
