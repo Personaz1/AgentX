@@ -2,13 +2,32 @@ CC = gcc
 CFLAGS = -Wall -Wextra -Werror -O2 -g
 LDFLAGS = 
 
+# --- Настройки зависимостей --- 
+# Включить поддержку libcurl для скачивания payload? (1 = да, 0 = нет)
+USE_CURL=1
+
+# --- Флаги и библиотеки в зависимости от ОС и настроек --- 
+CFLAGS += -Iinclude # Добавляем папку include для заголовочных файлов
+
 # В зависимости от операционной системы добавляем нужные флаги и библиотеки
 ifeq ($(OS),Windows_NT)
     CFLAGS += -D_WIN32
     LDFLAGS += -lws2_32
+    ifeq ($(USE_CURL),1)
+        CFLAGS += -DUSE_LIBCURL
+        # Путь к libcurl на Windows нужно указать явно (например, через -L и -I)
+        # LDFLAGS += -L/path/to/curl/lib -lcurl
+        # CFLAGS += -I/path/to/curl/include
+        # Пока предполагаем, что libcurl настроена в окружении сборки
+        LDFLAGS += -lcurl
+    endif
 else
     CFLAGS += -D_POSIX_C_SOURCE=200809L
-    LDFLAGS += -lcrypto -lssl
+    LDFLAGS += -lcrypto -lssl # Для OpenSSL (используется в covert_channel?)
+    ifeq ($(USE_CURL),1)
+        CFLAGS += -DUSE_LIBCURL
+        LDFLAGS += -lcurl
+    endif
 endif
 
 SRC_DIR = .

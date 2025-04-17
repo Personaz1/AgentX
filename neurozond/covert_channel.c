@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <arpa/inet.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -19,8 +20,9 @@
 #define sleep_ms(ms) usleep(ms * 1000)
 #endif
 
-#include "network/covert_channel.h"
-#include "network/https_channel.h"
+#include "covert_channel.h"
+#include "https_channel.h"
+#include "icmp_channel.h"   // Заголовок для ICMP (предполагаемый путь)
 
 /**
  * @brief Структура данных для хранения состояния скрытого канала связи
@@ -181,7 +183,7 @@ size_t covert_channel_send(covert_channel_handle handle, const unsigned char *da
         int range = channel_data->config.max_jitter_ms - channel_data->config.min_jitter_ms + 1;
         int jitter_ms = channel_data->config.min_jitter_ms + (rand() % range);
         if (jitter_ms > 0) { // Добавляем проверку, чтобы не вызывать sleep_ms(0)
-             sleep_ms(jitter_ms);
+        sleep_ms(jitter_ms);
         }
     }
     
@@ -228,7 +230,7 @@ size_t covert_channel_receive(covert_channel_handle handle, unsigned char *buffe
         int range = channel_data->config.max_jitter_ms - channel_data->config.min_jitter_ms + 1;
         int jitter_ms = channel_data->config.min_jitter_ms + (rand() % range);
         if (jitter_ms > 0) { // Добавляем проверку, чтобы не вызывать sleep_ms(0)
-             sleep_ms(jitter_ms);
+        sleep_ms(jitter_ms);
         }
     }
     

@@ -63,6 +63,25 @@ delay_loop:
     cmp     rax, 0x50000 ; Порог (подбирается экспериментально)
     jl      exit_program            ; Если времени прошло слишком мало (возможно, VM ускоряет?), выходим
     
+    ; --- Анти-отладка: Проверка аппаратных точек останова (DR0-DR7) --- 
+    mov     rax, dr7          ; Читаем регистр статуса отладки
+    test    rax, 0xFF         ; Проверяем биты L0-L3 и G0-G3 (разрешение точек)
+    jz      dr_check_ok       ; Если нули, точки не активны
+    ; Если точки разрешены, проверяем адреса
+    mov     rax, dr0
+    test    rax, rax
+    jnz     exit_program      ; Если DR0 != 0, выход
+    mov     rax, dr1
+    test    rax, rax
+    jnz     exit_program      ; Если DR1 != 0, выход
+    mov     rax, dr2
+    test    rax, rax
+    jnz     exit_program      ; Если DR2 != 0, выход
+    mov     rax, dr3
+    test    rax, rax
+    jnz     exit_program      ; Если DR3 != 0, выход
+dr_check_ok:
+    
     ; --- Основной цикл интерпретатора байткода --- 
 vm_loop:
     movzx   eax, byte [r10]   ; Читаем опкод
@@ -75,8 +94,20 @@ vm_loop:
     je      handle_push_const_qword
     cmp     al, 0x02          ; Опкод для LOAD_API_HASH?
     je      handle_load_api_hash
-    cmp     al, 0x03          ; Опкод для CALL_API?
-    je      handle_call_api
+    cmp     al, 0x03          ; Опкод для CALL_API (адрес в R0/r14)
+    je      handle_call_api_r0
+    cmp     al, 0x04          ; Опкод для POP_REG?
+    je      handle_pop_reg
+    cmp     al, 0x05          ; Опкод для PUSH_REG?
+    je      handle_push_reg
+    cmp     al, 0x06          ; Опкод для JMP_REG?
+    je      handle_jmp_reg
+    cmp     al, 0x07          ; Опкод для MOV_REG_CONST?
+    je      handle_mov_reg_const
+    cmp     al, 0x09          ; Опкод для JZ_REG?
+    je      handle_jz_reg
+    cmp     al, 0x0A          ; Опкод для XOR_MEM?
+    je      handle_xor_mem
     cmp     al, 0xFF          ; Опкод для HALT?
     je      handle_halt
 
@@ -115,13 +146,13 @@ handle_load_api_hash:
     pop     r10 ; Восстанавливаем VM_IP
     jmp     vm_loop
 
-handle_call_api:
+handle_call_api_r0:
     ; Читаем регистр VM с адресом API (1 байт)
     movzx   rcx, byte [r10]   ; Номер регистра (0=r14, 1=r13, ...)
-    inc     r10               ; VM_IP++
+    ; inc     r10               ; VM_IP++ (инкремент ниже, после чтения количества аргументов)
     ; Читаем количество аргументов (1 байт)
     movzx   rdx, byte [r10]   ; Число аргументов
-    inc     r10               ; VM_IP++
+    add     r10, 2            ; VM_IP += 2 (прочитали регистр и кол-во арг)
 
     ; Получаем адрес API из регистра VM
     ; TODO: Сделать более гибкую систему регистров VM
@@ -144,27 +175,57 @@ handle_call_api:
     push    r14 ; VM_R0 (Адрес API)
     push    r15 ; VM_SP
 
-    ; Перемещаем аргументы со стека VM в регистры/реальный стек
-    ; (Пока реализуем только до 4 аргументов для простоты)
-    ; TODO: Реализовать передачу >4 аргументов через стек
+    ; Перемещаем аргументы со стека VM в регистры и на реальный стек
+    ; Учитываем shadow space (4 * 8 = 32 байта) + место для аргументов > 4
+    mov     r8, rdx           ; Сохраняем количество аргументов в r8
     cmp     dl, 4
-    ja      exit_program      ; Пока не поддерживаем >4 аргументов
+    jbe     prepare_args_done ; Если аргументов <= 4, переходим к ним
+    
+    ; Если аргументов > 4, выделяем место на стеке (выровненное до 16)
+    mov     rax, rdx          ; rax = количество аргументов
+    sub     rax, 4            ; rax = количество аргументов на стеке
+    shl     rax, 3            ; rax = размер в байтах
+    add     rax, 8            ; +8 для выравнивания?
+    and     spl, 0xF0         ; Выравниваем RSP до 16 байт (может быть не так просто)
+    ; TODO: Реализовать правильное выравнивание стека!
+    sub     rsp, rax          ; Выделяем место
+    mov     r9, rsp           ; r9 - указатель на место для 5-го аргумента
+    push    r9                ; Сохраняем указатель на стековую область
+
+    ; Копируем аргументы > 4 со стека VM на реальный стек
+    mov     r11, rdx          ; r11 - счетчик аргументов
+    sub     r11, 4            ; Количество аргументов на стеке
+copy_stack_args:
+    mov     rcx, qword [r15 + r11*8 - 8] ; Берем аргумент со стека VM (последний идет первым на реальный стек)
+    mov     qword [r9 + r11*8 - 8], rcx ; Копируем на реальный стек
+    sub     r11, 1
+    jnz     copy_stack_args
+
+    pop     r9                ; Восстанавливаем r9 (не нужно, он 4й аргумент)
+    ; Теперь r15 указывает на 4й аргумент в стеке VM
+
+prepare_args_done:
+    mov     rdx, r8           ; Восстанавливаем количество аргументов в rdx
+    ; Загружаем первые 4 (или меньше) аргумента в регистры
     test    dl, dl
     jz      do_api_call       ; Если 0 аргументов, сразу вызываем
     
     mov     rcx, qword [r15] ; Первый аргумент в RCX
     add     r15, 8
-    cmp     dl, 1
+    cmp     dl, 1             ; Сравниваем с ОРИГИНАЛЬНЫМ количеством арг.
     je      do_api_call
     
     mov     rdx, qword [r15] ; Второй аргумент в RDX
     add     r15, 8
-    cmp     dl, 2
+    cmp     byte [rsp+0x48], 2 ; Сравниваем сохраненное кол-во арг (r8) с 2.
+    ; ПЕРЕДЕЛАТЬ: Сохранить rdx (кол-во арг) перед изменением
+    mov     byte [rbp-25], dl ; Сохраняем кол-во арг
+    cmp     dl, 2             ; Используем сохраненное значение
     je      do_api_call
 
     mov     r8, qword [r15]  ; Третий аргумент в R8
     add     r15, 8
-    cmp     dl, 3
+    cmp     byte [rbp-25], 3
     je      do_api_call
 
     mov     r9, qword [r15]  ; Четвертый аргумент в R9
@@ -172,6 +233,8 @@ handle_call_api:
 
 do_api_call:
     ; Выравнивание стека перед вызовом (ABI требует 16 байт)
+    ; Выделяем shadow space (32 байта)
+    sub     rsp, 0x20
     ; TODO: Реализовать правильное выравнивание
     call    rdi               ; Вызываем API (адрес в rdi)
     
@@ -184,6 +247,111 @@ do_api_call:
     pop     r11 ; VM_R3
     pop     r10 ; VM_IP
     
+    ; Очищаем стек от аргументов > 4, если они были
+    ; TODO: Реализовать очистку стека
+    ; mov     rsp, rbp ; Грубая очистка (неверно)
+    add     rsp, 0x20 ; Убираем shadow space
+    
+    jmp     vm_loop
+
+handle_pop_reg:
+    ; Читаем номер регистра VM (0=r14, 1=r13, 2=r12, 3=r11)
+    movzx   rbx, byte [r10]
+    inc     r10               ; VM_IP++
+    pop     rax               ; Снимаем значение со стека VM
+    mov     r15, rsp          ; Обновляем VM_SP
+    ; Сохраняем в нужный регистр VM
+    cmp     bl, 0
+    je      pop_to_r14
+    cmp     bl, 1
+    je      pop_to_r13
+    ; TODO: Добавить r12, r11
+    jmp     vm_loop ; Неизвестный регистр, пока просто продолжаем
+pop_to_r14: mov r14, rax; jmp vm_loop
+pop_to_r13: mov r13, rax; jmp vm_loop
+
+handle_push_reg:
+    ; Читаем номер регистра VM
+    movzx   rbx, byte [r10]
+    inc     r10
+    ; Кладем значение из регистра на стек VM
+    cmp     bl, 0
+    je      push_from_r14
+    cmp     bl, 1
+    je      push_from_r13
+    ; TODO: Добавить r12, r11
+    jmp     vm_loop ; Неизвестный регистр
+push_from_r14: push r14; mov r15, rsp; jmp vm_loop
+push_from_r13: push r13; mov r15, rsp; jmp vm_loop
+
+handle_jmp_reg:
+    ; Читаем номер регистра VM (1 байт)
+    movzx   rbx, byte [r10]
+    inc     r10
+    ; Прыгаем на адрес в регистре VM
+    cmp     bl, 0
+    je      jmp_to_r14
+    cmp     bl, 1
+    je      jmp_to_r13
+    ; TODO: Добавить r12, r11
+    jmp     vm_loop ; Неизвестный регистр
+jmp_to_r14: jmp r14 ; Непрямой прыжок на адрес в r14
+jmp_to_r13: jmp r13 ; Непрямой прыжок на адрес в r13
+
+handle_mov_reg_const:
+    ; Читаем номер регистра VM (1 байт)
+    movzx   rbx, byte [r10]
+    inc     r10
+    ; Читаем 64-битную константу
+    mov     rax, qword [r10]
+    add     r10, 8
+    ; Записываем в нужный регистр VM
+    cmp     bl, 0
+    je      mov_to_r14
+    cmp     bl, 1
+    je      mov_to_r13
+    ; TODO: Добавить r12, r11
+    jmp     vm_loop ; Неизвестный регистр
+mov_to_r14: mov r14, rax; jmp vm_loop
+mov_to_r13: mov r13, rax; jmp vm_loop
+
+handle_jz_reg: ; Jump if Zero (based on VM_R0/r14)
+    ; Читаем номер регистра VM с адресом для прыжка (1 байт)
+    movzx   rbx, byte [r10]
+    inc     r10
+    ; Проверяем VM_R0 (r14) на ноль
+    test    r14, r14
+    jnz     vm_loop ; Если не ноль, просто продолжаем
+    
+    ; Если ноль, прыгаем на адрес в указанном регистре
+    cmp     bl, 0
+    je      jz_to_r14
+    cmp     bl, 1
+    je      jz_to_r13
+    ; TODO: Добавить r12, r11
+    jmp     vm_loop ; Неизвестный регистр
+jz_to_r14: jmp r14
+jz_to_r13: jmp r13
+
+handle_xor_mem:
+    ; Снимаем аргументы со стека VM (адрес данных, размер, ключ)
+    pop     r8                ; R8 = Ключ (пока qword)
+    pop     rdx               ; RDX = Размер
+    pop     rcx               ; RCX = Адрес данных
+    mov     r15, rsp          ; Обновляем VM_SP
+
+    ; Простой XOR цикл
+    xor     rbx, rbx          ; Счетчик i = 0
+xor_mem_loop:
+    mov     al, byte [rcx + rbx] ; Байт данных
+    xor     al, r8b           ; XOR с младшим байтом ключа (упрощение!)
+    mov     byte [rcx + rbx], al ; Записываем обратно
+    inc     rbx
+    cmp     rbx, rdx
+    jb      xor_mem_loop
+
+    ; Результат операции (например, 0 = успех) в R0/r14
+    xor     r14, r14
     jmp     vm_loop
 
 handle_halt:
@@ -370,7 +538,7 @@ crypt_loop:
     inc     rdi               ; Следующий байт выходного буфера
     dec     r8                ; Уменьшаем счетчик длины
     jnz     crypt_loop
-
+    
     pop     rsi
     ret
 

@@ -293,8 +293,8 @@ class SupplyChainEngine:
 
         if not packages_to_scan:
             self.logger.info("Нет пакетов PyPI для сканирования.")
-            return []
-
+        return []
+    
         scanned_count = 0
         for pkg_name in list(packages_to_scan)[:self.max_scan_results]: # Ограничение количества
             if scanned_count >= self.max_scan_results:
@@ -432,7 +432,7 @@ class SupplyChainEngine:
             
         self.logger.info(f"Завершено сканирование GitHub. Добавлено новых целей: {len(found_targets)}")
         return found_targets
-
+    
     def _scan_docker_images(self) -> List[SupplyChainTarget]:
         """Сканирует DockerHub на наличие уязвимых образов"""
         # TODO: Реализовать сканирование DockerHub
@@ -595,7 +595,7 @@ class SupplyChainEngine:
         if not repo_full_name:
              self.logger.error("Отсутствует full_name в данных цели GitHub.")
              target.infection_details = {"error": "Missing repository full_name"}
-             return False
+        return False
 
         target.update_status(InfectionStatus.PREPARING)
 

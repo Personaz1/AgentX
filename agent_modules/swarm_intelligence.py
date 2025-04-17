@@ -1374,7 +1374,7 @@ class TaskDistributor:
         #    # Объединить результаты
 
         return results
-
+    
     def _collect_system_info(self) -> Dict[str, Any]:
         """Собирает базовую информацию о системе с помощью системных команд."""
         logger.info(f"Node {self.node.node_id}: Сбор системной информации...")
@@ -1417,25 +1417,25 @@ class TaskDistributor:
         info["details"] = results
         logger.info(f"Node {self.node.node_id}: Сбор системной информации завершен.")
         return info
-
+    
     def _extract_credentials(self) -> Dict[str, Any]:
         # TODO: Реализовать безопасный и скрытый сбор учетных данных
         # Используя Mimikatz, LaZagne, или доступ к LSASS (см. secret_dev_notes.md)
         logger.warning(f"Node {self.node.node_id}: Функция извлечения учетных данных не реализована (placeholder).")
         return {"message": "Credential extraction placeholder"}
-
+    
     def _find_sensitive_documents(self) -> Dict[str, Any]:
         # TODO: Реализовать поиск документов по ключевым словам и шаблонам
         # Например, поиск файлов *.doc, *.xls, *.pdf, *.txt содержащих "password", "secret", "confidential"
         logger.warning(f"Node {self.node.node_id}: Функция поиска документов не реализована (placeholder).")
         return {"message": "Document search placeholder"}
-
+    
     def _scan_for_vulnerabilities(self) -> Dict[str, Any]:
         # TODO: Реализовать сканирование известных уязвимостей
         # Например, проверка версий ПО, запущенных служб, использование локальных сканеров (если есть)
         logger.warning(f"Node {self.node.node_id}: Функция сканирования уязвимостей не реализована (placeholder).")
         return {"message": "Vulnerability scanning placeholder"}
-
+    
     def _analyze_security_products(self) -> Dict[str, Any]:
         # TODO: Реализовать анализ запущенных антивирусов, EDR, файрволов
         # Например, проверка списка процессов, служб, драйверов

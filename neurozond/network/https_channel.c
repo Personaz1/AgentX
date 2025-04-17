@@ -404,8 +404,8 @@ int https_channel_receive(CovertChannelHandle handle, unsigned char* buffer, siz
         if (result <= 0 || final_data == NULL) {
             fprintf(stderr, "HTTPS Receive: Decryption failed!\n");
             return -1; // Ошибка дешифрования
-        }
-        
+    }
+    
         // Копируем расшифрованные данные в выходной буфер
         size_t copy_len = (final_data_len < buffer_size) ? final_data_len : buffer_size;
         memcpy(buffer, final_data, copy_len);
@@ -416,8 +416,8 @@ int https_channel_receive(CovertChannelHandle handle, unsigned char* buffer, siz
         
     } else {
         // Шифрование не используется, копируем декодированные Base64 данные
-        size_t copy_len = (decoded_len < buffer_size) ? decoded_len : buffer_size;
-        memcpy(buffer, decoded_data, copy_len);
+    size_t copy_len = (decoded_len < buffer_size) ? decoded_len : buffer_size;
+    memcpy(buffer, decoded_data, copy_len);
         ret_len = (int)copy_len;
         
         free(decoded_data); // Освобождаем буфер от Base64 декодирования

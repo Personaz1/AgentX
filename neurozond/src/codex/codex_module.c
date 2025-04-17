@@ -330,7 +330,7 @@ static codex_status_t handle_execute_command(
     //    (*result)->status = (exec_res->status == COMMAND_STATUS_COMPLETED && exec_res->exit_code == 0) ? CODEX_STATUS_SUCCESS : CODEX_STATUS_ERROR_EXECUTION;
     //    command_result_free(exec_res); 
     // } else { ... обработка ошибки запуска ... }
-
+    
     return CODEX_STATUS_SUCCESS;
 }
 

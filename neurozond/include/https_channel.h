@@ -1,3 +1,10 @@
+#ifndef HTTPS_CHANNEL_H
+#define HTTPS_CHANNEL_H
+
+#include <stdbool.h> // Для типа bool
+#include <stddef.h> // Для size_t
+#include "covert_channel.h" // Для CovertChannelHandle
+
 /**
  * @brief Получает данные по скрытому каналу HTTPS
  * 
