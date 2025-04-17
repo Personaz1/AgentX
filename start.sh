@@ -47,6 +47,10 @@ else
     echo -e "${YELLOW}Файл .env не найден. Используем стандартные настройки.${NC}"
 fi
 
+# Создание необходимых директорий, если их нет
+echo -e "${BLUE}Проверка структуры директорий...${NC}"
+mkdir -p logs assets/{mcp,docs,logs,scripts,config,models} core server builders
+
 # Компиляция фронтенда
 echo -e "${BLUE}Компиляция панели администратора...${NC}"
 
@@ -89,7 +93,7 @@ else
 fi
 
 # Запуск сервера в screen
-echo -e "${GREEN}Сервер запущен. Остановливаем...${NC}"
+echo -e "${YELLOW}Останавливаем предыдущую сессию сервера...${NC}"
 
 if screen -list | grep -q "neurorat-server"; then
     screen -S neurorat-server -X quit
@@ -108,7 +112,7 @@ echo -e "${YELLOW}Запуск сервера в screen...${NC}"
 screen -dmS neurorat-server python server.py
 echo -e "${GREEN}Сервер запущен в screen-сессии 'neurorat-server'${NC}"
 echo -e "${CYAN}Для подключения к серверу: ${GREEN}screen -r neurorat-server${NC}"
-echo -e "${CYAN}Для просмотра логов: ${GREEN}screen -r neurorat-logs${NC}"
+echo -e "${CYAN}Для просмотра логов: ${GREEN}tail -f logs/server.log${NC}"
 
 echo -e "${GREEN}Информация о доступе к C2 Framework:${NC}"
 echo -e "========================================"

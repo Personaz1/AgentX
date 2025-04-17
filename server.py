@@ -6,6 +6,11 @@ import sys
 import logging
 from flask import Flask, render_template, request, jsonify, redirect, url_for, send_from_directory
 
+# Добавляем пути для импорта модулей
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'core'))
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'server'))
+
 # Настройка логирования
 if not os.path.exists('logs'):
     os.makedirs('logs')
