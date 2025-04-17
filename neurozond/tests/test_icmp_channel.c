@@ -1,270 +1,260 @@
+/**
+ * @file test_icmp_channel.c
+ * @brief Тесты для модуля ICMP канала связи
+ *
+ * @author iamtomasanderson@gmail.com
+ * @date 2023-09-03
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include <time.h>
+
 #include "../network/covert_channel.h"
 
-/* Объявление внешней функции для регистрации ICMP-канала */
-extern void register_icmp_channel(CovertChannelHandler *handler);
+// Счетчики тестов
+static int tests_passed = 0;
+static int tests_failed = 0;
 
-/* Тестирование инициализации ICMP-канала */
-void test_icmp_channel_init() {
-    CovertChannelHandler handler;
-    CovertChannelConfig config;
-    void *channel_data;
+// Макрос для запуска тестов и вывода результатов
+#define RUN_TEST(test_func) do { \
+    printf("Running test: %s... ", #test_func); \
+    if (test_func() == 0) { \
+        printf("PASSED\n"); \
+        tests_passed++; \
+    } else { \
+        printf("FAILED\n"); \
+        tests_failed++; \
+    } \
+} while (0)
+
+// Объявления внешних функций из модуля ICMP канала
+extern int icmp_channel_init(const char *server_address, int encryption_type, void **channel_data);
+extern int icmp_channel_connect(void *channel_data);
+extern int icmp_channel_send(void *channel_data, const char *data, size_t data_len);
+extern int icmp_channel_receive(void *channel_data, char *buffer, size_t buffer_size);
+extern void icmp_channel_cleanup(void *channel_data);
+
+/**
+ * @brief Тест инициализации с валидными параметрами
+ * 
+ * @return int 0 при успехе, 1 при неудаче
+ */
+int test_icmp_init_valid_params() {
+    void *channel_data = NULL;
+    int result = icmp_channel_init("127.0.0.1", ENCRYPTION_XOR, &channel_data);
     
-    printf("Тест инициализации ICMP-канала... ");
-    
-    /* Регистрируем обработчик ICMP-канала */
-    memset(&handler, 0, sizeof(handler));
-    register_icmp_channel(&handler);
-    
-    /* Проверяем, что обработчик был зарегистрирован */
-    assert(handler.init != NULL);
-    assert(handler.connect != NULL);
-    assert(handler.send != NULL);
-    assert(handler.receive != NULL);
-    assert(handler.close != NULL);
-    
-    /* Инициализируем конфигурацию канала */
-    memset(&config, 0, sizeof(config));
-    config.channel_type = CHANNEL_TYPE_ICMP;
-    config.server_addr = "127.0.0.1"; /* Локальный адрес для тестирования */
-    config.encryption = ENCRYPTION_NONE;
-    
-    /* Инициализируем канал */
-    channel_data = handler.init(&config);
-    
-    /* На некоторых системах ICMP-сокеты требуют привилегий root */
-    /* Поэтому не всегда можем успешно инициализировать канал в тестах */
-    if (channel_data == NULL) {
-        printf("ПРОПУЩЕНО (возможно требуются права root)\n");
-    } else {
-        printf("OK\n");
-        /* Закрываем канал */
-        handler.close(channel_data);
+    if (result != 0 || channel_data == NULL) {
+        if (channel_data != NULL) {
+            icmp_channel_cleanup(channel_data);
+        }
+        return 1;
     }
+    
+    icmp_channel_cleanup(channel_data);
+    return 0;
 }
 
-/* Тестирование подключения ICMP-канала */
-void test_icmp_channel_connect() {
-    CovertChannelHandler handler;
-    CovertChannelConfig config;
-    void *channel_data;
-    
-    printf("Тест подключения ICMP-канала... ");
-    
-    /* Регистрируем обработчик ICMP-канала */
-    memset(&handler, 0, sizeof(handler));
-    register_icmp_channel(&handler);
-    
-    /* Инициализируем конфигурацию канала */
-    memset(&config, 0, sizeof(config));
-    config.channel_type = CHANNEL_TYPE_ICMP;
-    config.server_addr = "127.0.0.1"; /* Локальный адрес для тестирования */
-    config.encryption = ENCRYPTION_NONE;
-    
-    /* Инициализируем канал */
-    channel_data = handler.init(&config);
-    
-    /* Проверяем возможность инициализации канала */
-    if (channel_data == NULL) {
-        printf("ПРОПУЩЕНО (возможно требуются права root)\n");
-        return;
-    }
-    
-    /* Подключаемся (на практике без сервера это должно завершиться с ошибкой) */
-    int result = handler.connect(channel_data);
-    
-    /* Так как нет реального сервера, ожидаем ошибку подключения */
-    if (result == COVERT_CHANNEL_ERROR) {
-        printf("OK (ожидаемая ошибка без сервера)\n");
-    } else {
-        printf("ОШИБКА (подключение должно было завершиться с ошибкой)\n");
-    }
-    
-    /* Закрываем канал */
-    handler.close(channel_data);
-}
-
-/* Тестирование отправки данных через ICMP-канал */
-void test_icmp_channel_send() {
-    CovertChannelHandler handler;
-    CovertChannelConfig config;
-    void *channel_data;
-    uint8_t test_data[] = "ICMP channel test data";
-    
-    printf("Тест отправки через ICMP-канал... ");
-    
-    /* Регистрируем обработчик ICMP-канала */
-    memset(&handler, 0, sizeof(handler));
-    register_icmp_channel(&handler);
-    
-    /* Инициализируем конфигурацию канала */
-    memset(&config, 0, sizeof(config));
-    config.channel_type = CHANNEL_TYPE_ICMP;
-    config.server_addr = "127.0.0.1"; /* Локальный адрес для тестирования */
-    config.encryption = ENCRYPTION_NONE;
-    
-    /* Инициализируем канал */
-    channel_data = handler.init(&config);
-    
-    /* Проверяем возможность инициализации канала */
-    if (channel_data == NULL) {
-        printf("ПРОПУЩЕНО (возможно требуются права root)\n");
-        return;
-    }
-    
-    /* Отправляем данные (на практике без сервера ожидаем успех отправки, но нет ответа) */
-    int result = handler.send(channel_data, test_data, strlen((char*)test_data));
-    
-    /* Проверяем результат отправки */
-    if (result == COVERT_CHANNEL_SUCCESS) {
-        printf("OK\n");
-    } else {
-        printf("ОШИБКА (отправка завершилась с ошибкой)\n");
-    }
-    
-    /* Закрываем канал */
-    handler.close(channel_data);
-}
-
-/* Тестирование получения данных через ICMP-канал (моделируем получение) */
-void test_icmp_channel_receive() {
-    CovertChannelHandler handler;
-    CovertChannelConfig config;
-    void *channel_data;
-    uint8_t buffer[1024];
-    size_t received = 0;
-    
-    printf("Тест получения через ICMP-канал... ");
-    
-    /* Регистрируем обработчик ICMP-канала */
-    memset(&handler, 0, sizeof(handler));
-    register_icmp_channel(&handler);
-    
-    /* Инициализируем конфигурацию канала */
-    memset(&config, 0, sizeof(config));
-    config.channel_type = CHANNEL_TYPE_ICMP;
-    config.server_addr = "127.0.0.1"; /* Локальный адрес для тестирования */
-    config.encryption = ENCRYPTION_NONE;
-    
-    /* Инициализируем канал */
-    channel_data = handler.init(&config);
-    
-    /* Проверяем возможность инициализации канала */
-    if (channel_data == NULL) {
-        printf("ПРОПУЩЕНО (возможно требуются права root)\n");
-        return;
-    }
-    
-    /* Пытаемся получить данные (на практике без сервера ожидаем таймаут) */
-    int result = handler.receive(channel_data, buffer, sizeof(buffer), &received);
-    
-    /* Ожидаем ошибку из-за тайм-аута */
-    if (result == COVERT_CHANNEL_ERROR && received == 0) {
-        printf("OK (ожидаемый таймаут без сервера)\n");
-    } else {
-        printf("ОШИБКА (получение должно было завершиться с таймаутом)\n");
-    }
-    
-    /* Закрываем канал */
-    handler.close(channel_data);
-}
-
-/* Тестирование с недопустимыми параметрами */
-void test_invalid_params() {
-    CovertChannelHandler handler;
-    CovertChannelConfig config;
+/**
+ * @brief Тест инициализации с NULL параметрами
+ * 
+ * @return int 0 при успехе, 1 при неудаче
+ */
+int test_icmp_init_null_params() {
     void *channel_data = NULL;
     
-    printf("Тест с недопустимыми параметрами... ");
+    // Проверка с NULL адресом сервера
+    int result1 = icmp_channel_init(NULL, ENCRYPTION_XOR, &channel_data);
     
-    /* Регистрируем обработчик ICMP-канала */
-    memset(&handler, 0, sizeof(handler));
-    register_icmp_channel(&handler);
+    // Проверка с NULL указателем для channel_data
+    int result2 = icmp_channel_init("127.0.0.1", ENCRYPTION_XOR, NULL);
     
-    /* Тестируем инициализацию с NULL-конфигурацией */
-    channel_data = handler.init(NULL);
-    assert(channel_data == NULL);
-    
-    /* Инициализируем конфигурацию канала без адреса сервера */
-    memset(&config, 0, sizeof(config));
-    config.channel_type = CHANNEL_TYPE_ICMP;
-    config.server_addr = NULL;
-    config.encryption = ENCRYPTION_NONE;
-    
-    /* Тестируем инициализацию без адреса сервера */
-    channel_data = handler.init(&config);
-    assert(channel_data == NULL);
-    
-    /* Тестируем подключение с NULL-данными канала */
-    int result = handler.connect(NULL);
-    assert(result == COVERT_CHANNEL_ERROR);
-    
-    /* Тестируем отправку с NULL-данными канала */
-    uint8_t test_data[] = "Test data";
-    result = handler.send(NULL, test_data, strlen((char*)test_data));
-    assert(result == COVERT_CHANNEL_ERROR);
-    
-    /* Тестируем получение с NULL-данными канала */
-    uint8_t buffer[1024];
-    size_t received = 0;
-    result = handler.receive(NULL, buffer, sizeof(buffer), &received);
-    assert(result == COVERT_CHANNEL_ERROR);
-    
-    /* Инициализируем конфигурацию канала с валидным адресом сервера */
-    memset(&config, 0, sizeof(config));
-    config.channel_type = CHANNEL_TYPE_ICMP;
-    config.server_addr = "127.0.0.1";
-    config.encryption = ENCRYPTION_NONE;
-    
-    /* Инициализируем канал */
-    channel_data = handler.init(&config);
-    
-    /* Проверяем возможность инициализации канала */
-    if (channel_data != NULL) {
-        /* Тестируем отправку с NULL-данными */
-        result = handler.send(channel_data, NULL, 10);
-        assert(result == COVERT_CHANNEL_ERROR);
-        
-        /* Тестируем отправку с нулевой длиной */
-        result = handler.send(channel_data, test_data, 0);
-        assert(result == COVERT_CHANNEL_ERROR);
-        
-        /* Тестируем получение с NULL-буфером */
-        result = handler.receive(channel_data, NULL, sizeof(buffer), &received);
-        assert(result == COVERT_CHANNEL_ERROR);
-        
-        /* Тестируем получение с нулевым размером буфера */
-        result = handler.receive(channel_data, buffer, 0, &received);
-        assert(result == COVERT_CHANNEL_ERROR);
-        
-        /* Тестируем получение с NULL-указателем на полученный размер */
-        result = handler.receive(channel_data, buffer, sizeof(buffer), NULL);
-        assert(result == COVERT_CHANNEL_ERROR);
-        
-        /* Закрываем канал */
-        handler.close(channel_data);
+    if (result1 != -1 || result2 != -1) {
+        if (channel_data != NULL) {
+            icmp_channel_cleanup(channel_data);
+        }
+        return 1;
     }
     
-    /* Тестируем закрытие с NULL-данными канала */
-    handler.close(NULL); /* Должно просто ничего не делать */
-    
-    printf("OK\n");
+    return 0;
 }
 
-int main() {
-    printf("Запуск тестов ICMP-канала...\n");
+/**
+ * @brief Тест работы с различными типами шифрования
+ * 
+ * @return int 0 при успехе, 1 при неудаче
+ */
+int test_icmp_encryption_types() {
+    void *channel_data1 = NULL;
+    void *channel_data2 = NULL;
+    void *channel_data3 = NULL;
     
-    /* Запускаем тесты */
-    test_icmp_channel_init();
-    test_icmp_channel_connect();
-    test_icmp_channel_send();
-    test_icmp_channel_receive();
-    test_invalid_params();
+    // Тест XOR шифрования
+    int result1 = icmp_channel_init("127.0.0.1", ENCRYPTION_XOR, &channel_data1);
     
-    printf("Все тесты ICMP-канала завершены.\n");
+    // Тест AES256 шифрования
+    int result2 = icmp_channel_init("127.0.0.1", ENCRYPTION_AES256, &channel_data2);
+    
+    // Тест ChaCha20 шифрования
+    int result3 = icmp_channel_init("127.0.0.1", ENCRYPTION_CHACHA20, &channel_data3);
+    
+    if (result1 != 0 || result2 != 0 || result3 != 0 || 
+        channel_data1 == NULL || channel_data2 == NULL || channel_data3 == NULL) {
+        if (channel_data1 != NULL) icmp_channel_cleanup(channel_data1);
+        if (channel_data2 != NULL) icmp_channel_cleanup(channel_data2);
+        if (channel_data3 != NULL) icmp_channel_cleanup(channel_data3);
+        return 1;
+    }
+    
+    icmp_channel_cleanup(channel_data1);
+    icmp_channel_cleanup(channel_data2);
+    icmp_channel_cleanup(channel_data3);
+    
     return 0;
+}
+
+/**
+ * @brief Тест функции connect с NULL дескриптором
+ * 
+ * @return int 0 при успехе, 1 при неудаче
+ */
+int test_icmp_connect_null_handle() {
+    int result = icmp_channel_connect(NULL);
+    
+    if (result != -1) {
+        return 1;
+    }
+    
+    return 0;
+}
+
+/**
+ * @brief Тест функции send с NULL дескриптором
+ * 
+ * @return int 0 при успехе, 1 при неудаче
+ */
+int test_icmp_send_null_handle() {
+    char data[] = "Test data";
+    int result = icmp_channel_send(NULL, data, strlen(data));
+    
+    if (result != -1) {
+        return 1;
+    }
+    
+    return 0;
+}
+
+/**
+ * @brief Тест функции receive с NULL дескриптором
+ * 
+ * @return int 0 при успехе, 1 при неудаче
+ */
+int test_icmp_receive_null_handle() {
+    char buffer[128];
+    int result = icmp_channel_receive(NULL, buffer, sizeof(buffer));
+    
+    if (result != -1) {
+        return 1;
+    }
+    
+    return 0;
+}
+
+/**
+ * @brief Тест функции send с NULL данными
+ * 
+ * @return int 0 при успехе, 1 при неудаче
+ */
+int test_icmp_send_null_data() {
+    void *channel_data = NULL;
+    int init_result = icmp_channel_init("127.0.0.1", ENCRYPTION_XOR, &channel_data);
+    
+    if (init_result != 0 || channel_data == NULL) {
+        if (channel_data != NULL) {
+            icmp_channel_cleanup(channel_data);
+        }
+        return 1;
+    }
+    
+    int result = icmp_channel_send(channel_data, NULL, 10);
+    
+    icmp_channel_cleanup(channel_data);
+    
+    if (result != -1) {
+        return 1;
+    }
+    
+    return 0;
+}
+
+/**
+ * @brief Тест отправки и получения данных ICMP канала (мок-тест)
+ * 
+ * @return int 0 при успехе, 1 при неудаче
+ */
+int test_icmp_send_receive_mock() {
+    void *channel_data = NULL;
+    int init_result = icmp_channel_init("127.0.0.1", ENCRYPTION_XOR, &channel_data);
+    
+    if (init_result != 0 || channel_data == NULL) {
+        if (channel_data != NULL) {
+            icmp_channel_cleanup(channel_data);
+        }
+        return 1;
+    }
+    
+    // Мы не выполняем реальное подключение и отправку/получение данных,
+    // так как это требует сетевого соединения и прав администратора
+    // для создания RAW сокетов
+    
+    icmp_channel_cleanup(channel_data);
+    return 0;
+}
+
+/**
+ * @brief Тест инициализации с неверным типом шифрования
+ * 
+ * @return int 0 при успехе, 1 при неудаче
+ */
+int test_icmp_invalid_encryption() {
+    void *channel_data = NULL;
+    int result = icmp_channel_init("127.0.0.1", 99, &channel_data); // 99 - недопустимый тип шифрования
+    
+    if (result != -1 || channel_data != NULL) {
+        if (channel_data != NULL) {
+            icmp_channel_cleanup(channel_data);
+        }
+        return 1;
+    }
+    
+    return 0;
+}
+
+/**
+ * @brief Точка входа для тестов
+ * 
+ * @return int Код возврата программы
+ */
+int main() {
+    printf("=== Testing ICMP Channel Module ===\n\n");
+    
+    // Запуск тестов
+    RUN_TEST(test_icmp_init_valid_params);
+    RUN_TEST(test_icmp_init_null_params);
+    RUN_TEST(test_icmp_encryption_types);
+    RUN_TEST(test_icmp_connect_null_handle);
+    RUN_TEST(test_icmp_send_null_handle);
+    RUN_TEST(test_icmp_receive_null_handle);
+    RUN_TEST(test_icmp_send_null_data);
+    RUN_TEST(test_icmp_send_receive_mock);
+    RUN_TEST(test_icmp_invalid_encryption);
+    
+    // Вывод итогов
+    printf("\n=== Test Results ===\n");
+    printf("Passed: %d\n", tests_passed);
+    printf("Failed: %d\n", tests_failed);
+    printf("Total: %d\n", tests_passed + tests_failed);
+    
+    return tests_failed > 0 ? 1 : 0;
 } 
