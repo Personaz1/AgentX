@@ -1,109 +1,172 @@
 # NeuroZond
 
-## Advanced Autonomous C2 Framework
+Agent component of the AgentX framework, designed for covert deployment on target systems.
 
-NeuroZond is a sophisticated Command and Control (C2) framework designed for professional security researchers and penetration testers. It provides a robust infrastructure for secure covert communication, autonomous decision-making, and advanced threat modeling.
+## Overview
+
+NeuroZond is the lightweight agent module of the AgentX C2 framework. It functions as a loader that receives, decodes, and executes commands from the C1 command center. The agent is designed with a focus on stealth, reliability, and minimal resource usage.
 
 ## Key Features
 
-- **Advanced Covert Communication** - Resistant to detection through DNS, HTTPS, and ICMP channels
-- **Military-grade Cryptographic Protection** - Utilizing AES-256 with key rotation
-- **Cross-platform Compatibility** - Linux, macOS, Windows support
-- **Autonomous Operation** - Integration with LLM for local decision-making
-- **Modular Architecture** - Easy extension and customization
+- **Covert Communication Channels** - DNS, HTTPS, and ICMP-based communication
+- **Strong Cryptography** - Multiple encryption algorithms (XOR, AES-256, ChaCha20)
+- **Cross-Platform Support** - Linux, macOS, and Windows compatibility
+- **Command Execution** - Secure and configurable command execution system
+- **Modular Architecture** - Easy extension through additional modules
+- **Extendable with CODEX** - Optional integration with LLM-based code analysis capabilities
 
-## Architecture
-
-The framework consists of several core components:
-
-- **Covert Channel Module** - Implements various covert communication methods
-- **Cryptographic Module** - Handles encryption, decryption, and key management
-- **Command Execution Module** - Executes received commands and returns results
-- **Integration Module** - Facilitates interaction with external systems and tools
-- **CODEX Module** - Provides LLM-based autonomous decision-making capabilities
-
-## Installation
+## Directory Structure
 
 ```
-git clone https://github.com/[repository]/neurozond.git
-cd neurozond
+neurozond/
+├── include/           # Header files
+│   ├── agent/         # Agent loop and sandbox headers
+│   ├── codex/         # CODEX module headers
+│   ├── command_executor.h
+│   └── covert_channel.h
+├── src/               # Source code
+│   ├── codex/         # CODEX module implementation
+│   └── ...
+├── network/           # Network communication implementations
+│   ├── dns_channel.c
+│   ├── https_channel.c
+│   └── icmp_channel.c
+├── crypto/            # Cryptographic operations
+├── command/           # Command execution
+├── core/              # Core agent functionality
+├── tests/             # Unit and integration tests
+├── examples/          # Example usage scenarios
+├── docs/              # Documentation
+├── build.sh           # Build script
+├── covert_channel.c   # Main covert channel implementation
+├── main.c             # Agent entry point
+└── Makefile           # Build configuration
+```
+
+## Building NeuroZond
+
+### Prerequisites
+
+- GCC 10+ or equivalent C compiler
+- Make build system
+- OpenSSL development libraries
+- libcurl
+- jansson (JSON library)
+
+### Compilation
+
+Basic build:
+```bash
 make
 ```
 
-### Dependencies
-
-- libcurl
-- jansson
-- openssl
-- [Additional dependencies based on enabled modules]
-
-## Usage
-
-### Initializing the Agent
-
-```c
-neurozond_options_t options = {
-    .channel_type = COVERT_CHANNEL_TYPE_HTTPS,
-    .server = "https://command.domain.com",
-    .key = "predefined_key_or_path_to_key_file",
-    .interval = 60,
-    .jitter = 0.3
-};
-
-neurozond_t *zond = neurozond_init(&options);
-if (zond == NULL) {
-    fprintf(stderr, "Failed to initialize NeuroZond\n");
-    return 1;
-}
+With CODEX module support:
+```bash
+make ENABLE_CODEX=1
 ```
 
-### Command Execution
-
-```c
-neurozond_command_t command = {
-    .type = NEUROZOND_COMMAND_SHELL,
-    .data = "systeminfo",
-    .timeout = 30
-};
-
-neurozond_result_t *result = neurozond_execute_command(zond, &command);
-if (result) {
-    printf("Command executed: %s\n", result->data);
-    neurozond_result_destroy(result);
-}
+Build for specific platform:
+```bash
+make TARGET=linux64    # Linux x86_64
+make TARGET=win64      # Windows x86_64
+make TARGET=macos      # macOS
 ```
 
-### Autonomous Mode
+## Architecture
+
+### Main Components
+
+1. **Covert Channel Module** - Manages communication with C1 server
+   - DNS tunneling
+   - HTTPS communication
+   - ICMP-based channel
+
+2. **Cryptographic Module** - Handles encryption and decryption
+   - XOR encryption (lightweight)
+   - AES-256 encryption (standard)
+   - ChaCha20 (fast stream cipher)
+
+3. **Command Execution Module** - Executes commands securely
+   - Shell command execution
+   - Process execution with custom flags
+   - Output capture and redirection
+
+4. **CODEX Module** (Optional) - Provides code analysis capabilities
+   - Code scanning and analysis
+   - Vulnerability detection
+   - LLM-based code operation
+
+### Communication Flow
+
+1. Agent initiates connection to C1 server through a covert channel
+2. Commands are received, decrypted and validated
+3. Commands are executed with appropriate security measures
+4. Results are encrypted and sent back to C1
+5. Communication jitter is applied to evade detection
+
+## Integration with C1
+
+NeuroZond is designed to work seamlessly with the C1 command center from the AgentX framework. The agent:
+
+- Registers with C1 on first connection
+- Receives encrypted commands
+- Returns execution results
+- Supports heartbeat for connection verification
+- Can be dynamically configured by C1
+
+## Advanced Usage
+
+### Jitter Configuration
 
 ```c
-neurozond_codex_options_t codex_options = {
-    .model = "local_llm_model",
-    .temperature = 0.7,
-    .max_tokens = 2048
-};
-
-int status = neurozond_enable_autonomous_mode(zond, &codex_options);
-if (status == NEUROZOND_STATUS_SUCCESS) {
-    printf("Autonomous mode enabled\n");
-}
+covert_channel_set_jitter(channel, 100, 3000);  // Min: 100ms, Max: 3000ms
 ```
 
-## Security Measures
+### Channel Selection Based on Environment
 
-NeuroZond implements several security features to minimize detection and maintain operational security:
+```c
+// Example logic for selecting optimal channel
+covert_channel_type selected_type;
 
-- Traffic obfuscation through timing randomization (jitter)
-- Encrypted communication channels
-- Anti-forensic capabilities
-- Memory protection mechanisms
-- Active defense against sandbox analysis
+if (dns_available())
+    selected_type = COVERT_CHANNEL_DNS;
+else if (https_available())
+    selected_type = COVERT_CHANNEL_HTTPS;
+else
+    selected_type = COVERT_CHANNEL_ICMP;
+```
 
-## Legal Disclaimer
+### Command Execution with Different Flags
 
-This software is provided for authorized security testing and research purposes only. Users are responsible for complying with applicable laws and obtaining proper authorization before deployment.
+```c
+Command* cmd = command_create(COMMAND_TYPE_SHELL);
+command_set_command_line(cmd, "systeminfo");
+command_set_flags(cmd, COMMAND_FLAG_HIDDEN);
+CommandResult* result = command_execute(cmd);
+```
 
-## License
+## Security Notes
 
-Proprietary - All rights reserved.
+- All strings are obfuscated in final builds
+- Configuration files and artifacts are encrypted on disk
+- Dynamic signature changes in network communications
+- Capabilities for detecting analysis attempts
+- Self-destruction mechanism when analysis is detected
 
-Copyright (c) 2025 [Organization] 
+## Testing
+
+Run the test suite:
+```bash
+make test
+```
+
+For specific test components:
+```bash
+make test_covert_channel
+make test_crypto
+make test_command_executor
+```
+
+## Relationship to AgentX Framework
+
+NeuroZond is a critical component of the AgentX framework, serving as the deployment agent on target systems. While it can function independently, it is designed to communicate with the C1 command center for full operational capability. 
