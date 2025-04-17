@@ -272,17 +272,349 @@ void command_result_free(CommandResult* result) {
 }
 
 #ifdef _WIN32
+// Структура для передачи данных в поток чтения вывода
+typedef struct {
+    HANDLE hPipe;
+    char* buffer;
+    size_t* buffer_pos;
+    size_t buffer_size;
+    ErrorInfo* error_info;
+} ReadPipeThreadData;
+
+// Функция потока для чтения данных из пайпа (stdout или stderr)
+static DWORD WINAPI ReadPipeThread(LPVOID lpParam) {
+    ReadPipeThreadData* data = (ReadPipeThreadData*)lpParam;
+    DWORD dwRead;
+    CHAR chBuf[4096];
+    BOOL bSuccess = FALSE;
+
+    while (1) {
+        // Читаем из пайпа
+        bSuccess = ReadFile(data->hPipe, chBuf, sizeof(chBuf), &dwRead, NULL);
+        
+        // Если чтение не удалось или прочитано 0 байт (пайп закрыт с другой стороны)
+        if (!bSuccess || dwRead == 0) {
+            if (GetLastError() == ERROR_BROKEN_PIPE) {
+                break; // Пайп закрыт, это нормально
+            } else if (GetLastError() != ERROR_SUCCESS) {
+                 // Произошла ошибка чтения, кроме закрытия пайпа
+                 if (data->error_info->code == 0) { // Устанавливаем ошибку, если она еще не установлена
+                     char error_msg[256];
+                     snprintf(error_msg, sizeof(error_msg), "ReadFile failed with error %lu", GetLastError());
+                     set_last_error(7, error_msg); // Используем статический set_last_error
+                     data->error_info->code = last_error.code; // Копируем для потока
+                     strncpy(data->error_info->message, last_error.message, sizeof(data->error_info->message) -1);
+                 }
+                 break;
+            }
+             // Если bSuccess == TRUE и dwRead == 0, значит достигнут конец файла (пайп закрыт)
+             if (dwRead == 0 && bSuccess) {
+                 break;
+             }
+        }
+
+        // Копируем прочитанные данные в общий буфер вывода
+        if (*(data->buffer_pos) + dwRead < data->buffer_size -1) {
+            memcpy(data->buffer + *(data->buffer_pos), chBuf, dwRead);
+            *(data->buffer_pos) += dwRead;
+        } else {
+            // Буфер переполнен, прекращаем чтение
+             if (data->error_info->code == 0) {
+                 set_last_error(8, "Output buffer overflow");
+                 data->error_info->code = last_error.code;
+                 strncpy(data->error_info->message, last_error.message, sizeof(data->error_info->message) -1);
+             }
+            break;
+        }
+    }
+    
+    return 0; // Успешное завершение потока
+}
+
+
 // Выполняет команду в Windows
 static CommandResult* execute_command_windows(Command* cmd) {
-    // Создаем результат
     CommandResult* result = create_command_result();
     if (result == NULL) {
         return NULL;
     }
     
-    // TODO: Реализовать выполнение команд на Windows с использованием CreateProcess
-    // и связанных API функций
+    if (cmd->command_line == NULL) {
+        set_last_error(3, "No command line specified");
+        result->status = COMMAND_STATUS_ERROR;
+        return result;
+    }
+
+    cmd->status = COMMAND_STATUS_RUNNING;
+
+    HANDLE hChildStdinRd = NULL, hChildStdinWr = NULL;
+    HANDLE hChildStdoutRd = NULL, hChildStdoutWr = NULL;
+    HANDLE hChildStderrRd = NULL, hChildStderrWr = NULL;
+    SECURITY_ATTRIBUTES saAttr;
+
+    // Устанавливаем атрибуты безопасности для наследования хендлов пайпов
+    saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
+    saAttr.bInheritHandle = TRUE;
+    saAttr.lpSecurityDescriptor = NULL;
+
+    // Создаем пайп для stdout дочернего процесса
+    if (!CreatePipe(&hChildStdoutRd, &hChildStdoutWr, &saAttr, 0)) {
+        set_last_error(4, "Stdout pipe creation failed");
+        result->status = COMMAND_STATUS_ERROR;
+        goto cleanup;
+    }
+    // Убеждаемся, что хендл для чтения stdout НЕ наследуется
+    if (!SetHandleInformation(hChildStdoutRd, HANDLE_FLAG_INHERIT, 0)) {
+         set_last_error(4, "Stdout SetHandleInformation failed");
+         result->status = COMMAND_STATUS_ERROR;
+         goto cleanup;
+    }
+
+
+    // Создаем пайп для stderr дочернего процесса
+    if (!CreatePipe(&hChildStderrRd, &hChildStderrWr, &saAttr, 0)) {
+        set_last_error(4, "Stderr pipe creation failed");
+        result->status = COMMAND_STATUS_ERROR;
+        goto cleanup;
+    }
+     // Убеждаемся, что хендл для чтения stderr НЕ наследуется
+    if (!SetHandleInformation(hChildStderrRd, HANDLE_FLAG_INHERIT, 0)) {
+         set_last_error(4, "Stderr SetHandleInformation failed");
+         result->status = COMMAND_STATUS_ERROR;
+         goto cleanup;
+    }
+
+    // Создаем пайп для stdin дочернего процесса, если есть входные данные
+    if (cmd->input_data != NULL && cmd->input_length > 0) {
+        if (!CreatePipe(&hChildStdinRd, &hChildStdinWr, &saAttr, 0)) {
+            set_last_error(4, "Stdin pipe creation failed");
+            result->status = COMMAND_STATUS_ERROR;
+            goto cleanup;
+        }
+        // Убеждаемся, что хендл для записи stdin НЕ наследуется
+        if (!SetHandleInformation(hChildStdinWr, HANDLE_FLAG_INHERIT, 0)) {
+             set_last_error(4, "Stdin SetHandleInformation failed");
+             result->status = COMMAND_STATUS_ERROR;
+             goto cleanup;
+        }
+    }
+
+
+    // Настраиваем структуры для CreateProcess
+    PROCESS_INFORMATION piProcInfo;
+    STARTUPINFO siStartInfo;
+    BOOL bSuccess = FALSE;
+
+    ZeroMemory(&piProcInfo, sizeof(PROCESS_INFORMATION));
+    ZeroMemory(&siStartInfo, sizeof(STARTUPINFO));
+    siStartInfo.cb = sizeof(STARTUPINFO);
+    siStartInfo.hStdError = hChildStderrWr;
+    siStartInfo.hStdOutput = hChildStdoutWr;
+    siStartInfo.dwFlags |= STARTF_USESTDHANDLES;
+
+    // Устанавливаем stdin, если он есть
+    if (hChildStdinRd != NULL) {
+        siStartInfo.hStdInput = hChildStdinRd;
+    } else {
+        siStartInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE); // Используем stdin родителя, если пайп не создан
+    }
+
+
+    // Устанавливаем флаги создания процесса
+    DWORD dwCreationFlags = 0;
+    if (cmd->flags & COMMAND_FLAG_HIDDEN) {
+        dwCreationFlags |= CREATE_NO_WINDOW;
+         // Можно добавить DETACHED_PROCESS, если нужно полностью отвязать
+         // dwCreationFlags |= DETACHED_PROCESS; 
+    }
+
+    // Засекаем время начала
+    LARGE_INTEGER frequency, start_time, end_time;
+    QueryPerformanceFrequency(&frequency);
+    QueryPerformanceCounter(&start_time);
+
+    // Создаем дочерний процесс
+    // CreateProcess требует неконстантную строку для командной строки
+    char* cmd_line_mutable = strdup(cmd->command_line);
+    if (cmd_line_mutable == NULL) {
+         set_last_error(2, "Memory allocation failed for command line copy");
+         result->status = COMMAND_STATUS_ERROR;
+         goto cleanup_cmdline;
+    }
+
+    bSuccess = CreateProcess(
+        NULL,             // Имя приложения (используем командную строку)
+        cmd_line_mutable, // Командная строка (должна быть изменяемой)
+        NULL,             // Атрибуты безопасности процесса
+        NULL,             // Атрибуты безопасности потока
+        TRUE,             // Наследование хендлов
+        dwCreationFlags,  // Флаги создания
+        NULL,             // Использовать переменные окружения родителя
+        cmd->working_dir, // Рабочая директория
+        &siStartInfo,     // Указатель на STARTUPINFO
+        &piProcInfo       // Указатель на PROCESS_INFORMATION
+    );
     
+    free(cmd_line_mutable); // Освобождаем копию командной строки
+
+    // Проверяем результат CreateProcess
+    if (!bSuccess) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "CreateProcess failed with error %lu", GetLastError());
+        set_last_error(5, error_msg);
+        result->status = COMMAND_STATUS_ERROR;
+        goto cleanup;
+    }
+
+    // Закрываем ненужные хендлы пайпов в родительском процессе
+    // Важно закрыть хендлы записи stdout/stderr и чтения stdin,
+    // чтобы ReadFile/WriteFile в дочернем и родительском процессах работали корректно
+    CloseHandle(hChildStdoutWr); hChildStdoutWr = NULL;
+    CloseHandle(hChildStderrWr); hChildStderrWr = NULL;
+    if (hChildStdinRd != NULL) {
+        CloseHandle(hChildStdinRd); hChildStdinRd = NULL;
+    }
+
+
+    // Если есть входные данные, пишем их в stdin дочернего процесса
+    if (hChildStdinWr != NULL) {
+        DWORD dwWritten;
+        bSuccess = WriteFile(hChildStdinWr, cmd->input_data, cmd->input_length, &dwWritten, NULL);
+        // Закрываем хендл записи в stdin ПОСЛЕ записи, чтобы дочерний процесс увидел EOF
+        CloseHandle(hChildStdinWr); hChildStdinWr = NULL; 
+        if (!bSuccess || dwWritten != cmd->input_length) {
+            set_last_error(9, "Failed to write to child stdin");
+            // Не прерываем выполнение, но устанавливаем ошибку
+            result->status = COMMAND_STATUS_ERROR; // Отмечаем, что была ошибка
+        }
+    }
+
+
+    // Готовим буфер для вывода
+    char* output_buffer = (char*)malloc(MAX_OUTPUT_BUFFER);
+    if (output_buffer == NULL) {
+        set_last_error(2, "Memory allocation failed for output buffer");
+        result->status = COMMAND_STATUS_ERROR;
+        // Пытаемся завершить дочерний процесс перед выходом
+        TerminateProcess(piProcInfo.hProcess, 1); 
+        goto cleanup_process;
+    }
+    size_t output_pos = 0;
+    output_buffer[0] = '\0';
+
+    // Структуры для передачи данных в потоки чтения
+    ErrorInfo read_error_info = {0, ""}; // Ошибка, специфичная для потоков чтения
+    ReadPipeThreadData stdout_thread_data = {hChildStdoutRd, output_buffer, &output_pos, MAX_OUTPUT_BUFFER, &read_error_info};
+    ReadPipeThreadData stderr_thread_data = {hChildStderrRd, output_buffer, &output_pos, MAX_OUTPUT_BUFFER, &read_error_info};
+    
+    // Создаем потоки для чтения stdout и stderr
+    HANDLE hThreadStdout = CreateThread(NULL, 0, ReadPipeThread, &stdout_thread_data, 0, NULL);
+    HANDLE hThreadStderr = CreateThread(NULL, 0, ReadPipeThread, &stderr_thread_data, 0, NULL);
+
+    if (hThreadStdout == NULL || hThreadStderr == NULL) {
+         set_last_error(10, "Failed to create read threads");
+         result->status = COMMAND_STATUS_ERROR;
+         TerminateProcess(piProcInfo.hProcess, 1);
+         if (hThreadStdout) CloseHandle(hThreadStdout);
+         if (hThreadStderr) CloseHandle(hThreadStderr);
+         free(output_buffer);
+         goto cleanup_process;
+    }
+
+    // Ждем завершения дочернего процесса И потоков чтения
+    HANDLE hWaitHandles[] = { piProcInfo.hProcess, hThreadStdout, hThreadStderr };
+    DWORD dwTimeout = (cmd->timeout_ms > 0) ? cmd->timeout_ms : INFINITE;
+    DWORD dwWaitResult;
+
+    // Ждем завершения процесса ИЛИ истечения тайм-аута
+    dwWaitResult = WaitForSingleObject(piProcInfo.hProcess, dwTimeout);
+
+    if (dwWaitResult == WAIT_OBJECT_0) {
+        // Процесс завершился сам
+        result->status = COMMAND_STATUS_COMPLETED;
+    } else if (dwWaitResult == WAIT_TIMEOUT) {
+        // Тайм-аут, принудительно завершаем процесс
+        set_last_error(11, "Command timed out");
+        TerminateProcess(piProcInfo.hProcess, 1); // Завершаем с кодом 1
+        result->status = COMMAND_STATUS_TIMEOUT;
+         // Даем немного времени потокам чтения заметить закрытие пайпов
+         Sleep(50); 
+    } else {
+        // Ошибка ожидания
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "WaitForSingleObject failed with error %lu", GetLastError());
+        set_last_error(6, error_msg);
+        result->status = COMMAND_STATUS_ERROR;
+        TerminateProcess(piProcInfo.hProcess, 1); // На всякий случай завершаем
+         Sleep(50);
+    }
+
+    // Ждем завершения потоков чтения (с небольшим тайм-аутом, чтобы не зависнуть)
+    // Они должны завершиться сами, так как пайпы будут закрыты после завершения дочернего процесса
+     WaitForSingleObject(hThreadStdout, 1000); 
+     WaitForSingleObject(hThreadStderr, 1000); 
+
+    // Закрываем хендлы потоков чтения
+    CloseHandle(hThreadStdout);
+    CloseHandle(hThreadStderr);
+    
+    // Получаем код завершения процесса
+    DWORD dwExitCode;
+    if (GetExitCodeProcess(piProcInfo.hProcess, &dwExitCode)) {
+        result->exit_code = (int)dwExitCode;
+         // Если процесс был убит по тайм-ауту, статус уже установлен
+         if (result->status == COMMAND_STATUS_COMPLETED && dwExitCode != 0) {
+             // Если процесс завершился сам, но с ненулевым кодом, считаем это ошибкой выполнения
+             //result->status = COMMAND_STATUS_ERROR; // Решаем, считать ли ненулевой код ошибкой
+         }
+    } else {
+        // Не удалось получить код завершения
+        if (result->status != COMMAND_STATUS_TIMEOUT){ // Не перезаписываем ошибку таймаута
+             char error_msg[256];
+             snprintf(error_msg, sizeof(error_msg), "GetExitCodeProcess failed with error %lu", GetLastError());
+             set_last_error(12, error_msg);
+             result->status = COMMAND_STATUS_ERROR;
+        }
+        result->exit_code = -1;
+    }
+
+    // Засекаем время окончания
+    QueryPerformanceCounter(&end_time);
+    result->execution_time_ms = (uint32_t)(((end_time.QuadPart - start_time.QuadPart) * 1000) / frequency.QuadPart);
+
+    // Завершаем строку вывода нулем
+    output_buffer[output_pos] = '\0';
+    result->output = output_buffer; // Передаем владение буфером результату
+    result->output_length = output_pos;
+    
+    // Проверяем, не возникла ли ошибка в потоках чтения
+     if (read_error_info.code != 0 && result->status != COMMAND_STATUS_TIMEOUT) {
+         // Если была ошибка чтения и это не тайм-аут, обновляем глобальную ошибку
+         // и статус результата
+         set_last_error(read_error_info.code, read_error_info.message);
+         result->status = COMMAND_STATUS_ERROR;
+     }
+
+
+cleanup_process:
+    // Закрываем хендлы процесса и основного потока
+    CloseHandle(piProcInfo.hProcess);
+    CloseHandle(piProcInfo.hThread);
+
+cleanup:
+    // Закрываем оставшиеся хендлы пайпов (если они не были закрыты ранее)
+    if (hChildStdoutRd) CloseHandle(hChildStdoutRd);
+    if (hChildStdoutWr) CloseHandle(hChildStdoutWr);
+    if (hChildStderrRd) CloseHandle(hChildStderrRd);
+    if (hChildStderrWr) CloseHandle(hChildStderrWr);
+    if (hChildStdinRd) CloseHandle(hChildStdinRd);
+    if (hChildStdinWr) CloseHandle(hChildStdinWr);
+    
+cleanup_cmdline: 
+    // Нет дополнительной очистки для cmd_line_mutable здесь, так как free вызывается раньше
+
+    // Обновляем статус команды
+    cmd->status = result->status;
     return result;
 }
 #else

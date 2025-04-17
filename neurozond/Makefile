@@ -17,7 +17,8 @@ BUILD_DIR = build
 BIN_DIR = bin
 
 # Исходные файлы
-SOURCES = $(wildcard $(SRC_DIR)/*.c $(SRC_DIR)/network/*.c)
+# Добавляем поиск .c файлов в директории injection
+SOURCES = $(wildcard $(SRC_DIR)/*.c $(SRC_DIR)/network/*.c $(SRC_DIR)/executor/*.c $(SRC_DIR)/crypto/*.c $(SRC_DIR)/core/*.c $(SRC_DIR)/injection/*.c)
 TEST_SOURCES = $(wildcard $(TEST_DIR)/*.c)
 
 # Объектные файлы
@@ -29,7 +30,10 @@ TARGET = $(BIN_DIR)/neurozond
 TEST_TARGETS = $(TEST_SOURCES:$(TEST_DIR)/%.c=$(BIN_DIR)/%)
 
 # Создание папок
-$(shell mkdir -p $(BUILD_DIR) $(BIN_DIR) $(BUILD_DIR)/$(SRC_DIR) $(BUILD_DIR)/$(TEST_DIR) $(BUILD_DIR)/$(SRC_DIR)/network)
+# Добавляем создание поддиректорий для объектных файлов
+$(shell mkdir -p $(BUILD_DIR) $(BIN_DIR) \
+                   $(patsubst %/,$(BUILD_DIR)/%/,$(sort $(dir $(SOURCES)))) \
+                   $(patsubst %/,$(BUILD_DIR)/%/,$(sort $(dir $(TEST_SOURCES)))) )
 
 # Правило для основного бинарного файла
 $(TARGET): $(OBJECTS)

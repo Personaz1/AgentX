@@ -247,8 +247,12 @@ static codex_status_t handle_analyze_command(
         return CODEX_STATUS_ERROR_INTERNAL;
     }
     
-    const char *placeholder = "Анализ файла выполнен успешно";
-    (*result)->content = strdup(placeholder);
+    // Формируем более осмысленное сообщение
+    char message_buffer[CODEX_MAX_BUFFER_SIZE];
+    snprintf(message_buffer, sizeof(message_buffer), 
+             "Запрос на анализ файла '%s' принят.", 
+             command->target_file ? command->target_file : "(не указан)");
+    (*result)->content = strdup(message_buffer);
     
     return CODEX_STATUS_SUCCESS;
 }
@@ -273,8 +277,12 @@ static codex_status_t handle_modify_command(
         return CODEX_STATUS_ERROR_INTERNAL;
     }
     
-    const char *placeholder = "Модификация файла выполнена успешно";
-    (*result)->content = strdup(placeholder);
+    // Формируем более осмысленное сообщение
+    char message_buffer[CODEX_MAX_BUFFER_SIZE];
+    snprintf(message_buffer, sizeof(message_buffer), 
+             "Запрос на модификацию файла '%s' принят.", 
+             command->target_file ? command->target_file : "(не указан)");
+    (*result)->content = strdup(message_buffer);
     
     // Добавление модифицированного файла в список
     (*result)->modified_files = (char**)malloc(sizeof(char*));
@@ -306,9 +314,23 @@ static codex_status_t handle_execute_command(
         return CODEX_STATUS_ERROR_INTERNAL;
     }
     
-    const char *placeholder = "Команда выполнена успешно";
-    (*result)->content = strdup(placeholder);
+    // Формируем более осмысленное сообщение
+    char message_buffer[CODEX_MAX_BUFFER_SIZE];
+    snprintf(message_buffer, sizeof(message_buffer), 
+             "Команда '%s' отправлена на выполнение.", 
+             command->content ? command->content : "(пустая команда)");
+    (*result)->content = strdup(message_buffer);
     
+    // TODO: Здесь должен быть вызов command_executor и получение реального вывода
+    // Например: 
+    // CommandResult* exec_res = command_execute(...);
+    // if (exec_res) { 
+    //    free((*result)->content); 
+    //    (*result)->content = exec_res->output ? strdup(exec_res->output) : strdup("");
+    //    (*result)->status = (exec_res->status == COMMAND_STATUS_COMPLETED && exec_res->exit_code == 0) ? CODEX_STATUS_SUCCESS : CODEX_STATUS_ERROR_EXECUTION;
+    //    command_result_free(exec_res); 
+    // } else { ... обработка ошибки запуска ... }
+
     return CODEX_STATUS_SUCCESS;
 }
 
@@ -379,8 +401,12 @@ static codex_status_t handle_project_command(
         return CODEX_STATUS_ERROR_INTERNAL;
     }
     
-    const char *placeholder = "Операция с проектом выполнена успешно";
-    (*result)->content = strdup(placeholder);
+    // Формируем более осмысленное сообщение
+    char message_buffer[CODEX_MAX_BUFFER_SIZE];
+    snprintf(message_buffer, sizeof(message_buffer), 
+             "Операция с проектом '%s' принята.", 
+             command->content ? command->content : "(не указана)");
+    (*result)->content = strdup(message_buffer);
     
     return CODEX_STATUS_SUCCESS;
 }
@@ -405,8 +431,14 @@ static codex_status_t handle_exploit_command(
         return CODEX_STATUS_ERROR_INTERNAL;
     }
     
-    const char *placeholder = "Поиск/эксплуатация уязвимости выполнены успешно";
-    (*result)->content = strdup(placeholder);
+    // Формируем более осмысленное сообщение
+    const char* target = command->target_file ? command->target_file : "(не указана)";
+    const char* type = (command->args_count > 0 && command->args[0]) ? command->args[0] : "(не указан)";
+    char message_buffer[CODEX_MAX_BUFFER_SIZE];
+    snprintf(message_buffer, sizeof(message_buffer), 
+             "Запрос на поиск/эксплуатацию уязвимости типа '%s' для цели '%s' принят.", 
+             type, target);
+    (*result)->content = strdup(message_buffer);
     
     return CODEX_STATUS_SUCCESS;
 }

