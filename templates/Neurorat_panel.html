@@ -1,0 +1,545 @@
+{% extends "shared/base_layout.html" %}
+{% block title %}NeuroRAT Control Panel | Киберпанк-интерфейс{% endblock %}
+{% block content %}
+<style>
+body {
+    background: #0a0a14;
+    color: #e0e0e0;
+    font-family: 'Fira Mono', 'Consolas', monospace;
+    background-image: 
+        linear-gradient(rgba(255, 0, 98, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 0, 98, 0.03) 1px, transparent 1px);
+    background-size: 30px 30px;
+}
+
+.cyberpunk-dashboard {
+    max-width: 98vw;
+    margin: 0 auto;
+    padding: 2rem 1rem 1rem 1rem;
+}
+
+/* Неоновые акценты */
+.neon-pink {
+    color: #ff00e1;
+    text-shadow: 0 0 5px #ff00e1, 0 0 10px #ff00e1;
+}
+
+.neon-blue {
+    color: #00c3ff;
+    text-shadow: 0 0 5px #00c3ff, 0 0 10px #00c3ff;
+}
+
+.neon-yellow {
+    color: #ffe100;
+    text-shadow: 0 0 5px #ffe100, 0 0 10px #ffe100;
+}
+
+/* Глитч-анимация */
+@keyframes glitch {
+    0% { transform: translate(0); }
+    20% { transform: translate(-2px, 2px); }
+    40% { transform: translate(-2px, -2px); }
+    60% { transform: translate(2px, 2px); }
+    80% { transform: translate(2px, -2px); }
+    100% { transform: translate(0); }
+}
+
+.glitch {
+    animation: glitch 0.5s infinite;
+    animation-play-state: paused;
+}
+
+.glitch:hover {
+    animation-play-state: running;
+}
+
+/* Панели в стиле киберпанк */
+.cyber-panel {
+    background: rgba(10, 10, 20, 0.8);
+    border: 1px solid #ff00e1;
+    border-radius: 5px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 0 15px rgba(255, 0, 225, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.cyber-panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, #ff00e1, #00c3ff, #ffe100);
+    animation: borderGlow 3s infinite alternate;
+}
+
+@keyframes borderGlow {
+    0% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #ff00e1;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+
+.panel-header h2 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.4rem;
+    margin: 0;
+}
+
+/* Кнопка в стиле киберпанк */
+.cyber-btn {
+    background: #0a0a14;
+    color: #ff00e1;
+    border: 1px solid #ff00e1;
+    padding: 8px 16px;
+    border-radius: 3px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.9rem;
+    transition: all 0.3s;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+
+.cyber-btn::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(transparent, rgba(255, 0, 225, 0.2), transparent);
+    transform: rotate(30deg);
+    transition: transform 0.3s;
+}
+
+.cyber-btn:hover {
+    background: rgba(255, 0, 225, 0.1);
+    box-shadow: 0 0 10px rgba(255, 0, 225, 0.5);
+}
+
+.cyber-btn:hover::after {
+    transform: translateX(100%) rotate(30deg);
+}
+
+/* Таблица в стиле киберпанк */
+.cyber-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin: 20px 0;
+}
+
+.cyber-table th, .cyber-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 0, 225, 0.2);
+}
+
+.cyber-table th {
+    background: rgba(10, 10, 20, 0.8);
+    color: #00c3ff;
+    font-weight: 600;
+    letter-spacing: 1px;
+}
+
+.cyber-table tr:hover td {
+    background: rgba(255, 0, 225, 0.1);
+}
+
+/* Статус индикаторы */
+.status-indicator {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+.status-active {
+    background: #00ff6a;
+    box-shadow: 0 0 8px #00ff6a;
+}
+
+.status-offline {
+    background: #ff3a5e;
+    box-shadow: 0 0 8px #ff3a5e;
+}
+
+.status-waiting {
+    background: #ffe100;
+    box-shadow: 0 0 8px #ffe100;
+}
+
+/* Сетка панелей */
+.grid-panels {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 20px;
+}
+
+/* Анимация загрузки */
+@keyframes scanline {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100%); }
+}
+
+.cyber-panel::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 5px;
+    background: rgba(0, 195, 255, 0.2);
+    animation: scanline 4s linear infinite;
+    pointer-events: none;
+}
+
+/* Виджет карты */
+.map-widget {
+    height: 300px;
+    background: #131320;
+    border-radius: 5px;
+    position: relative;
+    overflow: hidden;
+}
+
+.map-marker {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: #ff00e1;
+    border-radius: 50%;
+    box-shadow: 0 0 8px #ff00e1;
+    transform: translate(-50%, -50%);
+}
+
+/* Терминал */
+.terminal {
+    background: #0a0a14;
+    color: #00ff6a;
+    font-family: 'Courier New', monospace;
+    padding: 15px;
+    border-radius: 5px;
+    overflow-y: auto;
+    height: 250px;
+    border: 1px solid #00ff6a;
+}
+
+.terminal-line {
+    margin-bottom: 5px;
+    line-height: 1.6;
+}
+
+.terminal-input {
+    background: transparent;
+    border: none;
+    color: #00ff6a;
+    width: 100%;
+    font-family: 'Courier New', monospace;
+    outline: none;
+}
+
+/* Кнопка PANIC */
+.panic-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #ff3a5e;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    font-family: 'Orbitron', sans-serif;
+    font-weight: bold;
+    font-size: 1.2rem;
+    border-radius: 5px;
+    cursor: pointer;
+    box-shadow: 0 0 15px rgba(255, 58, 94, 0.5);
+    z-index: 1000;
+    transition: all 0.3s;
+}
+
+.panic-btn:hover {
+    background: #ff0f3d;
+    box-shadow: 0 0 20px rgba(255, 58, 94, 0.8);
+    transform: scale(1.05);
+}
+
+/* Медиа-запросы для адаптивности */
+@media (max-width: 768px) {
+    .grid-panels {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+<!-- Шапка с информацией -->
+<div class="cyber-panel">
+    <div class="panel-header">
+        <h2 class="neon-blue glitch">NeuroRAT Control Panel v2.0</h2>
+        <div id="status-display">
+            <span class="neon-yellow">Online Agents: </span>
+            <span class="neon-pink">25/45</span>
+        </div>
+    </div>
+    
+    <div class="panel-controls">
+        <button class="cyber-btn"><i class="fa-solid fa-satellite-dish"></i> Broadcast Command</button>
+        <button class="cyber-btn"><i class="fa-solid fa-shield-virus"></i> Stealth Mode</button>
+        <button class="cyber-btn"><i class="fa-solid fa-radiation"></i> Mass Deploy</button>
+        <button class="cyber-btn" style="color: #ff3a5e; border-color: #ff3a5e;"><i class="fa-solid fa-skull"></i> Terminate All</button>
+    </div>
+</div>
+
+<!-- Основной контент в сетке -->
+<div class="grid-panels">
+    <!-- Панель агентов -->
+    <div class="cyber-panel">
+        <div class="panel-header">
+            <h2 class="neon-pink"><i class="fa-solid fa-robot"></i> Active Agents</h2>
+            <button class="cyber-btn"><i class="fa-solid fa-filter"></i> Filter</button>
+        </div>
+        
+        <table class="cyber-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Status</th>
+                    <th>Location</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>NEURO-01</td>
+                    <td><span class="status-indicator status-active"></span>Active</td>
+                    <td>Tokyo</td>
+                    <td>
+                        <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-terminal"></i></button>
+                        <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-file"></i></button>
+                        <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-skull"></i></button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>NEURO-05</td>
+                    <td><span class="status-indicator status-offline"></span>Offline</td>
+                    <td>London</td>
+                    <td>
+                        <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-terminal"></i></button>
+                        <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-file"></i></button>
+                        <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-skull"></i></button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>NEURO-12</td>
+                    <td><span class="status-indicator status-waiting"></span>Waiting</td>
+                    <td>New York</td>
+                    <td>
+                        <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-terminal"></i></button>
+                        <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-file"></i></button>
+                        <button class="cyber-btn" style="padding: 5px 10px;"><i class="fa-solid fa-skull"></i></button>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Панель терминала -->
+    <div class="cyber-panel">
+        <div class="panel-header">
+            <h2 class="neon-blue"><i class="fa-solid fa-terminal"></i> Command Center</h2>
+            <button class="cyber-btn"><i class="fa-solid fa-broom"></i> Clear</button>
+        </div>
+        
+        <div class="terminal">
+            <div class="terminal-line">> Initializing NeuroRAT kernel modules...</div>
+            <div class="terminal-line">> Loading EDR evasion routines...</div>
+            <div class="terminal-line">> Establishing covert channels...</div>
+            <div class="terminal-line">> Connection established with 25 agents</div>
+            <div class="terminal-line">> System ready. Awaiting commands.</div>
+            <div class="terminal-line" style="margin-top: 10px;">
+                > <input type="text" class="terminal-input" placeholder="Enter command...">
+            </div>
+        </div>
+    </div>
+    
+    <!-- Карта распределения -->
+    <div class="cyber-panel">
+        <div class="panel-header">
+            <h2 class="neon-yellow"><i class="fa-solid fa-map"></i> Global Network</h2>
+            <button class="cyber-btn"><i class="fa-solid fa-expand"></i> Expand</button>
+        </div>
+        
+        <div class="map-widget" id="global-map">
+            <!-- Маркеры будут добавлены через JavaScript -->
+            <div class="map-marker" style="top: 35%; left: 80%;"></div>
+            <div class="map-marker" style="top: 25%; left: 45%;"></div>
+            <div class="map-marker" style="top: 30%; left: 25%;"></div>
+            <div class="map-marker" style="top: 40%; left: 50%;"></div>
+            <div class="map-marker" style="top: 70%; left: 60%;"></div>
+        </div>
+    </div>
+    
+    <!-- Панель статистики -->
+    <div class="cyber-panel">
+        <div class="panel-header">
+            <h2 class="neon-pink"><i class="fa-solid fa-chart-line"></i> Operation Stats</h2>
+            <button class="cyber-btn"><i class="fa-solid fa-download"></i> Export</button>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div>
+                <h3 class="neon-blue">Targets</h3>
+                <div style="margin: 15px 0; font-size: 2rem; font-weight: bold;">156</div>
+                <div style="color: #aaa;">Active targets in network</div>
+            </div>
+            
+            <div>
+                <h3 class="neon-yellow">Data Extracted</h3>
+                <div style="margin: 15px 0; font-size: 2rem; font-weight: bold;">2.3 TB</div>
+                <div style="color: #aaa;">Total exfiltrated data</div>
+            </div>
+            
+            <div>
+                <h3 class="neon-blue">Wallets</h3>
+                <div style="margin: 15px 0; font-size: 2rem; font-weight: bold;">45</div>
+                <div style="color: #aaa;">Crypto wallets compromised</div>
+            </div>
+            
+            <div>
+                <h3 class="neon-yellow">Uptime</h3>
+                <div style="margin: 15px 0; font-size: 2rem; font-weight: bold;">72d 14h</div>
+                <div style="color: #aaa;">System operational time</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно Reasoning -->
+<div id="ai-reasoning" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000;">
+    <div style="max-width: 600px; margin: 50px auto; background: #0a0a14; border: 1px solid #ff00e1; padding: 20px; border-radius: 5px; box-shadow: 0 0 20px rgba(255, 0, 225, 0.5);">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ff00e1; padding-bottom: 10px; margin-bottom: 15px;">
+            <h2 class="neon-pink">AI Reasoning Module</h2>
+            <span style="cursor: pointer; font-size: 1.5rem; color: #ff00e1;" onclick="document.getElementById('ai-reasoning').style.display='none';">&times;</span>
+        </div>
+        
+        <div id="reasoning-content">
+            <h3 class="neon-blue">Target Analysis</h3>
+            <p>Target appears to be running Windows 11 with updated security measures. Recommend using memory corruption technique bypass-11 with UAC evasion module.</p>
+            
+            <h3 class="neon-yellow" style="margin-top: 15px;">Attack Vectors</h3>
+            <ul style="list-style: none; padding-left: 0;">
+                <li><span class="neon-pink">✓</span> Supply Chain Vulnerability</li>
+                <li><span class="neon-pink">✓</span> Zero-day Browser Exploit</li>
+                <li><span class="neon-pink">✗</span> Social Engineering (Low success probability)</li>
+            </ul>
+            
+            <h3 class="neon-blue" style="margin-top: 15px;">Recommended Actions</h3>
+            <p>Deploy browser zero-day with EDR evasion module. Exfiltrate data through DNS covert channel with packet fragmentation.</p>
+        </div>
+    </div>
+</div>
+
+<!-- Кнопка PANIC -->
+<button class="panic-btn">PANIC</button>
+
+<script>
+// Имитация работы терминала
+const terminal = document.querySelector('.terminal');
+const terminalInput = document.querySelector('.terminal-input');
+
+terminalInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        // Добавляем введенную команду в терминал
+        const commandLine = document.createElement('div');
+        commandLine.className = 'terminal-line';
+        commandLine.textContent = '> ' + this.value;
+        
+        // Вставляем перед полем ввода
+        terminal.insertBefore(commandLine, this.parentElement);
+        
+        // Имитация ответа
+        setTimeout(() => {
+            const responseLine = document.createElement('div');
+            responseLine.className = 'terminal-line';
+            
+            // Простая логика ответов на команды
+            if (this.value.toLowerCase().includes('help')) {
+                responseLine.textContent = 'Available commands: status, deploy, exfil, terminate';
+            } else if (this.value.toLowerCase().includes('status')) {
+                responseLine.textContent = 'System status: OPERATIONAL | Agents: 25 active, 20 dormant, 0 compromised';
+            } else if (this.value.toLowerCase().includes('deploy')) {
+                responseLine.textContent = 'Deployment initiated. Target: SPECIFIED. Payload: SELECTED. ETA: 2m 30s';
+            } else if (this.value.toLowerCase().includes('reasoning')) {
+                document.getElementById('ai-reasoning').style.display = 'block';
+                responseLine.textContent = 'AI Reasoning module activated. Analysis in progress...';
+            } else {
+                responseLine.textContent = 'Command processed. Check dashboard for results.';
+            }
+            
+            terminal.insertBefore(responseLine, terminalInput.parentElement);
+            terminal.scrollTop = terminal.scrollHeight;
+        }, 500);
+        
+        // Очищаем поле ввода
+        this.value = '';
+    }
+});
+
+// Случайное мерцание для неоновых элементов
+setInterval(() => {
+    const neonElements = document.querySelectorAll('.neon-pink, .neon-blue, .neon-yellow');
+    const randomElement = neonElements[Math.floor(Math.random() * neonElements.length)];
+    
+    randomElement.style.opacity = '0.7';
+    setTimeout(() => {
+        randomElement.style.opacity = '1';
+    }, 100);
+}, 3000);
+
+// Панель PANIC
+document.querySelector('.panic-btn').addEventListener('click', function() {
+    if (confirm('ВНИМАНИЕ: Вы активируете протокол экстренного уничтожения. Все агенты получат команду самоуничтожения и данные будут стерты. Продолжить?')) {
+        alert('Протокол активирован. Агенты ликвидируются...');
+        // Здесь будет код для активации протокола
+    }
+});
+
+// Добавление случайных маркеров на карту
+function addRandomMarkers() {
+    const map = document.getElementById('global-map');
+    
+    for (let i = 0; i < 5; i++) {
+        setTimeout(() => {
+            const marker = document.createElement('div');
+            marker.className = 'map-marker';
+            marker.style.top = (10 + Math.random() * 80) + '%';
+            marker.style.left = (10 + Math.random() * 80) + '%';
+            
+            map.appendChild(marker);
+            
+            // Удаляем маркер через некоторое время
+            setTimeout(() => {
+                marker.style.opacity = '0';
+                setTimeout(() => marker.remove(), 500);
+            }, 5000 + Math.random() * 10000);
+        }, i * 2000);
+    }
+}
+
+// Запускаем добавление маркеров периодически
+setInterval(addRandomMarkers, 10000);
+addRandomMarkers(); // Запускаем сразу при загрузке
+</script>
+{% endblock %} 

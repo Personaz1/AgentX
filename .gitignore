@@ -258,3 +258,7 @@ core
 # Специфичные для системы файлы
 .DS_Store
 Thumbs.db
+
+# Исключение заметок разработчика
+DEV_NOTES.md
+secret_dev_notes.md

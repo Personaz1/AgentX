@@ -27,4 +27,10 @@ Thumbs.db
 # Игнорирование временных файлов
 *.tmp
 *.log
-core 
+core
+
+# Игнорирование заметок разработчика
+DEV_NOTES.md
+secret_dev_notes.md
+../DEV_NOTES.md
+../secret_dev_notes.md 

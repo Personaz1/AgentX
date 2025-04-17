@@ -1,147 +1,383 @@
-{% extends "shared/base_layout.html" %}
-
-{% block title %}NeuroRAT C2 Dashboard{% endblock %}
-
-{% block content %}
-<div class="card">
-    <h2>Server Status</h2>
-    <p>Uptime: {{uptime}}</p>
-    <p>Connected Agents: {{connected_agents}}</p>
-    <p>Total Agents: {{total_agents}}</p>
-</div>
-
-<div class="card">
-    <h2>Connected Agents</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>OS</th>
-                <th>Hostname</th>
-                <th>Username</th>
-                <th>IP Address</th>
-                <th>Status</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for agent in agents %}
-            <tr>
-                <td>{{agent.agent_id}}</td>
-                <td>{{agent.os}}</td>
-                <td>{{agent.hostname}}</td>
-                <td>{{agent.username}}</td>
-                <td>{{agent.ip_address}}</td>
-                <td class="status-{{agent.status}}">{{agent.status}}</td>
-                <td>
-                    <a href="/api/agent/{{agent.agent_id}}/chat" class="btn">Chat</a>
-                    <a href="/agent/{{agent.agent_id}}/command" class="btn">Command</a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-
-<div class="card">
-    <h2>Recent Events</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Time</th>
-                <th>Event Type</th>
-                <th>Agent</th>
-                <th>Details</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for event in events %}
-            <tr>
-                <td>{{event.timestamp}}</td>
-                <td>{{event.event_type}}</td>
-                <td>{{event.agent_id or "System"}}</td>
-                <td>{{event.details}}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-
-<!-- Кнопка вызова сатаны -->
-<button class="satan-btn" id="summonSatan">ВЫЗВАТЬ САТАНУ</button>
-
-<!-- Модальное окно с ASCII-артом сатаны -->
-<div id="satanModal" class="modal">
-    <div class="modal-content">
-        <span class="close-modal">&times;</span>
-        <h2 class="satan-text">САТАНА ПРИЗВАН!</h2>
-        <pre class="satan-text">{{satan_ascii|safe}}</pre>
-        <p class="satan-text">Ваша программа теперь проклята и работает на 666% быстрее</p>
-    </div>
-</div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-    // Refresh data every 30 seconds
-    setTimeout(() => {
-        window.location.reload();
-    }, 30000);
-    
-    // Модальное окно с сатаной
-    const modal = document.getElementById("satanModal");
-    const btn = document.getElementById("summonSatan");
-    const span = document.getElementsByClassName("close-modal")[0];
-    
-    // Открыть модальное окно при клике на кнопку
-    btn.onclick = function() {
-        modal.style.display = "block";
-        // Добавляем звуковой эффект (демонический смех)
-        playDemonicSound();
-    }
-    
-    // Закрыть модальное окно при клике на крестик
-    span.onclick = function() {
-        modal.style.display = "none";
-    }
-    
-    // Закрыть модальное окно при клике вне его
-    window.onclick = function(event) {
-        if (event.target == modal) {
-            modal.style.display = "none";
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeuroRAT | Панель управления</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #00ff9d;
+            --secondary-color: #ff3e75;
+            --dark-color: #0c0c14;
+            --darker-color: #050507;
+            --accent-color: #0ffbf9;
+            --text-color: #e0e0e0;
+            --shadow-color: rgba(0, 255, 157, 0.2);
+            --error-color: #ff3e3e;
         }
-    }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Roboto Mono', monospace;
+            background-color: var(--dark-color);
+            color: var(--text-color);
+            width: 100%;
+            height: 100vh;
+            overflow: hidden;
+            background-image: 
+                radial-gradient(rgba(0, 255, 157, 0.1) 1px, transparent 1px),
+                radial-gradient(rgba(0, 255, 157, 0.05) 1px, transparent 1px);
+            background-size: 50px 50px;
+            background-position: 0 0, 25px 25px;
+            position: relative;
+        }
+        
+        .grid-container {
+            display: grid;
+            grid-template-rows: 60px 1fr;
+            grid-template-columns: 250px 1fr;
+            grid-template-areas:
+                "header header"
+                "sidebar main";
+            height: 100vh;
+        }
+        
+        .header {
+            grid-area: header;
+            background-color: var(--darker-color);
+            border-bottom: 1px solid var(--primary-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+            z-index: 100;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+        }
+        
+        .logo h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-left: 10px;
+        }
+        
+        .logo-span {
+            color: var(--secondary-color);
+        }
+        
+        .user-menu {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .user-menu a {
+            color: var(--text-color);
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.3s;
+        }
+        
+        .user-menu a:hover {
+            color: var(--primary-color);
+        }
+        
+        .sidebar {
+            grid-area: sidebar;
+            background-color: var(--darker-color);
+            border-right: 1px solid var(--primary-color);
+            padding: 20px 0;
+            overflow-y: auto;
+        }
+        
+        .nav-item {
+            padding: 12px 20px;
+            border-left: 3px solid transparent;
+            transition: all 0.3s;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .nav-item:hover {
+            background-color: rgba(0, 255, 157, 0.05);
+            border-left-color: var(--primary-color);
+        }
+        
+        .nav-item.active {
+            background-color: rgba(0, 255, 157, 0.1);
+            border-left-color: var(--primary-color);
+        }
+        
+        .nav-item span {
+            font-size: 14px;
+        }
+        
+        .nav-divider {
+            margin: 10px 20px;
+            height: 1px;
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+        
+        .main-content {
+            grid-area: main;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .dashboard-card {
+            background-color: var(--darker-color);
+            border: 1px solid var(--primary-color);
+            border-radius: 4px;
+            padding: 20px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .card-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--primary-color);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .card-content {
+            margin-top: 15px;
+        }
+        
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: var(--accent-color);
+        }
+        
+        .zond-list {
+            list-style: none;
+        }
+        
+        .zond-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .zond-item:last-child {
+            border-bottom: none;
+        }
+        
+        .zond-name {
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .zond-status {
+            font-size: 12px;
+            padding: 3px 8px;
+            border-radius: 12px;
+        }
+        
+        .status-active {
+            background-color: rgba(0, 255, 157, 0.1);
+            color: var(--primary-color);
+        }
+        
+        .status-inactive {
+            background-color: rgba(255, 62, 117, 0.1);
+            color: var(--secondary-color);
+        }
+        
+        .section-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(0, 255, 157, 0.3);
+            padding-bottom: 10px;
+        }
+        
+        .button {
+            background: linear-gradient(90deg, var(--primary-color), var(--accent-color));
+            color: var(--darker-color);
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 255, 157, 0.3);
+        }
+        
+        .button.danger {
+            background: linear-gradient(90deg, var(--secondary-color), #ff7547);
+        }
+        
+        .login-cta {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+        }
+        
+        .login-cta h2 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 24px;
+            color: var(--primary-color);
+            margin-bottom: 20px;
+        }
+        
+        .login-cta p {
+            margin-bottom: 30px;
+            max-width: 600px;
+        }
+        
+        .login-button {
+            display: inline-block;
+            background: linear-gradient(45deg, var(--primary-color), var(--accent-color));
+            color: var(--darker-color);
+            text-decoration: none;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 16px;
+            padding: 12px 30px;
+            border-radius: 4px;
+            transition: all 0.3s;
+        }
+        
+        .login-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 25px rgba(0, 255, 157, 0.4);
+        }
+        
+        .cyber-line {
+            position: absolute;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary-color), transparent);
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            animation: scan-line 4s linear infinite;
+        }
+        
+        @keyframes scan-line {
+            0% {
+                transform: translateY(0);
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(-100vh);
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="cyber-line"></div>
     
-    // Функция для звукового эффекта
-    function playDemonicSound() {
-        // Здесь мог бы быть код для проигрывания звука
-        console.log("Демонический смех звучит в вашем воображении");
-    }
-</script>
-{% endblock %}
-
-{% block extra_styles %}
-@keyframes flicker {
-    0% { opacity: 1; }
-    5% { opacity: 0.8; }
-    10% { opacity: 1; }
-    15% { opacity: 0.9; }
-    20% { opacity: 1; }
-    25% { opacity: 0.9; }
-    30% { opacity: 1; }
-    35% { opacity: 0.8; }
-    40% { opacity: 1; }
-    50% { opacity: 0.7; }
-    60% { opacity: 1; }
-    70% { opacity: 0.9; }
-    80% { opacity: 1; }
-    90% { opacity: 0.8; }
-    100% { opacity: 1; }
-}
-
-.satan-text {
-    animation: flicker 5s infinite;
-    color: #ff3300;
-    text-shadow: 0 0 10px #ff0000;
-}
-{% endblock %}
+    <div class="grid-container">
+        <header class="header">
+            <div class="logo">
+                <h1>NEURO<span class="logo-span">RAT</span></h1>
+            </div>
+            <div class="user-menu">
+                <a href="/login">Вход</a>
+                <a href="/admin">Панель управления</a>
+            </div>
+        </header>
+        
+        <aside class="sidebar">
+            <div class="nav-item active">
+                <span>Главная</span>
+            </div>
+            <div class="nav-item">
+                <span>Зонды</span>
+            </div>
+            <div class="nav-item">
+                <span>Задачи</span>
+            </div>
+            <div class="nav-divider"></div>
+            <div class="nav-item">
+                <span>ATS Модуль</span>
+            </div>
+            <div class="nav-item">
+                <span>Атаки</span>
+            </div>
+            <div class="nav-item">
+                <span>Аналитика</span>
+            </div>
+            <div class="nav-divider"></div>
+            <div class="nav-item">
+                <span>Настройки</span>
+            </div>
+            <div class="nav-item">
+                <span>Документация</span>
+            </div>
+        </aside>
+        
+        <main class="main-content">
+            <div class="login-cta">
+                <h2>WELCOME TO NEURORAT CONTROL SYSTEM</h2>
+                <p>Система управления и контроля NeuroRAT предназначена для централизованного управления сетью зондов, проведения автоматизированных операций и аналитики собранных данных.</p>
+                <a href="/login" class="login-button">АВТОРИЗАЦИЯ</a>
+            </div>
+        </main>
+    </div>
+    
+    <script>
+        // Простая анимация для элементов интерфейса
+        document.addEventListener('DOMContentLoaded', function() {
+            const navItems = document.querySelectorAll('.nav-item');
+            
+            navItems.forEach(item => {
+                item.addEventListener('click', function() {
+                    navItems.forEach(i => i.classList.remove('active'));
+                    this.classList.add('active');
+                });
+            });
+        });
+    </script>
+</body>
+</html>
