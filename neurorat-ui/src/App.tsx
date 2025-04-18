@@ -8,7 +8,7 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import Sidebar from './components/Sidebar';
 
 // Pages
-import Dashboard from './pages/Dashboard';
+import DashboardPage from './pages/DashboardPage';
 import ZondsManagementPage from './pages/ZondsManagementPage';
 import IncidentsListPage from './pages/IncidentsListPage';
 import AnomalyDetectionPage from './pages/AnomalyDetectionPage';
@@ -21,6 +21,8 @@ import SecurityPage from './pages/SecurityPage';
 import TasksPage from './pages/TasksPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
+import ATSPage from './pages/ATSPage';
+import IncidentDetailsPage from './pages/IncidentDetailsPage';
 
 // Styles
 const AppContainer = styled.div`
@@ -63,24 +65,31 @@ const chakraTheme = extendTheme({
 
 // Styled-components theme
 const styledTheme = {
-  colors: {
-    primary: '#2196f3',
-    primaryDark: '#1976d2',
-    secondary: '#ff4081',
-    success: '#4caf50',
-    warning: '#ff9800',
-    error: '#f44336',
-    background: '#121212',
-    surface: '#1e1e1e',
-    text: '#e0e0e0',
-    textSecondary: '#a0a0a0',
-    border: '#333333',
+  bg: {
+    primary: '#121212',
+    secondary: '#1E1E1E',
+    tertiary: '#2D2D2D',
+    input: '#252525',
+    hover: '#333333',
   },
-  shadows: {
-    small: '0 2px 4px rgba(0, 0, 0, 0.3)',
-    medium: '0 4px 8px rgba(0, 0, 0, 0.4)',
-    large: '0 8px 16px rgba(0, 0, 0, 0.5)',
+  text: {
+    primary: '#FFFFFF',
+    secondary: '#A0A0A0',
+    placeholder: '#6C6C6C',
+    inverted: '#000000',
   },
+  border: {
+    primary: '#3A3A3A',
+    secondary: '#4D4D4D',
+  },
+  accent: {
+    primary: '#0F94FF',
+    secondary: '#107EFF',
+  },
+  success: '#10B981',
+  warning: '#F59E0B',
+  danger: '#EF4444',
+  info: '#3B82F6',
 };
 
 const App: React.FC = () => {
@@ -95,20 +104,28 @@ const App: React.FC = () => {
                 {/* Public routes */}
                 <Route path="/login" element={<LoginPage />} />
                 
-                {/* Protected routes */}
-                <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                {/* Основное */}
+                <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+                <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
                 <Route path="/zonds" element={<ProtectedRoute><ZondsManagementPage /></ProtectedRoute>} />
                 <Route path="/incidents" element={<ProtectedRoute><IncidentsListPage /></ProtectedRoute>} />
+                <Route path="/incidents/:id" element={<ProtectedRoute><IncidentDetailsPage /></ProtectedRoute>} />
                 <Route path="/anomalies" element={<ProtectedRoute><AnomalyDetectionPage /></ProtectedRoute>} />
                 <Route path="/anomalies/:id" element={<ProtectedRoute><AnomalyDetailsPage /></ProtectedRoute>} />
-                <Route path="/c1brain" element={<ProtectedRoute><C1BrainPage /></ProtectedRoute>} />
+                
+                {/* Управление */}
                 <Route path="/codex" element={<ProtectedRoute><CodexPage /></ProtectedRoute>} />
-                <Route path="/security" element={<ProtectedRoute><SecurityPage /></ProtectedRoute>} />
+                <Route path="/c1brain" element={<ProtectedRoute><C1BrainPage /></ProtectedRoute>} />
                 <Route path="/operations" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
+                <Route path="/ats" element={<ProtectedRoute><ATSPage /></ProtectedRoute>} />
+                
+                {/* Аналитика */}
                 <Route path="/analytics" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
+                <Route path="/security" element={<ProtectedRoute><SecurityPage /></ProtectedRoute>} />
+                
+                {/* Система */}
                 <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-                <Route path="/billing" element={<ProtectedRoute><NotFoundPage /></ProtectedRoute>} />
+                <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
                 
                 {/* 404 Not Found */}
                 <Route path="*" element={<NotFoundPage />} />

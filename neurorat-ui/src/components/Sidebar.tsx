@@ -1,7 +1,21 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import styled from 'styled-components';
-import { FiHome, FiServer, FiList, FiActivity, FiDollarSign, FiSettings, FiFileText, FiAlertTriangle, FiCode, FiCpu } from 'react-icons/fi';
+import { 
+  FiHome, 
+  FiServer, 
+  FiList, 
+  FiActivity, 
+  FiSettings, 
+  FiFileText, 
+  FiAlertTriangle, 
+  FiCode, 
+  FiCpu,
+  FiBarChart2,
+  FiDatabase,
+  FiDollarSign,
+  FiShield
+} from 'react-icons/fi';
 import { darkTheme } from '../theme';
 
 // Типизация для темы styled-components
@@ -80,7 +94,7 @@ const Sidebar: React.FC = () => {
         <SectionTitle>Основное</SectionTitle>
         <NavItem to="/dashboard">
           <NavIcon><FiHome /></NavIcon>
-          Обзор
+          Дашборд
         </NavItem>
         <NavItem to="/zonds">
           <NavIcon><FiServer /></NavIcon>
@@ -89,6 +103,10 @@ const Sidebar: React.FC = () => {
         <NavItem to="/incidents">
           <NavIcon><FiAlertTriangle /></NavIcon>
           Инциденты
+        </NavItem>
+        <NavItem to="/anomalies">
+          <NavIcon><FiBarChart2 /></NavIcon>
+          Аномалии
         </NavItem>
       </NavSection>
 
@@ -106,9 +124,21 @@ const Sidebar: React.FC = () => {
           <NavIcon><FiList /></NavIcon>
           Операции
         </NavItem>
+        <NavItem to="/ats">
+          <NavIcon><FiDollarSign /></NavIcon>
+          ATS Модуль
+        </NavItem>
+      </NavSection>
+
+      <NavSection>
+        <SectionTitle>Аналитика</SectionTitle>
         <NavItem to="/analytics">
           <NavIcon><FiActivity /></NavIcon>
-          Аналитика
+          Отчёты
+        </NavItem>
+        <NavItem to="/security">
+          <NavIcon><FiShield /></NavIcon>
+          Безопасность
         </NavItem>
       </NavSection>
 
@@ -118,13 +148,9 @@ const Sidebar: React.FC = () => {
           <NavIcon><FiSettings /></NavIcon>
           Настройки
         </NavItem>
-        <NavItem to="/security">
+        <NavItem to="/reports">
           <NavIcon><FiFileText /></NavIcon>
-          Безопасность
-        </NavItem>
-        <NavItem to="/billing">
-          <NavIcon><FiDollarSign /></NavIcon>
-          Биллинг
+          Логи
         </NavItem>
       </NavSection>
     </SidebarContainer>
