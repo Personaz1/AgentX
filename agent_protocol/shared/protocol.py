@@ -67,7 +67,8 @@ class Command:
     """
     
     def __init__(self, command_type: Union[CommandType, str], data: Dict[str, Any] = None, 
-                 command_id: Optional[str] = None, session_id: Optional[str] = None):
+                 command_id: Optional[str] = None, session_id: Optional[str] = None,
+                 auth_token: Optional[str] = None):
         """
         Инициализация команды.
         
@@ -81,6 +82,7 @@ class Command:
         self.data = data or {}
         self.command_id = command_id or str(uuid.uuid4())
         self.session_id = session_id
+        self.auth_token = auth_token
         self.timestamp = time.time()
     
     def to_dict(self) -> Dict[str, Any]:
@@ -99,6 +101,8 @@ class Command:
         
         if self.session_id:
             result["session_id"] = self.session_id
+        if self.auth_token:
+            result["auth_token"] = self.auth_token
         
         return result
     
@@ -126,8 +130,9 @@ class Command:
         command_data = data.get("data", {})
         command_id = data.get("command_id")
         session_id = data.get("session_id")
+        auth_token = data.get("auth_token")
         
-        command = cls(command_type, command_data, command_id, session_id)
+        command = cls(command_type, command_data, command_id, session_id, auth_token)
         command.timestamp = data.get("timestamp", time.time())
         
         return command
