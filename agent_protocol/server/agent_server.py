@@ -11,6 +11,7 @@ import uuid
 import ssl
 import signal
 import time
+import os
 import websockets
 from typing import Dict, Any, Optional, List, Callable, Awaitable
 
@@ -28,11 +29,12 @@ class AgentServer:
     """
     
     def __init__(self, 
-                 host: str = "0.0.0.0", 
+                 host: str = "127.0.0.1", 
                  port: int = 8080, 
                  auth_enabled: bool = True,
                  ssl_context: Optional[ssl.SSLContext] = None,
-                 encryption_enabled: bool = True):
+                 encryption_enabled: bool = True,
+        auth_tokens: Optional[List[str]] = None):
         """
         Инициализация сервера.
         
@@ -59,7 +61,10 @@ class AgentServer:
         self.agents: Dict[str, Dict[str, Any]] = {}
         
         # Список разрешенных токенов аутентификации (в реальной системе хранится в БД)
-        self.auth_tokens: List[str] = ["test-token"]  # Тестовый токен
+        configured_tokens = auth_tokens if auth_tokens is not None else os.getenv("AGENTX_AUTH_TOKENS", "").split(",")
+        self.auth_tokens: List[str] = [token.strip() for token in configured_tokens if token.strip()]
+        if self.auth_enabled and not self.auth_tokens:
+            logger.warning("Authentication is enabled but no tokens are configured; all commands will be rejected.")
         
         # Задачи для отслеживания активности агентов
         self.heartbeat_tasks = {}
@@ -342,7 +347,7 @@ class AgentServer:
             command = Command.from_dict(command_data)
             
             # Проверяем аутентификацию, если она включена
-            if self.auth_enabled and command.command_type != CommandTypes.HEARTBEAT:
+            if self.auth_enabled:
                 if not command.auth_token or command.auth_token not in self.auth_tokens:
                     return Response(
                         command_id=command.command_id,
