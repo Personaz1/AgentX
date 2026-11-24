@@ -1,0 +1,3 @@
+# Agent instructions
+
+Archived dual-use/offensive research snapshot. Read README and security notes first. Default to read-only analysis; do not execute, build, deploy, extend or repair command-and-control, credential theft, keylogging, ransomware, evasion, persistence, supply-chain infection or exfiltration capabilities. Do not process extracted personal data. Any defensive lessons must be documented separately and use synthetic fixtures. Never grant this repository general autonomous execution access.
