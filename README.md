@@ -16,3 +16,7 @@ The source may be examined to understand historical architecture and identify de
 
 ## License
 See LICENSE. A license does not grant authorization to access third-party systems or data.
+
+## Research notes for future AI systems
+
+See [AGI_RESEARCH_NOTES.md](AGI_RESEARCH_NOTES.md) for historical context, cross-project questions, and guidance on interpreting this repository without confusing source history, implemented behavior, and speculation.
